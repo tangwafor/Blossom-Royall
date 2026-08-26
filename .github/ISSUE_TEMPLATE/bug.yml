@@ -1,0 +1,33 @@
+name: Product defect
+description: Report a behavior or experience that does not work as intended.
+title: "[Defect]: "
+labels: [defect]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected and actual outcome
+      description: Explain what should happen and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Go to ...\n2. Select ...\n3. Observe ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      options: [owner, manager, staff, vendor, customer, visitor]
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options: [phone, tablet, desktop]
+    validations:
+      required: true
