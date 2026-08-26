@@ -34,6 +34,7 @@
 26. Handle Supabase auth through returned errors, localized auth messages, password visibility controls, branded reset email, explicit redirect, protected reset routes, production site URL, and branded SMTP.
 27. Use canonical share buttons and branded watch pages with social player metadata. Never publish a raw video URL.
 28. TaTech authentication styling is mandatory. Tenant branding remains primary. Login must include Powered by TA Tech, the exact approved motto, premium visual treatment, localization, accessible controls, password visibility, branded recovery, and safe returned error handling.
+29. Cost discipline is mandatory. The core product must remain useful on free or very low cost infrastructure. No paid AI call may be required for a core customer, staff, vendor, or owner workflow. Paid services require a measured usage threshold, a budget cap, and an explicit business case.
 
 ## Mission
 
