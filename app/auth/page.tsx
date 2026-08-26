@@ -53,6 +53,10 @@ export default function AuthPage() {
     const form = new FormData(event.currentTarget),
       email = String(form.get("email") || ""),
       password = String(form.get("password") || "");
+    if (mode === "signup" && form.get("agreement") !== "accepted") {
+      setMessage("Please accept the account terms to create your profile.");
+      return;
+    }
     const supabase = createClient();
     const result =
       mode === "signin"
@@ -143,6 +147,19 @@ export default function AuthPage() {
               </button>
             </div>
           </label>
+          {mode === "signup" && (
+            <label className="agreement">
+              <input
+                name="agreement"
+                type="checkbox"
+                value="accepted"
+                required
+              />
+              <span>
+                I agree to the Blossom Royall account terms and privacy notice.
+              </span>
+            </label>
+          )}
           {mode === "signin" && (
             <button
               type="button"
@@ -178,6 +195,10 @@ export default function AuthPage() {
               ? "New to Blossom Royall? Create an account"
               : "Already have an account? Sign in"}
           </button>
+          <small className="auth-conditions">
+            By continuing, you confirm that you are authorized to use this
+            workspace.
+          </small>
         </form>
       </section>
     </main>

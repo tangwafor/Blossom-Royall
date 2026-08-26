@@ -112,6 +112,47 @@ test("shows personalized customer recommendations with explanations", async ({
   await expect(
     page.getByRole("button", { name: "Add Aurelia Satin Midi to bag" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Why these picks?" }).click();
+  await expect(
+    page.getByText("Recommendations you can understand"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Not for me" }).first().click();
+  await expect(
+    page.getByRole("button", { name: "Restore hidden picks" }),
+  ).toBeVisible();
+});
+
+test("turns intelligence signals into accountable owner actions", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile")
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Intelligence" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Demand you can act on" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Create merchandising brief" })
+    .click();
+  await expect(
+    page.getByText("Protect the weekend opportunity."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Approve reorder" }).click();
+  await expect(page.getByText("Reorder approved")).toBeVisible();
+});
+
+test("presents a branded luxury mall entrance", async ({ page }) => {
+  await page.goto("/welcome");
+  await expect(
+    page.getByRole("heading", {
+      name: "Step into the future of beautiful retail.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Powered by TA Tech")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Enter Blossom Royall" }),
+  ).toBeVisible();
 });
 
 test("gives the owner purchase performance by brand", async ({ page }) => {
@@ -144,6 +185,11 @@ test("renders branded authentication with safe password controls", async ({
   await page.getByRole("button", { name: /Create an account/ }).click();
   await expect(
     page.getByRole("heading", { name: "Create your account" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel(
+      "I agree to the Blossom Royall account terms and privacy notice.",
+    ),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Back to Blossom Royall" }),

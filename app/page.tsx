@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   Bell,
+  BrainCircuit,
   Check,
   ChevronRight,
   CircleDollarSign,
+  CircleHelp,
   Clock3,
   FileSignature,
+  Heart,
   LayoutDashboard,
   Menu,
   Moon,
@@ -20,6 +23,7 @@ import {
   Sparkles,
   Store,
   Sun,
+  TrendingUp,
   Users,
   X,
 } from "lucide-react";
@@ -32,6 +36,7 @@ const nav = [
   ["Products", Package],
   ["Vendors", Store],
   ["Staff", Users],
+  ["Intelligence", BrainCircuit],
 ] as const;
 const orders = [
   {
@@ -85,7 +90,9 @@ export default function Home() {
     [theme, setTheme] = useState("light");
   useEffect(() => {
     const saved = localStorage.getItem("br-theme");
-    const next = saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const next =
+      saved ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(next);
     document.documentElement.dataset.theme = next;
     document.documentElement.dataset.appReady = "true";
@@ -176,7 +183,11 @@ export default function Home() {
             <button className="bell" aria-label="Notifications">
               <Bell />
             </button>
-            <button className="bell theme-toggle" aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`} onClick={toggleTheme}>
+            <button
+              className="bell theme-toggle"
+              aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`}
+              onClick={toggleTheme}
+            >
               {theme === "light" ? <Moon /> : <Sun />}
             </button>
             <button
@@ -315,6 +326,7 @@ export default function Home() {
             </div>
           </ListView>
         )}
+        {active === "Intelligence" && <IntelligenceHub />}
       </main>
       {sale && (
         <div className="modal-wrap">
@@ -422,11 +434,236 @@ function ListView({
 
 function CustomerShop() {
   const picks = [
-    ["Aurelia Satin Midi", "Because you love emerald occasionwear", "$168", "96% match"],
-    ["Mila Gold Clutch", "Pairs with your saved looks", "$86", "Complete the look"],
-    ["Noelle Silk Trousers", "Inspired by your recent fitting", "$142", "Your size is in stock"],
+    [
+      "Aurelia Satin Midi",
+      "Because you love emerald occasionwear",
+      "$168",
+      "96% match",
+    ],
+    [
+      "Mila Gold Clutch",
+      "Pairs with your saved looks",
+      "$86",
+      "Complete the look",
+    ],
+    [
+      "Noelle Silk Trousers",
+      "Inspired by your recent fitting",
+      "$142",
+      "Your size is in stock",
+    ],
   ];
-  return <div className="content shop"><section className="shop-hero"><span className="eyebrow">MADE FOR AMARA</span><h2>Your style, beautifully understood.</h2><p>Fresh pieces selected from your sizes, saved looks, purchases, and the brands you return to.</p><button className="primary">Refine my style</button></section><section className="shop-head"><div><span className="eyebrow">TOP PICKS FOR YOU</span><h2>We think you will love these</h2></div><button>Why these picks?</button></section><div className="recommendations">{picks.map((p,index)=><article key={p[0]}><div className={'recommendation-art r'+index}><ShoppingBag/><em>{p[3]}</em></div><small>{p[1]}</small><h3>{p[0]}</h3><footer><b>{p[2]}</b><button aria-label={`Add ${p[0]} to bag`}><Plus/></button></footer></article>)}</div><section className="shop-row panel"><div><span className="eyebrow">SHOP YOUR HISTORY</span><h3>More from brands you love</h3><p>New arrivals from Atelier Omi and Nia Collective, tuned to your preferred colors and fit.</p></div><button>Explore familiar favorites <ArrowUpRight/></button></section></div>
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [saved, setSaved] = useState<string[]>([]);
+  const [showWhy, setShowWhy] = useState(false);
+  const [showStyle, setShowStyle] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const visiblePicks = picks.filter((pick) => !hidden.includes(pick[0]));
+  const hidePick = (name: string) => setHidden((current) => [...current, name]);
+  return (
+    <div className="content shop">
+      <section className="shop-hero">
+        <span className="eyebrow">MADE FOR AMARA</span>
+        <h2>Your style, beautifully understood.</h2>
+        <p>
+          Fresh pieces selected from your sizes, saved looks, purchases, and the
+          brands you return to.
+        </p>
+        <button
+          className="primary"
+          onClick={() => setShowStyle((current) => !current)}
+        >
+          {showStyle ? "Save my style" : "Refine my style"}
+        </button>
+        {showStyle && (
+          <div className="style-signals" aria-label="Style signals">
+            <span>Emerald</span>
+            <span>Occasionwear</span>
+            <span>Size 8</span>
+            <span>Atelier Omi</span>
+          </div>
+        )}
+      </section>
+      <section className="shop-head">
+        <div>
+          <span className="eyebrow">TOP PICKS FOR YOU</span>
+          <h2>We think you will love these</h2>
+        </div>
+        <button onClick={() => setShowWhy((current) => !current)}>
+          <CircleHelp />
+          Why these picks?
+        </button>
+      </section>
+      {showWhy && (
+        <section className="recommendation-explainer panel" aria-live="polite">
+          <BrainCircuit />
+          <div>
+            <b>Recommendations you can understand</b>
+            <p>
+              These picks use your saved looks, preferred colors, size, recent
+              fitting activity, and favorite brands. You can hide anything that
+              does not feel right.
+            </p>
+          </div>
+        </section>
+      )}
+      <div className="recommendations">
+        {visiblePicks.map((p, index) => (
+          <article key={p[0]}>
+            <div className={"recommendation-art r" + index}>
+              <ShoppingBag />
+              <em>{p[3]}</em>
+            </div>
+            <small>{p[1]}</small>
+            <h3>{p[0]}</h3>
+            <footer>
+              <b>{p[2]}</b>
+              <button
+                aria-label={`${saved.includes(p[0]) ? "Remove" : "Add"} ${p[0]} ${saved.includes(p[0]) ? "from" : "to"} bag`}
+                onClick={() =>
+                  setSaved((current) =>
+                    current.includes(p[0])
+                      ? current.filter((item) => item !== p[0])
+                      : [...current, p[0]],
+                  )
+                }
+              >
+                {saved.includes(p[0]) ? <Check /> : <Plus />}
+              </button>
+            </footer>
+            <button className="not-for-me" onClick={() => hidePick(p[0])}>
+              Not for me
+            </button>
+          </article>
+        ))}
+      </div>
+      {hidden.length > 0 && (
+        <button className="undo-picks" onClick={() => setHidden([])}>
+          Restore hidden picks
+        </button>
+      )}
+      <section className="shop-row panel">
+        <div>
+          <span className="eyebrow">SHOP YOUR HISTORY</span>
+          <h3>More from brands you love</h3>
+          <p>
+            New arrivals from Atelier Omi and Nia Collective, tuned to your
+            preferred colors and fit.
+          </p>
+          {showHistory && (
+            <small className="history-note">
+              Your storefront has 12 new arrivals in your preferred size.
+            </small>
+          )}
+        </div>
+        <button onClick={() => setShowHistory((current) => !current)}>
+          {showHistory
+            ? "Hide familiar favorites"
+            : "Explore familiar favorites"}{" "}
+          <ArrowUpRight />
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function IntelligenceHub() {
+  const [briefReady, setBriefReady] = useState(false);
+  const [reorderApproved, setReorderApproved] = useState(false);
+  return (
+    <ListView
+      eyebrow="BLOSSOM INTELLIGENCE"
+      title="Demand you can act on"
+      subtitle="Signals are explainable, privacy aware, and tied to an owner action."
+    >
+      <section className="intelligence-hero panel">
+        <div>
+          <span className="eyebrow">TODAY'S OPPORTUNITY</span>
+          <h3>Emerald occasionwear is accelerating.</h3>
+          <p>
+            Demand is up 31% from searches, fitting activity, completed sales,
+            and repeat customer interest. Current stock covers about four
+            selling days.
+          </p>
+          <div className="signal-row">
+            <span>
+              <TrendingUp />
+              31% demand lift
+            </span>
+            <span>
+              <Heart />
+              42% repeat buyers
+            </span>
+            <span>
+              <Package />4 days of stock
+            </span>
+          </div>
+        </div>
+        <button className="primary" onClick={() => setBriefReady(true)}>
+          {briefReady ? "Brief ready" : "Create merchandising brief"}
+        </button>
+      </section>
+      {briefReady && (
+        <section className="brief-card" aria-live="polite">
+          <span className="eyebrow">MERCHANDISING BRIEF</span>
+          <h3>Protect the weekend opportunity.</h3>
+          <ol>
+            <li>Feature Aurelia Satin Midi and Mila Gold Clutch together.</li>
+            <li>Reorder six emerald size 8 units from Atelier Omi.</li>
+            <li>
+              Send the edited look to customers who saved emerald occasionwear.
+            </li>
+          </ol>
+        </section>
+      )}
+      <section className="intelligence-grid">
+        <article className="panel">
+          <span className="eyebrow">CUSTOMER VALUE</span>
+          <h3>Recommendation assisted revenue</h3>
+          <b className="big-stat">$1,420</b>
+          <p>
+            29% of today&apos;s sales began with a personalized discovery
+            touchpoint.
+          </p>
+        </article>
+        <article className="panel">
+          <span className="eyebrow">BRAND MOMENTUM</span>
+          <h3>Atelier Omi</h3>
+          <b className="big-stat">+18%</b>
+          <p>
+            Strongest lift from repeat buyers and complete the look pairings.
+          </p>
+        </article>
+        <article className="panel action-card">
+          <span className="eyebrow">INVENTORY DECISION</span>
+          <h3>Reorder emerald size 8</h3>
+          <p>Six units protect projected demand through Sunday.</p>
+          <button onClick={() => setReorderApproved((current) => !current)}>
+            {reorderApproved ? (
+              <>
+                <Check />
+                Reorder approved
+              </>
+            ) : (
+              "Approve reorder"
+            )}
+          </button>
+        </article>
+      </section>
+      <section className="panel trust-card">
+        <BrainCircuit />
+        <div>
+          <span className="eyebrow">TRUST AND CONTROL</span>
+          <h3>Intelligence stays accountable.</h3>
+          <p>
+            Every recommendation has a reason, customers can refine or hide
+            suggestions, and customer data is used only within the tenant and
+            their consent.
+          </p>
+        </div>
+      </section>
+    </ListView>
+  );
 }
 function Dashboard({
   go,
@@ -573,7 +810,39 @@ function Dashboard({
           </div>
         </article>
       </section>
-      <section className="brand-performance panel"><div className="panel-head"><span><small className="eyebrow">BRAND INTELLIGENCE</small><h3>What customers are buying</h3></span><button>Open full analysis <ArrowUpRight/></button></div><div className="brand-table"><div><span>Brand</span><span>Sales</span><span>Units</span><span>Repeat buyers</span><span>Trend</span></div>{[["Atelier Omi","$12,480","86","42%","+18%"],["Nia Collective","$8,920","64","37%","+11%"],["Maison Halo","$7,610","51","29%","+6%"]].map(row=><div key={row[0]}>{row.map((cell,index)=><span key={cell} className={index===4?'positive':''}>{cell}</span>)}</div>)}</div></section>
+      <section className="brand-performance panel">
+        <div className="panel-head">
+          <span>
+            <small className="eyebrow">BRAND INTELLIGENCE</small>
+            <h3>What customers are buying</h3>
+          </span>
+          <button onClick={() => go("Intelligence")}>
+            Open full analysis <ArrowUpRight />
+          </button>
+        </div>
+        <div className="brand-table">
+          <div>
+            <span>Brand</span>
+            <span>Sales</span>
+            <span>Units</span>
+            <span>Repeat buyers</span>
+            <span>Trend</span>
+          </div>
+          {[
+            ["Atelier Omi", "$12,480", "86", "42%", "+18%"],
+            ["Nia Collective", "$8,920", "64", "37%", "+11%"],
+            ["Maison Halo", "$7,610", "51", "29%", "+6%"],
+          ].map((row) => (
+            <div key={row[0]}>
+              {row.map((cell, index) => (
+                <span key={cell} className={index === 4 ? "positive" : ""}>
+                  {cell}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
