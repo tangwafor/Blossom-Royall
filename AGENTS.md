@@ -17,7 +17,7 @@
 9. Keep the platform console separate and restricted to platform admins. No self promotion. Impersonation requires an audit record and permanent visible banner. Never use the word god in user facing copy.
 10. Include error tracking, synthetic monitors, metrics, and alerts.
 11. Maintain canonical page and API inventories plus a brief tab.
-12. Apply tenant branding to the application, PWA icon, and printables. Display Powered by TA Tech. Printed documents use the tenant logo in the header and the TaTech logo and motto in the footer. The motto is: It's not where you have been, but where you are going. Never use em dashes.
+12. Apply tenant branding to the application, PWA icon, and printables. Display Powered by TA Tech. Printed documents use the tenant logo in the header and the TaTech logo and motto in the footer. The exact motto is: Is not where you have been but where you are going. Never use em dashes.
 13. Use database snapshots, development first, RLS enforcement, and a fresh dump before new SQL.
 14. Enforce least privilege and privacy in the database. Every entity requires full create, read, update, and remove workflows.
 15. Do not hardcode tenant configurable lists. Ship editable defaults.
@@ -33,11 +33,14 @@
 25. Use branded product domains with docs and watch subdomains. Do not expose raw hosting provider domains.
 26. Handle Supabase auth through returned errors, localized auth messages, password visibility controls, branded reset email, explicit redirect, protected reset routes, production site URL, and branded SMTP.
 27. Use canonical share buttons and branded watch pages with social player metadata. Never publish a raw video URL.
+28. TaTech authentication styling is mandatory. Tenant branding remains primary. Login must include Powered by TA Tech, the exact approved motto, premium visual treatment, localization, accessible controls, password visibility, branded recovery, and safe returned error handling.
 
 ## Mission
+
 Build a premium, mobile-first mall operating system that replaces disconnected POS, inventory, vendor, rent, workforce, messaging, document and ecommerce tools.
 
 ## Non-negotiable UX rules
+
 1. Never ask for information the system can infer, scan, calculate or generate.
 2. Every workflow must work end-to-end; no dead demo buttons in completed features.
 3. Mobile-first, touch-friendly, fast and calm. Luxury retail, not enterprise back-office software.
@@ -47,13 +50,16 @@ Build a premium, mobile-first mall operating system that replaces disconnected P
 7. Database RLS is mandatory; UI hiding is never considered security.
 
 ## Primary roles
+
 owner, manager, staff, vendor, customer
 
 ## Critical vertical slices
+
 - Customer browse -> My Fit -> cart -> checkout/layaway -> receipt -> fulfillment -> inventory/vendor attribution.
 - Vendor invite -> onboarding -> lease -> e-sign -> rent/deposit -> receipt -> inventory -> storefront.
 - Staff hire -> permissions -> schedule -> clock in/out -> hours -> payroll estimate.
 - Sale -> vendor ledger -> stock -> customer history -> analytics -> AI recommendation.
 
 ## Production safety
+
 Agents may autonomously edit code, run tests and create preview deployments. Require explicit approval for production DB migrations, destructive operations, DNS changes, secrets, payment webhook changes and production promotion.

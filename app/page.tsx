@@ -133,13 +133,13 @@ export default function Home() {
             </button>
           ))}
         </nav>
-        <div className="profile">
+        <a className="profile" href="/auth">
           <i>AR</i>
           <span>
             <b>Avery Royall</b>
             <small>Owner</small>
           </span>
-        </div>
+        </a>
       </aside>
       {menu && (
         <button

@@ -1,5 +1,11 @@
 # Blossom Royall Canonical Inventory
 
+## Tenant defaults
+
+| Setting | Value |
+| --- | --- |
+| Currency | USD |
+
 ## Current product surfaces
 
 | Surface | Primary role | Status | Behavior coverage |
