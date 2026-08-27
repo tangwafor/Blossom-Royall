@@ -74,7 +74,7 @@ export default function AuthPage() {
     if (mode === "signin" && method === "magic") {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${location.origin}/auth/callback` },
+        options: { emailRedirectTo: `${location.origin}/auth/callback?returnTo=%2Fworkspace` },
       });
       setLoading(false);
       setMessage(
@@ -90,7 +90,7 @@ export default function AuthPage() {
         : await supabase.auth.signUp({
             email,
             password,
-            options: { emailRedirectTo: `${location.origin}/auth` },
+            options: { emailRedirectTo: `${location.origin}/auth?returnTo=%2Fworkspace` },
           });
     setLoading(false);
     if (result.error) {
@@ -106,14 +106,14 @@ export default function AuthPage() {
       setMessage("Check your email to confirm your Blossom Royall account.");
       return;
     }
-    location.assign("/");
+    location.assign("/workspace");
   };
   const signInWithGoogle = async () => {
     setLoading(true);
     setMessage("");
     const { data, error } = await createClient().auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: { redirectTo: `${location.origin}/auth/callback?returnTo=%2Fworkspace` },
     });
     if (error) {
       setLoading(false);

@@ -454,6 +454,16 @@ test("manages a vendor lifecycle without developer intervention", async ({ page 
   await expect(page.getByLabel("Contact email")).toHaveValue("ama@kentehouse.example");
 });
 
+test("keeps vendor writes in a clearly identified preview without tenant membership", async ({ page }, testInfo) => {
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }));
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Vendors", exact: true }).click();
+  const runtime = page.locator(".vendor-operations .tenant-runtime");
+  await expect(runtime).toContainText("Private preview mode");
+  await expect(runtime).toContainText("authorized Blossom Royall account");
+});
+
 test("configures a vendor agreement and issues a rent receipt", async ({ page }, testInfo) => {
   await page.goto("/");
   if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
@@ -678,4 +688,11 @@ test("renders branded authentication with safe password controls", async ({
   await expect(
     page.getByRole("link", { name: "Back to Blossom Royall" }),
   ).toBeVisible();
+});
+
+test("protects the operating workspace from unauthenticated access", async ({ page }) => {
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }));
+  await page.goto("/workspace");
+  await expect(page).toHaveURL(/\/auth\?returnTo=%2Fworkspace$/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

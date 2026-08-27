@@ -13,7 +13,7 @@
 
 The live Supabase project was inspected on August 27, 2026. The `vendors`, `leases`, and `rent_payments` tables already exist with row level security enabled. All public tables reported row level security enabled. The Supabase security advisor reported no findings.
 
-The readiness submission workflow is already persisted in production. The new operating workflows remain on the local adapter until authenticated tenant identity and real business records exist.
+The readiness submission workflow is already persisted in production. Vendor operations now include an authenticated tenant adapter. It resolves the signed in user, requires a store membership, loads only vendors for that store, and permits production mutations only for owners and managers. When identity, membership, or production access is unavailable, the interface explicitly remains in private preview mode and preserves work on the device.
 
 ## Required external activation data
 
@@ -30,7 +30,7 @@ The readiness submission workflow is already persisted in production. The new op
 1. Pull and commit a fresh production schema dump.
 2. Create the production store, Delly's profile, and owner membership with explicit approval.
 3. Import or invite confirmed vendors through an audited idempotent workflow.
-4. Connect the vendor directory to role scoped Supabase create, read, update, and removal operations.
+4. Verify the existing role scoped vendor adapter using Delly's authenticated production owner membership.
 5. Connect agreements and rent receipts to the existing lease and payment tables.
 6. Verify database audit triggers, tenant isolation, concurrency handling, and revocation behavior.
 7. Run security advisors, information schema checks, behavior tests, production build, and production account hygiene.

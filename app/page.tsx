@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import BrandMark from "./brand-mark";
 import Link from "next/link";
+import { loadTenantVendors, removeTenantVendor, resolveTenantContext, saveTenantVendor, type TenantContext } from "../lib/supabase/tenant-runtime";
 
 const nav = [
   ["Command Center", LayoutDashboard],
@@ -781,11 +782,22 @@ function VendorOperations() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [invitationLink, setInvitationLink] = useState("");
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
   useEffect(() => {
     const stored = localStorage.getItem(storageKey);
     const storedAudits = localStorage.getItem(auditKey);
     if (stored) setRecords(JSON.parse(stored));
     if (storedAudits) setAudits(JSON.parse(storedAudits));
+    void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
+      if (context.mode !== "production") return;
+      try {
+        const productionVendors = await loadTenantVendors(context);
+        setRecords(productionVendors.map((vendor) => ({ id: vendor.id, name: vendor.name, category: "Tenant vendor", contactName: "", email: "", phone: "", status: vendor.status === "suspended" ? "Suspended" : vendor.status === "active" ? "Launch ready" : "Onboarding", roster: "Confirmed", createdAt: vendor.created_at })));
+      } catch {
+        setTenantContext({ ...context, mode: "preview", reason: "Production vendor records could not be loaded. Changes remain in this device preview." });
+      }
+    });
   }, []);
   const persist = (next: VendorRecord[], vendorName: string, action: string) => {
     const event: VendorAuditEvent = { id: crypto.randomUUID(), vendorName, action, at: new Date().toISOString() };
@@ -814,6 +826,7 @@ function VendorOperations() {
     };
     const next = editing ? records.map((vendor) => vendor.id === editing.id ? record : vendor) : [record, ...records];
     persist(next, name, editing ? "Vendor profile updated" : "Vendor invited");
+    if (tenantContext.mode === "production") void saveTenantVendor(tenantContext, { id: record.id, name: record.name, status: record.status === "Suspended" ? "suspended" : record.status === "Launch ready" ? "active" : "onboarding" }).catch(() => setNotice("The vendor remains saved on this device, but production synchronization needs attention."));
     if (!editing) {
       const query = new URLSearchParams({ role: "vendor", brandName: name, contactName: record.contactName, email: record.email });
       setInvitationLink(`${window.location.origin}/readiness?${query.toString()}`);
@@ -824,11 +837,13 @@ function VendorOperations() {
   const toggleStatus = (vendor: VendorRecord) => {
     const status = vendor.status === "Suspended" ? "Onboarding" : "Suspended";
     persist(records.map((item) => item.id === vendor.id ? { ...item, status } : item), vendor.name, status === "Suspended" ? "Vendor suspended" : "Vendor restored");
+    if (tenantContext.mode === "production") void saveTenantVendor(tenantContext, { id: vendor.id, name: vendor.name, status: status === "Suspended" ? "suspended" : "onboarding" }).catch(() => setNotice("The status changed on this device, but production synchronization needs attention."));
     setNotice(status === "Suspended" ? `${vendor.name} was suspended. Selling access should be revoked by production authorization.` : `${vendor.name} was restored to onboarding.`);
   };
   const removeVendor = (vendor: VendorRecord) => {
     if (deleteId !== vendor.id) { setDeleteId(vendor.id); setNotice(`Select remove again to confirm deleting ${vendor.name}.`); return; }
     persist(records.filter((item) => item.id !== vendor.id), vendor.name, "Vendor removed");
+    if (tenantContext.mode === "production") void removeTenantVendor(tenantContext, vendor.id).catch(() => setNotice("The local record was removed, but production removal needs attention."));
     setDeleteId(null);
     setNotice(`${vendor.name} was removed from this tenant roster.`);
   };
@@ -836,6 +851,7 @@ function VendorOperations() {
     <section className="panel vendor-operations">
       <div className="panel-head"><span><small className="eyebrow">TENANT VENDOR DIRECTORY</small><h3>{records.length} managed brands</h3></span><button className="primary" onClick={() => { setEditing(null); setOpen((value) => !value); setNotice(""); }}><Plus />{open && !editing ? "Close invitation" : "Invite vendor"}</button></div>
       <p>Add and maintain vendors without engineering work. Each change stays attached to the Blossom Royall tenant and creates an accountable history entry.</p>
+      <div className={`tenant-runtime ${tenantContext.mode}`} role="status"><ShieldCheck /><span><b>{tenantContext.mode === "production" ? "Production tenant connected" : "Private preview mode"}</b><small>{tenantContext.reason}</small></span></div>
       {open && <form className="vendor-operations-form" onSubmit={saveVendor} key={editing?.id || "new-vendor"}>
         <div><span className="eyebrow">{editing ? "EDIT VENDOR" : "NEW VENDOR"}</span><h3>{editing ? `Update ${editing.name}` : "Prepare a vendor invitation"}</h3></div>
         <label>Public brand name<input name="name" required defaultValue={editing?.name} autoComplete="organization" /></label>
@@ -1534,6 +1550,7 @@ function StaffOperations() {
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
   useEffect(() => {
     const savedStaff = localStorage.getItem(staffKey);
     const savedLeave = localStorage.getItem(leaveKey);
@@ -1541,6 +1558,7 @@ function StaffOperations() {
     if (savedStaff) setStaff(JSON.parse(savedStaff));
     if (savedLeave) setLeave(JSON.parse(savedLeave));
     if (savedAudits) setAudits(JSON.parse(savedAudits));
+    void resolveTenantContext().then((context) => setTenantContext(context.mode === "production" ? { ...context, reason: "Tenant identity is connected. Staff writes remain in preview until real employee identities and wage rules are approved." } : context));
   }, []);
   const addAudit = (staffName: string, action: string) => {
     const next = [{ id: crypto.randomUUID(), staffName, action, at: new Date().toISOString() }, ...audits].slice(0, 30);
@@ -1616,6 +1634,7 @@ function StaffOperations() {
     <section className="panel staff-center">
       <div className="panel-head"><span><small className="eyebrow">PEOPLE AND SCHEDULES</small><h3>One accountable team workspace</h3></span><div><button onClick={() => setLeaveOpen((value) => !value)}>Request leave</button><button className="primary" onClick={() => { setEditing(null); setOpen((value) => !value); }}><Plus />Invite staff</button></div></div>
       <p>Manage roles, schedules, time activity, leave, and pay estimates without engineering intervention.</p>
+      <div className={`tenant-runtime ${tenantContext.mode}`} role="status"><ShieldCheck /><span><b>{tenantContext.mode === "production" ? "Production tenant identified" : "Private preview mode"}</b><small>{tenantContext.reason}</small></span></div>
       {notice && <output className="policy-saved" role="status">{notice}</output>}
       {open && <form className="staff-form" onSubmit={saveStaff} key={editing?.id || "new-staff"}>
         <label>Full name<input name="name" required defaultValue={editing?.name} autoComplete="name" /></label><label>Email<input name="email" type="email" required defaultValue={editing?.email} autoComplete="email" /></label>

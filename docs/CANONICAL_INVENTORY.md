@@ -50,6 +50,7 @@
 | Printable branding contract | Tenant logo header and TaTech attribution footer active on receipt preview |
 | Authentication methods | Password, secure email link, Google OAuth, email only remembering |
 | Authentication callback | Static deployment compatible secure session exchange active |
+| Protected operating workspace | `/workspace` verifies Supabase identity and store membership before rendering the console. Unauthenticated visitors return to branded access, and authenticated accounts without membership receive a safe assignment boundary. |
 | Protected password reset | Recovery session validation active |
 | Supabase production persistence | Readiness submissions live with hardened insert policy and audit trigger, core operating workflows remain preview adapters |
 | Full RLS role matrix | Readiness submission roles verified, full operating workflow matrix remains pending |
