@@ -21,7 +21,7 @@
 | My Orders | Customer | Working preview | Coordinated order progress, pickup credential, seller attributed items, layaway balance and payment, return eligibility, and persisted return request |
 | Orders | Owner, manager, staff | Working preview | Search and fulfillment status |
 | Products | Owner, manager, vendor | Working preview | Inventory overview and stock state |
-| Vendors | Owner, manager, vendor | Working preview | Rent and sales summary |
+| Vendors | Owner, manager, vendor | Working preview | Tenant vendor directory with create, view, edit, suspend, restore, confirmed removal, contact links, generated readiness invitations with prefilled vendor details, persisted browser state, accountable change history, configurable lease drafts, rent and deposit recording, branded payment receipts, payment history, sales summary, plus vendor supplied logo review without developer intervention |
 | Shared Commerce | Owner, manager | Working preview | Single cashier attribution, configurable payout cadence and reserves, settlement preview, scan safeguards, and inventory rebalance recommendations |
 | Delivery | Owner, manager | Working preview | Pickup, local delivery, carrier shipping, tenant routing rules, multi vendor consolidation, custody workflow, and active fulfillment board |
 | Staff | Owner, manager, staff | Working preview | Coverage and time status |
@@ -48,9 +48,15 @@
 | Authentication methods | Password, secure email link, Google OAuth, email only remembering |
 | Authentication callback | Static deployment compatible secure session exchange active |
 | Protected password reset | Recovery session validation active |
-| Supabase production persistence | Pending credentials and schema hardening |
-| Full RLS role matrix | Pending fresh database snapshot |
+| Supabase production persistence | Readiness submissions live with hardened insert policy and audit trigger, core operating workflows remain preview adapters |
+| Full RLS role matrix | Readiness submission roles verified, full operating workflow matrix remains pending |
 | Customer recommendation signals | Working interface, pending persisted consented event model |
 | Owner intelligence actions | Working interface, pending role scoped database persistence |
 | Tenant retail policy persistence | Working local tenant adapter, pending production snapshot and database connection |
 | Native store signing | Pending Apple and Google credentials |
+
+## Vendor lifecycle boundary
+
+The working preview now exercises the full vendor lifecycle without developer intervention and records each mutation in a tenant keyed browser audit history. This is deliberately not represented as production persistence. Before vendor records control real selling access, the same workflows require authenticated owner and manager authorization, tenant scoped Supabase tables, row level security, database audit triggers, invitation delivery, and revocation tests.
+
+The live schema was checked on August 27, 2026. It already contains RLS enabled `vendors`, `leases`, and `rent_payments` tables, and the Supabase security advisor reported no findings. Production activation still requires Delly's authenticated owner identity, the first Blossom Royall store record, owner membership, approved lease language, signature provider selection, and real vendor data. The missing local `DATABASE_URL` prevents the constitutionally required fresh `pg_dump`, so no new SQL migration was authored.

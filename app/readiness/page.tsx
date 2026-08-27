@@ -85,6 +85,21 @@ export default function ReadinessPage() {
     const next = saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(next);
     document.documentElement.dataset.theme = next;
+    const params = new URLSearchParams(window.location.search);
+    const invitedRole = params.get("role");
+    if (invitedRole === "vendor" || invitedRole === "prospect" || invitedRole === "owner") {
+      const invitedPath = invitedRole as Path;
+      const invitedKey = `br-readiness:${invitedPath}`;
+      const existing = JSON.parse(localStorage.getItem(invitedKey) || "{}");
+      const invitedAnswers = {
+        ...existing,
+        ...(params.get("brandName") ? { brandName: params.get("brandName") } : {}),
+        ...(params.get("contactName") ? { contactName: params.get("contactName") } : {}),
+        ...(params.get("email") ? { email: params.get("email") } : {}),
+      };
+      localStorage.setItem(invitedKey, JSON.stringify(invitedAnswers));
+      setPath(invitedPath);
+    }
   }, []);
   useEffect(() => {
     if (!storageKey) return;

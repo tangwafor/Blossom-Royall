@@ -139,6 +139,55 @@ const vendors = [
   ["SI", "Sapologie Italiano", "Suits and accessories", "Onboarding", "Confirmed"],
 ];
 
+type VendorRecord = {
+  id: string;
+  name: string;
+  category: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  status: "Invited" | "Onboarding" | "Launch ready" | "Suspended";
+  roster: "Confirmed" | "Prospect";
+  createdAt: string;
+};
+
+type VendorAuditEvent = {
+  id: string;
+  vendorName: string;
+  action: string;
+  at: string;
+};
+
+type VendorAgreement = {
+  id: string;
+  vendorId: string;
+  monthlyRent: number;
+  deposit: number;
+  commissionPercent: number;
+  dueDay: number;
+  startDate: string;
+  endDate: string;
+  status: "Draft" | "Ready for legal review" | "Sent for signature" | "Signed";
+};
+
+type VendorPayment = {
+  id: string;
+  agreementId: string;
+  vendorName: string;
+  type: "Deposit" | "Rent" | "Adjustment";
+  amount: number;
+  method: "Card" | "ACH" | "Cash" | "Check";
+  receiptNumber: string;
+  paidAt: string;
+};
+
+const defaultVendorRecords: VendorRecord[] = [
+  { id: "blossom-collections", name: "Blossom Collections", category: "House collection", contactName: "Delly", email: "", phone: "", status: "Launch ready", roster: "Confirmed", createdAt: "2026-08-26T09:00:00.000Z" },
+  { id: "jose-kako", name: "Jose Kako", category: "Men’s formalwear", contactName: "", email: "", phone: "", status: "Onboarding", roster: "Confirmed", createdAt: "2026-08-26T09:00:00.000Z" },
+  { id: "africstyle-fashion", name: "Africstyle Fashion", category: "African heritage fashion", contactName: "", email: "", phone: "", status: "Launch ready", roster: "Confirmed", createdAt: "2026-08-26T09:00:00.000Z" },
+  { id: "sapologie-italiano", name: "Sapologie Italiano", category: "Suits and accessories", contactName: "", email: "", phone: "", status: "Onboarding", roster: "Confirmed", createdAt: "2026-08-26T09:00:00.000Z" },
+];
+
 const tourSteps = [
   {
     title: "Welcome to your Command Center",
@@ -366,31 +415,8 @@ export default function Home() {
             eyebrow="MALL PARTNERS"
             title="Vendors"
             subtitle="Leases, rent, inventory, and performance in one place."
-            action="Invite vendor"
-            actionHref="/partners"
           >
-            <VendorBrandManager />
-            <div className="vendors">
-              {vendors.map((v) => (
-                <article className="panel vendor" key={v[1]}>
-                  <i>{v[0]}</i>
-                  <span>
-                    <h3>{v[1]}</h3>
-                    <small>{v[2]}</small>
-                  </span>
-                  <span>
-                    <small>Opening roster</small>
-                    <b>{v[4]}</b>
-                  </span>
-                  <em
-                    className={(v[3] as string).includes("Onboarding") ? "warn" : ""}
-                  >
-                    {v[3]}
-                  </em>
-                  <ChevronRight />
-                </article>
-              ))}
-            </div>
+            <VendorOperations />
           </ListView>
         )}
         {active === "Shared Commerce" && <SharedCommerceCenter />}
@@ -670,6 +696,179 @@ function ProductCatalogManager() {
     </section>
     <div className="product-grid">{products.map((p) => <article className="product" key={p[2] as string}><div><ShoppingBag /><span>{(p[3] as number) === 0 ? "Online only" : (p[3] as number) <= 3 ? "Low stock" : "In stock"}</span></div><small>{p[2]}</small><h3>{p[0]}</h3><p>{p[1]}</p><footer><b>{p[4]}</b><span>{p[3]} onsite{p[5] !== undefined ? ` · ${p[5]} online` : ""}</span></footer>{p[6] && <small className="channel-source">{p[6]}</small>}</article>)}</div>
   </>;
+}
+
+function VendorOperations() {
+  const storageKey = "br-vendors:blossom-royall";
+  const auditKey = "br-vendor-audit:blossom-royall";
+  const [records, setRecords] = useState<VendorRecord[]>(defaultVendorRecords);
+  const [audits, setAudits] = useState<VendorAuditEvent[]>([]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<VendorRecord | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  const [invitationLink, setInvitationLink] = useState("");
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    const storedAudits = localStorage.getItem(auditKey);
+    if (stored) setRecords(JSON.parse(stored));
+    if (storedAudits) setAudits(JSON.parse(storedAudits));
+  }, []);
+  const persist = (next: VendorRecord[], vendorName: string, action: string) => {
+    const event: VendorAuditEvent = { id: crypto.randomUUID(), vendorName, action, at: new Date().toISOString() };
+    const nextAudits = [event, ...audits].slice(0, 20);
+    setRecords(next);
+    setAudits(nextAudits);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    localStorage.setItem(auditKey, JSON.stringify(nextAudits));
+  };
+  const closeForm = () => { setOpen(false); setEditing(null); };
+  const startEdit = (vendor: VendorRecord) => { setEditing(vendor); setOpen(true); setNotice(""); };
+  const saveVendor = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const name = String(data.get("name") || "").trim();
+    const record: VendorRecord = {
+      id: editing?.id || crypto.randomUUID(),
+      name,
+      category: String(data.get("category") || "").trim(),
+      contactName: String(data.get("contactName") || "").trim(),
+      email: String(data.get("email") || "").trim().toLowerCase(),
+      phone: String(data.get("phone") || "").trim(),
+      status: String(data.get("status") || "Invited") as VendorRecord["status"],
+      roster: String(data.get("roster") || "Prospect") as VendorRecord["roster"],
+      createdAt: editing?.createdAt || new Date().toISOString(),
+    };
+    const next = editing ? records.map((vendor) => vendor.id === editing.id ? record : vendor) : [record, ...records];
+    persist(next, name, editing ? "Vendor profile updated" : "Vendor invited");
+    if (!editing) {
+      const query = new URLSearchParams({ role: "vendor", brandName: name, contactName: record.contactName, email: record.email });
+      setInvitationLink(`${window.location.origin}/readiness?${query.toString()}`);
+    }
+    setNotice(editing ? `${name} was updated.` : `${name} was added. Share the private onboarding link below.`);
+    closeForm();
+  };
+  const toggleStatus = (vendor: VendorRecord) => {
+    const status = vendor.status === "Suspended" ? "Onboarding" : "Suspended";
+    persist(records.map((item) => item.id === vendor.id ? { ...item, status } : item), vendor.name, status === "Suspended" ? "Vendor suspended" : "Vendor restored");
+    setNotice(status === "Suspended" ? `${vendor.name} was suspended. Selling access should be revoked by production authorization.` : `${vendor.name} was restored to onboarding.`);
+  };
+  const removeVendor = (vendor: VendorRecord) => {
+    if (deleteId !== vendor.id) { setDeleteId(vendor.id); setNotice(`Select remove again to confirm deleting ${vendor.name}.`); return; }
+    persist(records.filter((item) => item.id !== vendor.id), vendor.name, "Vendor removed");
+    setDeleteId(null);
+    setNotice(`${vendor.name} was removed from this tenant roster.`);
+  };
+  return <>
+    <section className="panel vendor-operations">
+      <div className="panel-head"><span><small className="eyebrow">TENANT VENDOR DIRECTORY</small><h3>{records.length} managed brands</h3></span><button className="primary" onClick={() => { setEditing(null); setOpen((value) => !value); setNotice(""); }}><Plus />{open && !editing ? "Close invitation" : "Invite vendor"}</button></div>
+      <p>Add and maintain vendors without engineering work. Each change stays attached to the Blossom Royall tenant and creates an accountable history entry.</p>
+      {open && <form className="vendor-operations-form" onSubmit={saveVendor} key={editing?.id || "new-vendor"}>
+        <div><span className="eyebrow">{editing ? "EDIT VENDOR" : "NEW VENDOR"}</span><h3>{editing ? `Update ${editing.name}` : "Prepare a vendor invitation"}</h3></div>
+        <label>Public brand name<input name="name" required defaultValue={editing?.name} autoComplete="organization" /></label>
+        <label>Category<input name="category" required defaultValue={editing?.category} placeholder="Fashion, beauty, accessories, services" /></label>
+        <label>Contact person<input name="contactName" required defaultValue={editing?.contactName} autoComplete="name" /></label>
+        <label>Email<input name="email" type="email" required defaultValue={editing?.email} autoComplete="email" /></label>
+        <label>Phone<input name="phone" type="tel" defaultValue={editing?.phone} autoComplete="tel" /></label>
+        <label>Onboarding status<select name="status" defaultValue={editing?.status || "Invited"}><option>Invited</option><option>Onboarding</option><option>Launch ready</option><option>Suspended</option></select></label>
+        <label>Opening roster<select name="roster" defaultValue={editing?.roster || "Prospect"}><option>Prospect</option><option>Confirmed</option></select></label>
+        <footer><button type="button" onClick={closeForm}>Cancel</button><button className="primary" type="submit"><Check />{editing ? "Save vendor" : "Create invitation"}</button></footer>
+      </form>}
+      {notice && <output className="policy-saved" role="status">{notice}</output>}
+      {invitationLink && <div className="vendor-invitation-link"><span><small>VENDOR ONBOARDING LINK</small><a href={invitationLink}>{invitationLink}</a></span><button type="button" onClick={async () => { await navigator.clipboard.writeText(invitationLink); setNotice("Vendor onboarding link copied."); }}>Copy link</button></div>}
+      <div className="vendor-directory">{records.map((vendor) => <article className="panel vendor" key={vendor.id}>
+        <i>{vendor.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</i>
+        <span><h3>{vendor.name}</h3><small>{vendor.category}</small>{vendor.email && <a href={`mailto:${vendor.email}`}>{vendor.email}</a>}</span>
+        <span><small>Opening roster</small><b>{vendor.roster}</b></span>
+        <em className={vendor.status === "Onboarding" || vendor.status === "Invited" || vendor.status === "Suspended" ? "warn" : ""}>{vendor.status}</em>
+        <div className="vendor-row-actions"><button onClick={() => startEdit(vendor)}>Edit</button><button onClick={() => toggleStatus(vendor)}>{vendor.status === "Suspended" ? "Restore" : "Suspend"}</button><button className={deleteId === vendor.id ? "danger" : ""} onClick={() => removeVendor(vendor)}>{deleteId === vendor.id ? "Confirm remove" : "Remove"}</button></div>
+      </article>)}</div>
+      {audits.length > 0 && <details className="vendor-audit"><summary>View vendor change history</summary><ol>{audits.map((event) => <li key={event.id}><span><b>{event.action}</b><small>{event.vendorName}</small></span><time>{new Date(event.at).toLocaleString()}</time></li>)}</ol></details>}
+    </section>
+    <VendorLeaseRentCenter vendors={records} />
+    <VendorBrandManager />
+  </>;
+}
+
+function VendorLeaseRentCenter({ vendors }: { vendors: VendorRecord[] }) {
+  const agreementKey = "br-vendor-agreements:blossom-royall";
+  const paymentKey = "br-vendor-payments:blossom-royall";
+  const [agreements, setAgreements] = useState<VendorAgreement[]>([]);
+  const [payments, setPayments] = useState<VendorPayment[]>([]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<VendorAgreement | null>(null);
+  const [notice, setNotice] = useState("");
+  const [receipt, setReceipt] = useState<VendorPayment | null>(null);
+  useEffect(() => {
+    const savedAgreements = localStorage.getItem(agreementKey);
+    const savedPayments = localStorage.getItem(paymentKey);
+    if (savedAgreements) setAgreements(JSON.parse(savedAgreements));
+    if (savedPayments) setPayments(JSON.parse(savedPayments));
+  }, []);
+  const persistAgreements = (next: VendorAgreement[]) => { setAgreements(next); localStorage.setItem(agreementKey, JSON.stringify(next)); };
+  const persistPayments = (next: VendorPayment[]) => { setPayments(next); localStorage.setItem(paymentKey, JSON.stringify(next)); };
+  const saveAgreement = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const agreement: VendorAgreement = {
+      id: editing?.id || crypto.randomUUID(),
+      vendorId: String(data.get("vendorId")),
+      monthlyRent: Number(data.get("monthlyRent")),
+      deposit: Number(data.get("deposit")),
+      commissionPercent: Number(data.get("commissionPercent")),
+      dueDay: Number(data.get("dueDay")),
+      startDate: String(data.get("startDate")),
+      endDate: String(data.get("endDate")),
+      status: String(data.get("status")) as VendorAgreement["status"],
+    };
+    persistAgreements(editing ? agreements.map((item) => item.id === editing.id ? agreement : item) : [agreement, ...agreements]);
+    setNotice(editing ? "Agreement terms updated and recorded." : "Agreement draft created and recorded.");
+    setEditing(null);
+    setOpen(false);
+  };
+  const recordPayment = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const agreementId = String(data.get("agreementId"));
+    const agreement = agreements.find((item) => item.id === agreementId);
+    const vendor = vendors.find((item) => item.id === agreement?.vendorId);
+    if (!agreement || !vendor) return;
+    const next: VendorPayment = {
+      id: crypto.randomUUID(),
+      agreementId,
+      vendorName: vendor.name,
+      type: String(data.get("type")) as VendorPayment["type"],
+      amount: Number(data.get("amount")),
+      method: String(data.get("method")) as VendorPayment["method"],
+      receiptNumber: `BRR-${String(payments.length + 1).padStart(5, "0")}`,
+      paidAt: new Date().toISOString(),
+    };
+    persistPayments([next, ...payments]);
+    setReceipt(next);
+    setNotice(`${next.type} payment recorded with receipt ${next.receiptNumber}.`);
+    event.currentTarget.reset();
+  };
+  const vendorName = (vendorId: string) => vendors.find((vendor) => vendor.id === vendorId)?.name || "Former vendor";
+  return <section className="panel vendor-finance">
+    <div className="panel-head"><span><small className="eyebrow">LEASES AND RENT</small><h3>Vendor agreements and payments</h3></span><button onClick={() => { setEditing(null); setOpen((value) => !value); }}><FileSignature />{open && !editing ? "Close draft" : "New agreement"}</button></div>
+    <p>Configure commercial terms in the interface, record payments, and issue branded receipts. Legal wording and electronic signature activation remain blocked until the owner approves the lease template and signature provider.</p>
+    {open && <form className="vendor-agreement-form" onSubmit={saveAgreement} key={editing?.id || "new-agreement"}>
+      <label>Vendor<select name="vendorId" required defaultValue={editing?.vendorId || ""}><option value="" disabled>Choose vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
+      <label>Monthly rent<span><b>$</b><input name="monthlyRent" type="number" min="0" step=".01" required defaultValue={editing?.monthlyRent || ""} /></span></label>
+      <label>Security deposit<span><b>$</b><input name="deposit" type="number" min="0" step=".01" required defaultValue={editing?.deposit || ""} /></span></label>
+      <label>Sales commission<span><input name="commissionPercent" type="number" min="0" max="100" step=".1" required defaultValue={editing?.commissionPercent || 0} /><b>%</b></span></label>
+      <label>Rent due day<input name="dueDay" type="number" min="1" max="28" required defaultValue={editing?.dueDay || 1} /></label>
+      <label>Start date<input name="startDate" type="date" required defaultValue={editing?.startDate} /></label>
+      <label>End date<input name="endDate" type="date" required defaultValue={editing?.endDate} /></label>
+      <label>Agreement status<select name="status" defaultValue={editing?.status || "Draft"}><option>Draft</option><option>Ready for legal review</option><option>Sent for signature</option><option>Signed</option></select></label>
+      <footer><button type="button" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</button><button className="primary" type="submit"><Check />Save agreement</button></footer>
+    </form>}
+    {notice && <output className="policy-saved" role="status">{notice}</output>}
+    {agreements.length > 0 && <div className="agreement-ledger">{agreements.map((agreement) => <article key={agreement.id}><span><b>{vendorName(agreement.vendorId)}</b><small>{agreement.startDate} to {agreement.endDate}</small></span><span><small>Monthly rent</small><b>${agreement.monthlyRent.toFixed(2)}</b></span><span><small>Deposit</small><b>${agreement.deposit.toFixed(2)}</b></span><span><small>Commission</small><b>{agreement.commissionPercent}%</b></span><em>{agreement.status}</em><button onClick={() => { setEditing(agreement); setOpen(true); }}>Edit terms</button></article>)}</div>}
+    {agreements.length > 0 && <form className="vendor-payment-form" onSubmit={recordPayment}><div><span className="eyebrow">RECORD PAYMENT</span><h3>Create an accountable rent receipt</h3></div><label>Agreement<select name="agreementId" required defaultValue=""><option value="" disabled>Choose vendor agreement</option>{agreements.map((agreement) => <option key={agreement.id} value={agreement.id}>{vendorName(agreement.vendorId)}</option>)}</select></label><label>Payment type<select name="type"><option>Rent</option><option>Deposit</option><option>Adjustment</option></select></label><label>Amount<span><b>$</b><input name="amount" type="number" min=".01" step=".01" required /></span></label><label>Method<select name="method"><option>Card</option><option>ACH</option><option>Cash</option><option>Check</option></select></label><button className="primary" type="submit"><Banknote />Record and receipt</button></form>}
+    {receipt && <article className="vendor-rent-receipt" aria-label={`Receipt ${receipt.receiptNumber}`}><header><BrandMark /><span><b>Blossom Royall</b><small>Vendor payment receipt</small></span></header><dl><div><dt>Receipt</dt><dd>{receipt.receiptNumber}</dd></div><div><dt>Vendor</dt><dd>{receipt.vendorName}</dd></div><div><dt>Payment</dt><dd>{receipt.type}</dd></div><div><dt>Method</dt><dd>{receipt.method}</dd></div><div><dt>Date</dt><dd>{new Date(receipt.paidAt).toLocaleDateString()}</dd></div><div><dt>Amount paid</dt><dd>${receipt.amount.toFixed(2)}</dd></div></dl><footer><span><b>Powered by TA Tech</b><small>Is not where you have been but where you are going.</small></span><button onClick={() => window.print()}><Printer />Print receipt</button></footer></article>}
+    {payments.length > 0 && <details className="vendor-audit"><summary>View payment ledger</summary><ol>{payments.map((payment) => <li key={payment.id}><span><b>{payment.receiptNumber} · {payment.type}</b><small>{payment.vendorName} · {payment.method}</small></span><time>${payment.amount.toFixed(2)} · {new Date(payment.paidAt).toLocaleDateString()}</time></li>)}</ol></details>}
+  </section>;
 }
 
 function VendorBrandManager() {
