@@ -35,6 +35,9 @@ test("renders the command center and live operating data", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("$4,820").first()).toBeVisible();
   await expect(page.getByText("#BR-2048")).toBeVisible();
+  await expect(page.getByText("GOOD MORNING, DELLY")).toBeVisible();
+  await expect(page.getByText("Delly", { exact: true })).toBeVisible();
+  await expect(page.getByText("Avery Royall")).toHaveCount(0);
 });
 
 test("navigates between core operating views", async ({ page }, testInfo) => {
@@ -420,6 +423,58 @@ test("keeps the readiness experience inside a narrow viewport", async ({ page })
   const dimensions = await page.evaluate(() => ({ viewport: window.innerWidth, page: document.documentElement.scrollWidth, offenders: Array.from(document.querySelectorAll("body *")).map((element) => { const rect = element.getBoundingClientRect(); return { tag: element.tagName, className: element.className, left: rect.left, right: rect.right, width: rect.width }; }).filter((element) => element.right > window.innerWidth + 1 || element.left < -1).slice(0, 12) }));
   expect(dimensions.offenders).toEqual([]);
   expect(dimensions.page).toBeLessThanOrEqual(dimensions.viewport);
+});
+
+test("keeps unapproved synthetic narration out of the public experience", async ({ page }) => {
+  await page.goto("/readiness");
+  await expect(page.locator("video")).toHaveCount(0);
+  await expect(page.getByText("Narrated", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /I am a participating vendor/ })).toBeVisible();
+});
+
+test("lets owners select and persist multiple readiness propositions", async ({ page }) => {
+  await page.goto("/readiness");
+  await page.getByRole("button", { name: /I own Blossom Royall/ }).click();
+  await expect(page.getByText("Select all that apply.").first()).toBeVisible();
+  const systems = page.getByRole("group", { name: /Systems, spreadsheets/ });
+  await systems.getByText("Square", { exact: true }).click();
+  await systems.getByText("Shopify", { exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: /I own Blossom Royall/ }).click();
+  await expect(page.getByRole("group", { name: /Systems, spreadsheets/ }).getByRole("checkbox", { name: "Square" })).toBeChecked();
+  await expect(page.getByRole("group", { name: /Systems, spreadsheets/ }).getByRole("checkbox", { name: "Shopify" })).toBeChecked();
+});
+
+test("securely delivers a vendor readiness response", async ({ page }) => {
+  await page.route("**/rest/v1/readiness_submissions*", async (route) => {
+    const payload = route.request().postDataJSON();
+    expect(payload).toMatchObject({ tenant_slug: "blossom-royall", respondent_role: "vendor", consent_confirmed: true });
+    await route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+  });
+  await page.goto("/readiness");
+  await page.getByRole("button", { name: /I am a participating vendor/ }).click();
+  await page.getByLabel(/I confirm that I am authorized/).check();
+  await page.getByRole("button", { name: "Complete readiness profile" }).click();
+  await expect(page.getByRole("heading", { name: "Your readiness profile was securely delivered." })).toBeVisible();
+});
+
+test("keeps zero percent readiness status readable", async ({ page }) => {
+  await page.goto("/readiness");
+  await page.getByRole("button", { name: /I am a participating vendor/ }).click();
+  const progress = page.locator(".readiness-progress");
+  await expect(progress).toHaveCSS("background-color", "rgb(67, 38, 48)");
+  await expect(progress.locator("span")).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(progress.locator("span")).toHaveCSS("font-size", "10px");
+});
+
+test("persists the black and white readiness theme", async ({ page }) => {
+  await page.goto("/readiness");
+  await page.getByRole("button", { name: "Use dark theme" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.locator(".readiness-page")).toHaveCSS("background-color", "rgb(8, 8, 8)");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Use light theme" }).click();
 });
 
 test("renders branded authentication with safe password controls", async ({

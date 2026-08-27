@@ -227,9 +227,9 @@ export default function Home() {
           ))}
         </nav>
         <a className="profile" href="/auth">
-          <i>AR</i>
+          <i>D</i>
           <span>
-            <b>Avery Royall</b>
+            <b>Delly</b>
             <small>Owner</small>
           </span>
         </a>
@@ -1354,7 +1354,7 @@ function Dashboard({
     <div className="content">
       <section className="welcome">
         <div>
-          <span className="eyebrow">GOOD MORNING, AVERY</span>
+          <span className="eyebrow">GOOD MORNING, DELLY</span>
           <h2>Your mall is moving beautifully.</h2>
           <p>
             Sales are 18% ahead of last Wednesday. Three items need your
