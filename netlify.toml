@@ -20,8 +20,13 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
 
 [[redirects]]
+  from = "/"
+  to = "/readiness"
+  status = 302
+  force = true
+
+[[redirects]]
   from = "/concept"
   to = "/404.html"
   status = 404
   force = true
-

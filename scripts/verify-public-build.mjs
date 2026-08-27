@@ -22,4 +22,9 @@ if (!readiness.includes("Readiness experience") && !readiness.includes("readines
   throw new Error("Public readiness output failed its content check.");
 }
 
-console.log("Public build verified: readiness present, confidential concept absent.");
+const netlify = await readFile(join(root, "netlify.toml"), "utf8");
+if (!netlify.includes('from = "/"') || !netlify.includes('to = "/readiness"')) {
+  throw new Error("Public root is not routed away from the internal command center.");
+}
+
+console.log("Public build verified: readiness present, confidential concept absent, internal root redirected.");
