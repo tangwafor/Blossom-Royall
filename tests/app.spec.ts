@@ -40,6 +40,20 @@ test("renders the command center and live operating data", async ({ page }) => {
   await expect(page.getByText("Avery Royall")).toHaveCount(0);
 });
 
+test("turns owner notifications into direct operating actions", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Notifications" }).click();
+  const inbox = page.getByRole("dialog", { name: "Notifications" });
+  await expect(inbox.getByText("12 low stock variants")).toBeVisible();
+  await inbox.locator("article").filter({ hasText: "Leave request awaiting review" }).getByRole("button", { name: "Review" }).click();
+  await expect(page.getByRole("heading", { name: "Staff & payroll" })).toBeVisible();
+  await page.getByRole("button", { name: "Notifications" }).click();
+  await page.getByRole("button", { name: "Mark all reviewed" }).click();
+  await expect(page.locator(".notification-count")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".notification-count")).toHaveCount(0);
+});
+
 test("navigates between core operating views", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-app-ready", "true");
@@ -192,6 +206,35 @@ test("mobile navigation exposes every core destination", async ({
   await expect(
     page.getByRole("heading", { name: "Staff & payroll" }),
   ).toBeVisible();
+});
+
+test("provides role aware help with direct workflow routing", async ({ page }, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Help", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Answers at the moment of work." })).toBeVisible();
+  await page.getByRole("button", { name: "Vendor", exact: true }).click();
+  await page.getByLabel("Search help").fill("collection");
+  const guide = page.getByText("Add one item or a collection", { exact: true });
+  await expect(guide).toBeVisible();
+  await guide.click();
+  await page.getByRole("button", { name: "Open Products" }).click();
+  await expect(page.getByRole("heading", { name: "Products & inventory" })).toBeVisible();
+});
+
+test("provides a renameable policy aware tenant assistant", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open Blossom assistant" }).click();
+  const assistant = page.getByRole("dialog", { name: "Blossom assistant" });
+  await assistant.getByRole("button", { name: "How do returns work?" }).click();
+  await expect(assistant.getByRole("status")).toContainText("tenant policy saved in Policies");
+  await assistant.getByText("Assistant settings").click();
+  await assistant.getByLabel("Assistant name").fill("Delly Rose");
+  await assistant.getByRole("button", { name: "Save assistant name" }).click();
+  await page.getByRole("dialog", { name: "Delly Rose assistant" }).getByRole("button", { name: "Close assistant" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Open Delly Rose assistant" }).click();
+  await expect(page.getByRole("dialog", { name: "Delly Rose assistant" })).toBeVisible();
 });
 
 test("persists the chosen theme across reloads", async ({ page }) => {
@@ -491,6 +534,43 @@ test("formats and publishes one item or a bulk vendor collection", async ({ page
   if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "Products" }).click();
   await expect(page.getByText("Live in storefront")).toHaveCount(2);
+});
+
+test("manages staff schedules, time activity, leave, and payroll estimates", async ({ page }, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Staff", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "One accountable team workspace" })).toBeVisible();
+  await page.getByRole("button", { name: "Invite staff" }).click();
+  const staffForm = page.locator(".staff-form");
+  await staffForm.getByLabel("Full name").fill("Amina Bello");
+  await staffForm.getByLabel("Email").fill("amina@example.com");
+  await staffForm.getByLabel("Job title").fill("Senior stylist");
+  await staffForm.getByLabel("Department").selectOption("Sales floor");
+  await staffForm.getByLabel("Employment status").selectOption("Active");
+  await staffForm.getByLabel("Hourly rate").fill("24");
+  await staffForm.getByRole("button", { name: "Save staff record" }).click();
+  let person = page.locator(".staff-roster article").filter({ hasText: "Amina Bello" });
+  await expect(person).toContainText("Senior stylist");
+  await person.getByRole("button", { name: "Clock in" }).click();
+  await expect(person.getByRole("button", { name: "Clock out" })).toBeVisible();
+  await page.getByRole("button", { name: "Request leave" }).click();
+  const leaveForm = page.locator(".staff-leave-form");
+  await leaveForm.getByLabel("Team member").selectOption({ label: "Amina Bello" });
+  await leaveForm.getByLabel("First day").fill("2026-09-10");
+  await leaveForm.getByLabel("Return date").fill("2026-09-12");
+  await leaveForm.getByRole("button", { name: "Submit for review" }).click();
+  const request = page.locator(".staff-leave article").filter({ hasText: "Amina Bello" });
+  await request.getByRole("button", { name: "Approve" }).click();
+  await expect(request).toContainText("Approved");
+  await page.reload();
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Staff", exact: true }).click();
+  person = page.locator(".staff-roster article").filter({ hasText: "Amina Bello" });
+  await expect(person.getByRole("button", { name: "Clock out" })).toBeVisible();
+  await expect(page.locator(".staff-leave article").filter({ hasText: "Amina Bello" })).toContainText("Approved");
+  await page.getByText("View staff change history").click();
+  await expect(page.getByText("Leave request approved")).toBeVisible();
 });
 
 test("keeps the readiness experience inside a narrow viewport", async ({ page }) => {

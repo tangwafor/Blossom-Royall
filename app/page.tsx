@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Banknote,
   Bell,
+  BookOpen,
   BrainCircuit,
   Check,
   ClipboardList,
@@ -16,6 +17,7 @@ import {
   Heart,
   LayoutDashboard,
   MapPin,
+  MessageCircle,
   Menu,
   Moon,
   Package,
@@ -54,6 +56,7 @@ const nav = [
   ["Staff", Users],
   ["Intelligence", BrainCircuit],
   ["Policies", Settings],
+  ["Help", BookOpen],
 ] as const;
 
 type RetailPolicy = {
@@ -181,6 +184,39 @@ type VendorPayment = {
   paidAt: string;
 };
 
+type StaffRecord = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  job: string;
+  department: string;
+  hourlyRate: number;
+  status: "Invited" | "Active" | "On leave" | "Inactive";
+  shiftStart: string;
+  shiftEnd: string;
+  scheduledDays: string[];
+  clockedInAt: string | null;
+  breakMinutes: number;
+};
+
+type LeaveRequest = {
+  id: string;
+  staffId: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: "Pending" | "Approved" | "Declined";
+  createdAt: string;
+};
+
+type StaffAuditEvent = {
+  id: string;
+  staffName: string;
+  action: string;
+  at: string;
+};
+
 const defaultVendorRecords: VendorRecord[] = [
   { id: "blossom-collections", name: "Blossom Collections", category: "House collection", contactName: "Delly", email: "", phone: "", status: "Launch ready", roster: "Confirmed", createdAt: "2026-08-26T09:00:00.000Z" },
   { id: "jose-kako", name: "Jose Kako", category: "Men’s formalwear", contactName: "", email: "", phone: "", status: "Onboarding", roster: "Confirmed", createdAt: "2026-08-26T09:00:00.000Z" },
@@ -213,6 +249,13 @@ export default function Home() {
     [done, setDone] = useState(false),
     [query, setQuery] = useState(""),
     [theme, setTheme] = useState("light"),
+    [notificationsOpen, setNotificationsOpen] = useState(false),
+    [readNotifications, setReadNotifications] = useState<string[]>([]),
+    [assistantOpen, setAssistantOpen] = useState(false),
+    [assistantName, setAssistantName] = useState("Blossom"),
+    [assistantNameDraft, setAssistantNameDraft] = useState("Blossom"),
+    [assistantQuestion, setAssistantQuestion] = useState(""),
+    [assistantAnswer, setAssistantAnswer] = useState(""),
     [tourStep, setTourStep] = useState<number | null>(null);
   useEffect(() => {
     const saved = localStorage.getItem("br-theme");
@@ -222,6 +265,10 @@ export default function Home() {
     setTheme(next);
     document.documentElement.dataset.theme = next;
     document.documentElement.dataset.appReady = "true";
+    const savedNotifications = localStorage.getItem("br-reviewed-notifications:blossom-royall");
+    if (savedNotifications) setReadNotifications(JSON.parse(savedNotifications));
+    const savedAssistantName = localStorage.getItem("br-assistant-name:blossom-royall");
+    if (savedAssistantName) { setAssistantName(savedAssistantName); setAssistantNameDraft(savedAssistantName); }
     if (!localStorage.getItem("br-tour-complete")) setTourStep(0);
   }, []);
   const toggleTheme = () => {
@@ -248,6 +295,30 @@ export default function Home() {
   const closeTour = () => {
     localStorage.setItem("br-tour-complete", "true");
     setTourStep(null);
+  };
+  const reviewNotifications = (ids: string[]) => {
+    const next = Array.from(new Set([...readNotifications, ...ids]));
+    setReadNotifications(next);
+    localStorage.setItem("br-reviewed-notifications:blossom-royall", JSON.stringify(next));
+  };
+  const askAssistant = (question: string) => {
+    const value = question.trim();
+    if (!value) return;
+    const lower = value.toLowerCase();
+    const response = lower.includes("return") || lower.includes("exchange")
+      ? "Returns follow the tenant policy saved in Policies. Open Aftercare to verify the original policy snapshot, item eligibility, seller attribution, inspection, and resolution before approving money or inventory movement."
+      : lower.includes("vendor") || lower.includes("rent") || lower.includes("lease")
+        ? "Vendor records, onboarding links, brand packages, agreements, rent, deposits, and receipts are managed in Vendors. Production signatures and payment transfers remain approval controlled."
+        : lower.includes("staff") || lower.includes("schedule") || lower.includes("payroll") || lower.includes("leave")
+          ? "Staff contains the roster, schedules, clock activity, leave review, and gross pay estimates. Real payroll requires approved employee data, wage rules, permissions, and a configured provider."
+          : lower.includes("deliver") || lower.includes("pickup") || lower.includes("ship")
+            ? "Delivery coordinates store pickup, local delivery, and carrier shipping. Confirm every vendor item and custody scan before releasing a consolidated order."
+            : lower.includes("stock") || lower.includes("inventory") || lower.includes("product")
+              ? "Products shows onsite and online inventory by vendor. Use the collection studio for one item or bulk photographs, then review names and seller attribution before publishing."
+              : lower.includes("sale") || lower.includes("checkout") || lower.includes("cashier")
+                ? "Checkout accepts products from multiple vendors in one sale while preserving seller attribution for inventory, receipts, returns, and the vendor ledger."
+                : "I can guide you through sales, vendors, inventory, delivery, returns, policies, staff, and customer orders. I use the current Blossom Royall operating rules and never initiate a protected production action on your behalf.";
+    setAssistantAnswer(response);
   };
   return (
     <div className="shell">
@@ -315,8 +386,9 @@ export default function Home() {
                 placeholder="Search orders, products…"
               />
             </label>
-            <button className="bell" aria-label="Notifications">
+            <button className="bell notification-toggle" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((value) => !value)}>
               <Bell />
+              {readNotifications.length < 3 && <i className="notification-count">{3 - readNotifications.length}</i>}
             </button>
             <button
               className="bell tour-toggle"
@@ -344,6 +416,15 @@ export default function Home() {
             </button>
           </section>
         </header>
+        {notificationsOpen && <section className="notification-center" role="dialog" aria-label="Notifications">
+          <header><span><small className="eyebrow">OWNER INBOX</small><h2>Needs your attention</h2></span><button aria-label="Close notifications" onClick={() => setNotificationsOpen(false)}><X /></button></header>
+          {[
+            { id: "stock", title: "12 low stock variants", detail: "Reorder before the weekend", destination: "Products" },
+            { id: "rent", title: "Vendor rent due today", detail: "Nia Collective · $800", destination: "Vendors" },
+            { id: "leave", title: "Leave request awaiting review", detail: "Open the staff decision queue", destination: "Staff" },
+          ].map((item) => <article className={readNotifications.includes(item.id) ? "read" : ""} key={item.id}><span><b>{item.title}</b><small>{item.detail}</small></span><button onClick={() => { reviewNotifications([item.id]); setNotificationsOpen(false); go(item.destination); }}>Review</button></article>)}
+          <footer><button onClick={() => reviewNotifications(["stock", "rent", "leave"])}><Check />Mark all reviewed</button></footer>
+        </section>}
         {active === "Command Center" && (
           <Dashboard go={go} orders={filtered} openSale={() => setSale(true)} />
         )}
@@ -426,34 +507,26 @@ export default function Home() {
           <ListView
             eyebrow="TODAY'S TEAM"
             title="Staff & payroll"
-            subtitle="Six of eight scheduled team members are clocked in."
-            action="Open time clock"
+            subtitle="Schedules, clock activity, leave, and payroll estimates in one accountable workspace."
           >
-            <div className="staff panel">
-              {[
-                "Maya · Floor lead",
-                "Jordan · Checkout",
-                "Elena · Styling",
-                "Drew · Fulfillment",
-              ].map((x, i) => (
-                <div key={x}>
-                  <i>{x[0]}</i>
-                  <span>
-                    <b>{x.split(" · ")[0]}</b>
-                    <small>{x.split(" · ")[1]}</small>
-                  </span>
-                  <time>
-                    {i < 2 ? "9:00 AM – 5:00 PM" : "11:00 AM – 7:00 PM"}
-                  </time>
-                  <em>Clocked in</em>
-                </div>
-              ))}
-            </div>
+            <StaffOperations />
           </ListView>
         )}
         {active === "Intelligence" && <IntelligenceHub />}
         {active === "Policies" && <PolicyCenter />}
+        {active === "Help" && <HelpCenter go={go} startTour={() => showTourStep(0)} />}
       </main>
+      <button className="assistant-launcher" aria-label={`Open ${assistantName} assistant`} onClick={() => setAssistantOpen(true)}><MessageCircle /><span>{assistantName}</span></button>
+      {assistantOpen && <section className="assistant-panel" role="dialog" aria-modal="true" aria-label={`${assistantName} assistant`}>
+        <header><span><i><Sparkles /></i><span><small>TENANT ASSISTANT</small><b>{assistantName}</b></span></span><button aria-label="Close assistant" onClick={() => setAssistantOpen(false)}><X /></button></header>
+        <p>Ask about the work on this screen or choose a common task. Answers stay within your role and Blossom Royall policies.</p>
+        <div className="assistant-context"><small>CURRENT WORKSPACE</small><b>{active}</b></div>
+        <div className="assistant-prompts">{["How do returns work?", "How do I onboard a vendor?", "Explain shared checkout", "What needs production approval?"].map((prompt) => <button key={prompt} onClick={() => { setAssistantQuestion(prompt); askAssistant(prompt); }}>{prompt}</button>)}</div>
+        {assistantAnswer && <output className="assistant-answer" role="status"><Sparkles /><span><b>{assistantName}</b><p>{assistantAnswer}</p></span></output>}
+        <form onSubmit={(event) => { event.preventDefault(); askAssistant(assistantQuestion); }}><label><span>Ask {assistantName}</span><textarea aria-label={`Ask ${assistantName}`} value={assistantQuestion} onChange={(event) => setAssistantQuestion(event.target.value)} placeholder="How do I..." /></label><button className="primary" type="submit">Ask</button></form>
+        <details><summary>Assistant settings</summary><label>Assistant name<input aria-label="Assistant name" value={assistantNameDraft} onChange={(event) => setAssistantNameDraft(event.target.value)} /></label><button onClick={() => { const next = assistantNameDraft.trim() || "Blossom"; setAssistantName(next); setAssistantNameDraft(next); localStorage.setItem("br-assistant-name:blossom-royall", next); }}>Save assistant name</button></details>
+        <footer><ShieldCheck /><span><b>Protected actions stay protected</b><small>No payment, payroll, permission, legal, or production database action happens from an answer.</small></span></footer>
+      </section>}
       {sale && (
         <div className="modal-wrap">
           <button
@@ -1440,6 +1513,150 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
       </section>
     </div>
   );
+}
+
+const defaultStaffRecords: StaffRecord[] = [
+  { id: "maya-chen", name: "Maya Chen", email: "maya@example.com", phone: "", job: "Store manager", department: "Operations", hourlyRate: 28, status: "Active", shiftStart: "09:00", shiftEnd: "17:00", scheduledDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], clockedInAt: null, breakMinutes: 30 },
+  { id: "jordan-ellis", name: "Jordan Ellis", email: "jordan@example.com", phone: "", job: "Client stylist", department: "Sales floor", hourlyRate: 22, status: "Active", shiftStart: "10:00", shiftEnd: "18:00", scheduledDays: ["Wed", "Thu", "Fri", "Sat", "Sun"], clockedInAt: null, breakMinutes: 30 },
+  { id: "elena-ruiz", name: "Elena Ruiz", email: "elena@example.com", phone: "", job: "Fulfillment associate", department: "Fulfillment", hourlyRate: 20, status: "Invited", shiftStart: "11:00", shiftEnd: "19:00", scheduledDays: ["Tue", "Wed", "Thu", "Fri", "Sat"], clockedInAt: null, breakMinutes: 30 },
+];
+
+function StaffOperations() {
+  const staffKey = "br-staff:blossom-royall";
+  const leaveKey = "br-staff-leave:blossom-royall";
+  const auditKey = "br-staff-audit:blossom-royall";
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const [staff, setStaff] = useState<StaffRecord[]>(defaultStaffRecords);
+  const [leave, setLeave] = useState<LeaveRequest[]>([]);
+  const [audits, setAudits] = useState<StaffAuditEvent[]>([]);
+  const [editing, setEditing] = useState<StaffRecord | null>(null);
+  const [open, setOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [removeId, setRemoveId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    const savedStaff = localStorage.getItem(staffKey);
+    const savedLeave = localStorage.getItem(leaveKey);
+    const savedAudits = localStorage.getItem(auditKey);
+    if (savedStaff) setStaff(JSON.parse(savedStaff));
+    if (savedLeave) setLeave(JSON.parse(savedLeave));
+    if (savedAudits) setAudits(JSON.parse(savedAudits));
+  }, []);
+  const addAudit = (staffName: string, action: string) => {
+    const next = [{ id: crypto.randomUUID(), staffName, action, at: new Date().toISOString() }, ...audits].slice(0, 30);
+    setAudits(next);
+    localStorage.setItem(auditKey, JSON.stringify(next));
+  };
+  const saveStaffState = (next: StaffRecord[], staffName: string, action: string) => {
+    setStaff(next);
+    localStorage.setItem(staffKey, JSON.stringify(next));
+    addAudit(staffName, action);
+  };
+  const saveStaff = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const name = String(data.get("name") || "").trim();
+    const record: StaffRecord = {
+      id: editing?.id || crypto.randomUUID(), name,
+      email: String(data.get("email") || "").trim().toLowerCase(), phone: String(data.get("phone") || "").trim(),
+      job: String(data.get("job") || "").trim(), department: String(data.get("department") || ""),
+      hourlyRate: Number(data.get("hourlyRate")), status: String(data.get("status")) as StaffRecord["status"],
+      shiftStart: String(data.get("shiftStart")), shiftEnd: String(data.get("shiftEnd")),
+      scheduledDays: data.getAll("scheduledDays").map(String), clockedInAt: editing?.clockedInAt || null,
+      breakMinutes: Number(data.get("breakMinutes")),
+    };
+    const next = editing ? staff.map((person) => person.id === editing.id ? record : person) : [record, ...staff];
+    saveStaffState(next, name, editing ? "Staff profile and schedule updated" : "Staff invitation prepared");
+    setNotice(editing ? `${name} was updated.` : `${name} was added to the staff roster.`);
+    setEditing(null); setOpen(false);
+  };
+  const toggleClock = (person: StaffRecord) => {
+    const clockedInAt = person.clockedInAt ? null : new Date().toISOString();
+    saveStaffState(staff.map((item) => item.id === person.id ? { ...item, clockedInAt } : item), person.name, clockedInAt ? "Clocked in" : "Clocked out");
+    setNotice(`${person.name} ${clockedInAt ? "clocked in" : "clocked out"}.`);
+  };
+  const toggleStatus = (person: StaffRecord) => {
+    const status = person.status === "Inactive" ? "Active" : "Inactive";
+    saveStaffState(staff.map((item) => item.id === person.id ? { ...item, status } : item), person.name, status === "Inactive" ? "Staff access deactivated" : "Staff access restored");
+  };
+  const removeStaff = (person: StaffRecord) => {
+    if (removeId !== person.id) { setRemoveId(person.id); setNotice(`Select remove again to confirm removing ${person.name}.`); return; }
+    saveStaffState(staff.filter((item) => item.id !== person.id), person.name, "Staff record removed");
+    setRemoveId(null); setNotice(`${person.name} was removed.`);
+  };
+  const saveLeave = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const staffId = String(data.get("staffId"));
+    const person = staff.find((item) => item.id === staffId);
+    if (!person) return;
+    const request: LeaveRequest = { id: crypto.randomUUID(), staffId, startDate: String(data.get("startDate")), endDate: String(data.get("endDate")), reason: String(data.get("reason")), status: "Pending", createdAt: new Date().toISOString() };
+    const next = [request, ...leave]; setLeave(next); localStorage.setItem(leaveKey, JSON.stringify(next));
+    addAudit(person.name, "Leave request submitted"); setLeaveOpen(false); setNotice(`${person.name}'s leave request is ready for review.`);
+  };
+  const decideLeave = (request: LeaveRequest, status: LeaveRequest["status"]) => {
+    const next = leave.map((item) => item.id === request.id ? { ...item, status } : item);
+    setLeave(next); localStorage.setItem(leaveKey, JSON.stringify(next));
+    const person = staff.find((item) => item.id === request.staffId);
+    if (person) addAudit(person.name, `Leave request ${status.toLowerCase()}`);
+  };
+  const hoursFor = (person: StaffRecord) => {
+    const [startHour, startMinute] = person.shiftStart.split(":").map(Number);
+    const [endHour, endMinute] = person.shiftEnd.split(":").map(Number);
+    return Math.max(0, endHour + endMinute / 60 - startHour - startMinute / 60 - person.breakMinutes / 60) * person.scheduledDays.length;
+  };
+  const weeklyPayroll = staff.filter((person) => person.status === "Active").reduce((sum, person) => sum + hoursFor(person) * person.hourlyRate, 0);
+  return <div className="staff-operations">
+    <section className="staff-summary">
+      <article><small>ACTIVE TEAM</small><b>{staff.filter((person) => person.status === "Active").length}</b><span>{staff.length} roster records</span></article>
+      <article><small>ON SHIFT NOW</small><b>{staff.filter((person) => person.clockedInAt).length}</b><span>Live clock activity</span></article>
+      <article><small>WEEKLY ESTIMATE</small><b>${weeklyPayroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b><span>Before taxes and adjustments</span></article>
+      <article><small>LEAVE TO REVIEW</small><b>{leave.filter((request) => request.status === "Pending").length}</b><span>Pending owner decision</span></article>
+    </section>
+    <section className="panel staff-center">
+      <div className="panel-head"><span><small className="eyebrow">PEOPLE AND SCHEDULES</small><h3>One accountable team workspace</h3></span><div><button onClick={() => setLeaveOpen((value) => !value)}>Request leave</button><button className="primary" onClick={() => { setEditing(null); setOpen((value) => !value); }}><Plus />Invite staff</button></div></div>
+      <p>Manage roles, schedules, time activity, leave, and pay estimates without engineering intervention.</p>
+      {notice && <output className="policy-saved" role="status">{notice}</output>}
+      {open && <form className="staff-form" onSubmit={saveStaff} key={editing?.id || "new-staff"}>
+        <label>Full name<input name="name" required defaultValue={editing?.name} autoComplete="name" /></label><label>Email<input name="email" type="email" required defaultValue={editing?.email} autoComplete="email" /></label>
+        <label>Phone<input name="phone" type="tel" defaultValue={editing?.phone} autoComplete="tel" /></label><label>Job title<input name="job" required defaultValue={editing?.job} /></label>
+        <label>Department<select name="department" defaultValue={editing?.department || "Sales floor"}><option>Operations</option><option>Sales floor</option><option>Checkout</option><option>Fulfillment</option><option>Inventory</option><option>Administration</option></select></label>
+        <label>Employment status<select name="status" defaultValue={editing?.status || "Invited"}><option>Invited</option><option>Active</option><option>On leave</option><option>Inactive</option></select></label>
+        <label>Hourly rate<span><b>$</b><input name="hourlyRate" type="number" min="0" step=".01" required defaultValue={editing?.hourlyRate || ""} /></span></label><label>Unpaid break minutes<input name="breakMinutes" type="number" min="0" step="5" required defaultValue={editing?.breakMinutes ?? 30} /></label>
+        <label>Shift starts<input name="shiftStart" type="time" required defaultValue={editing?.shiftStart || "09:00"} /></label><label>Shift ends<input name="shiftEnd" type="time" required defaultValue={editing?.shiftEnd || "17:00"} /></label>
+        <fieldset><legend>Scheduled days</legend>{days.map((day) => <label key={day}><input type="checkbox" name="scheduledDays" value={day} defaultChecked={editing?.scheduledDays.includes(day) ?? ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(day)} />{day}</label>)}</fieldset>
+        <footer><button type="button" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</button><button className="primary" type="submit"><Check />Save staff record</button></footer>
+      </form>}
+      {leaveOpen && <form className="staff-leave-form" onSubmit={saveLeave}><label>Team member<select name="staffId" required defaultValue=""><option value="" disabled>Choose team member</option>{staff.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label>First day<input name="startDate" type="date" required /></label><label>Return date<input name="endDate" type="date" required /></label><label>Reason<select name="reason"><option>Vacation</option><option>Medical</option><option>Personal</option><option>Family care</option><option>Other approved leave</option></select></label><button className="primary" type="submit">Submit for review</button></form>}
+      <div className="staff-roster">{staff.map((person) => <article key={person.id}><i>{person.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><span><b>{person.name}</b><small>{person.job} · {person.department}</small><a href={`mailto:${person.email}`}>{person.email}</a></span><span><small>Schedule</small><b>{person.scheduledDays.join(", ") || "Not scheduled"}</b><small>{person.shiftStart} to {person.shiftEnd} · {person.breakMinutes} min break</small></span><span><small>Weekly estimate</small><b>{hoursFor(person).toFixed(1)} hours · ${(hoursFor(person) * person.hourlyRate).toFixed(2)}</b><em>{person.status}</em></span><div><button className={person.clockedInAt ? "active" : ""} onClick={() => toggleClock(person)}><Clock3 />{person.clockedInAt ? "Clock out" : "Clock in"}</button><button onClick={() => { setEditing(person); setOpen(true); }}>Edit</button><button onClick={() => toggleStatus(person)}>{person.status === "Inactive" ? "Restore" : "Deactivate"}</button><button className={removeId === person.id ? "danger" : ""} onClick={() => removeStaff(person)}>{removeId === person.id ? "Confirm remove" : "Remove"}</button></div></article>)}</div>
+    </section>
+    {leave.length > 0 && <section className="panel staff-leave"><div className="panel-head"><span><small className="eyebrow">LEAVE REVIEW</small><h3>Requests and decisions</h3></span></div>{leave.map((request) => { const person = staff.find((item) => item.id === request.staffId); return <article key={request.id}><span><b>{person?.name || "Former staff member"}</b><small>{request.reason} · {request.startDate} to {request.endDate}</small></span><em>{request.status}</em>{request.status === "Pending" && <div><button onClick={() => decideLeave(request, "Declined")}>Decline</button><button className="primary" onClick={() => decideLeave(request, "Approved")}><Check />Approve</button></div>}</article>; })}</section>}
+    <section className="panel staff-payroll-note"><ShieldCheck /><span><b>Payroll safe by design</b><p>Figures shown are planning estimates only. Production payroll, tax withholding, identity verification, and wage payments will activate only after Delly approves the provider, employee records, permissions, and legal settings.</p></span></section>
+    {audits.length > 0 && <details className="vendor-audit staff-audit"><summary>View staff change history</summary><ol>{audits.map((event) => <li key={event.id}><span><b>{event.action}</b><small>{event.staffName}</small></span><time>{new Date(event.at).toLocaleString()}</time></li>)}</ol></details>}
+  </div>;
+}
+
+function HelpCenter({ go, startTour }: { go: (destination: string) => void; startTour: () => void }) {
+  const [role, setRole] = useState("Owner");
+  const [search, setSearch] = useState("");
+  const guides = [
+    { title: "Open and close a sale", summary: "Scan seller attributed products, take one payment, and produce a complete receipt.", destination: "Checkout", roles: ["Owner", "Manager", "Staff"], steps: ["Open Checkout and start a sale.", "Scan or locate each item and confirm its vendor.", "Confirm tender, fulfillment, and receipt delivery before completing payment."] },
+    { title: "Invite and launch a vendor", summary: "Create a vendor record, share onboarding, review branding, and prepare commercial terms.", destination: "Vendors", roles: ["Owner", "Manager", "Vendor"], steps: ["Invite the vendor from the tenant directory.", "Share the generated readiness link with the authorized contact.", "Review submitted details, brand assets, agreement terms, and selling status."] },
+    { title: "Add one item or a collection", summary: "Format photographs, preserve vendor ownership, and publish inventory without engineering help.", destination: "Products", roles: ["Owner", "Manager", "Staff", "Vendor"], steps: ["Choose the owning vendor.", "Upload one photograph or a complete collection.", "Review generated names and publish approved items."] },
+    { title: "Handle a return or exchange", summary: "Check the saved policy snapshot, inspect the item, and preserve the seller ledger.", destination: "Aftercare", roles: ["Owner", "Manager", "Staff"], steps: ["Open the customer request and verify eligibility.", "Record condition and selected resolution.", "Approve the inventory and financial disposition with an audit entry."] },
+    { title: "Coordinate online fulfillment", summary: "Consolidate vendor items for pickup, local delivery, or carrier shipping.", destination: "Delivery", roles: ["Owner", "Manager", "Staff", "Vendor"], steps: ["Open the active fulfillment board.", "Confirm each seller item and custody scan.", "Release the complete order only after every required item passes the packing check."] },
+    { title: "Schedule and support the team", summary: "Maintain staff access, shifts, time activity, leave, and gross pay estimates.", destination: "Staff", roles: ["Owner", "Manager", "Staff"], steps: ["Invite or select the team member.", "Set role, schedule, break, and pay planning information.", "Review clock activity and leave decisions before payroll export."] },
+    { title: "Set returns and layaway rules", summary: "Publish tenant controlled promises without hardcoded engineering changes.", destination: "Policies", roles: ["Owner", "Manager"], steps: ["Review the current return and exchange window.", "Configure final sale, fees, layaway, grace, and inventory holding rules.", "Publish only after confirming the customer facing preview."] },
+    { title: "Shop across every brand", summary: "Build a complete look, pay once, and follow one coordinated order.", destination: "Customer Shop", roles: ["Customer"], steps: ["Tell Blossom the occasion, budget, and timing.", "Review why each product was selected and who sells it.", "Choose fulfillment, pay once, and track every item from My Orders."] },
+  ];
+  const visible = guides.filter((guide) => guide.roles.includes(role) && `${guide.title} ${guide.summary} ${guide.steps.join(" ")}`.toLowerCase().includes(search.toLowerCase()));
+  return <div className="content inner help-center">
+    <div className="view-head"><div><span className="eyebrow">BLOSSOM GUIDE</span><h2>Answers at the moment of work.</h2><p>Choose your role, find the task, and go directly to the right operating surface.</p></div><button className="primary" onClick={startTour}><Sparkles />Start guided tour</button></div>
+    <section className="panel help-controls"><label><Search /><input aria-label="Search help" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search sales, vendors, returns, delivery..." /></label><fieldset><legend>Show guidance for</legend>{["Owner", "Manager", "Staff", "Vendor", "Customer"].map((item) => <button className={role === item ? "active" : ""} onClick={() => setRole(item)} key={item}>{item}</button>)}</fieldset></section>
+    <section className="help-grid" aria-live="polite">{visible.map((guide) => <details className="panel" key={guide.title}><summary><span><small>{guide.destination.toUpperCase()}</small><b>{guide.title}</b><p>{guide.summary}</p></span><ChevronRight /></summary><ol>{guide.steps.map((step) => <li key={step}>{step}</li>)}</ol><button className="primary" onClick={() => go(guide.destination)}>Open {guide.destination}<ArrowUpRight /></button></details>)}</section>
+    {visible.length === 0 && <section className="panel help-empty"><CircleHelp /><h3>No matching guide yet</h3><p>Try a broader word or choose another role. This result is also a documentation gap for the product team to address.</p><button onClick={() => setSearch("")}>Clear search</button></section>}
+    <section className="panel help-safety"><ShieldCheck /><span><b>Know what the preview will not do</b><p>Payroll, legal signatures, production identity invitations, payment transfers, database changes, and permission grants require approved providers, authenticated roles, real business data, and production authorization.</p></span></section>
+  </div>;
 }
 
 function IntelligenceHub() {

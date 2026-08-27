@@ -11,6 +11,9 @@
 | Surface | Primary role | Status | Behavior coverage |
 | --- | --- | --- | --- |
 | Command Center | Owner, manager | Working preview | Metrics, priorities, recent orders, intelligence, brand performance |
+| Owner notification center | Owner, manager | Working preview | Visible attention count, low stock, vendor rent and staff leave alerts, direct routing into the responsible operating workflow, and reviewed state |
+| In app help | Owner, manager, staff, vendor, customer | Working preview | Searchable role aware task guidance, expandable operating steps, direct workflow routing, guided tour restart, and explicit production safety boundaries |
+| Tenant assistant | Owner, manager, staff, vendor, customer | Working preview | Renameable tenant identity, contextual operating guidance, policy aware answers, protected action boundaries, zero cost deterministic core, and persisted tenant naming |
 | Customer Shop | Customer | Working preview | Mission based occasion shopping, budget and timing aware complete looks, cross vendor edits, transparent match reasons, seller verification, fulfillment confidence, African designer storytelling, textile provenance, preference controls, and familiar brand discovery |
 | Intelligence | Owner, manager | Working preview | Explainable demand signals, merchandising brief, reorder decision, trust controls |
 | Welcome | Visitor | Working preview | September 1 grand opening, Prince George’s Plaza location, store hours, African designers, local brands, and luxury experience narrative |
@@ -24,7 +27,7 @@
 | Vendors | Owner, manager, vendor | Working preview | Tenant vendor directory with create, view, edit, suspend, restore, confirmed removal, contact links, generated readiness invitations with prefilled vendor details, persisted browser state, accountable change history, configurable lease drafts, rent and deposit recording, branded payment receipts, payment history, sales summary, plus vendor supplied logo review without developer intervention |
 | Shared Commerce | Owner, manager | Working preview | Single cashier attribution, configurable payout cadence and reserves, settlement preview, scan safeguards, and inventory rebalance recommendations |
 | Delivery | Owner, manager | Working preview | Pickup, local delivery, carrier shipping, tenant routing rules, multi vendor consolidation, custody workflow, and active fulfillment board |
-| Staff | Owner, manager, staff | Working preview | Coverage and time status |
+| Staff | Owner, manager, staff | Working preview | Tenant staff directory, invitation and employment lifecycle, editable schedules and breaks, clock activity, weekly pay estimates, leave requests and decisions, local persistence, and accountable change history |
 | Policy Center | Owner, manager | Working preview | Tenant keyed returns, exchanges, final sale, fees, eligibility preview, layaway terms, and local persistence |
 | Aftercare | Owner, manager, staff | Working preview | Return approval, exchange reservation, exception review, layaway reminders, grace periods, and accountable history |
 | Signed vendor research | Owner, manager | Four video confirmed labels documented with verification status, public evidence, positioning, and onboarding gaps |
@@ -52,6 +55,7 @@
 | Full RLS role matrix | Readiness submission roles verified, full operating workflow matrix remains pending |
 | Customer recommendation signals | Working interface, pending persisted consented event model |
 | Owner intelligence actions | Working interface, pending role scoped database persistence |
+| Tenant AI enhancement | Zero cost deterministic guidance is active. Gemini first automation and Anthropic fallback remain optional pending credentials, role enforcement, measured usage threshold, and budget approval. |
 | Tenant retail policy persistence | Working local tenant adapter, pending production snapshot and database connection |
 | Native store signing | Pending Apple and Google credentials |
 
@@ -60,3 +64,9 @@
 The working preview now exercises the full vendor lifecycle without developer intervention and records each mutation in a tenant keyed browser audit history. This is deliberately not represented as production persistence. Before vendor records control real selling access, the same workflows require authenticated owner and manager authorization, tenant scoped Supabase tables, row level security, database audit triggers, invitation delivery, and revocation tests.
 
 The live schema was checked on August 27, 2026. It already contains RLS enabled `vendors`, `leases`, and `rent_payments` tables, and the Supabase security advisor reported no findings. Production activation still requires Delly's authenticated owner identity, the first Blossom Royall store record, owner membership, approved lease language, signature provider selection, and real vendor data. The missing local `DATABASE_URL` prevents the constitutionally required fresh `pg_dump`, so no new SQL migration was authored.
+
+## Staff operations boundary
+
+The staff workspace now exercises employee roster changes, configurable schedules, breaks, clock activity, leave review, pay planning, persistence, and audit history without developer intervention. Names and rates in the preview are editable sample defaults and do not represent real employees. Pay figures are explicitly estimates and never initiate payroll.
+
+Production activation requires Delly's real employee roster, approved roles and permissions, wage and overtime rules, tax location, payroll provider, time clock policy, leave policy, authenticated manager approvals, tenant scoped row level security, database audit triggers, and employment counsel review. No production employee record, identity invitation, tax calculation, or wage payment is created by this preview.
