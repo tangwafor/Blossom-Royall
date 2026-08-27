@@ -375,7 +375,7 @@ h3 {
 .chart {
   height: 200px;
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-around;
   background: repeating-linear-gradient(
     to bottom,
@@ -514,7 +514,7 @@ h3 {
 .view-head {
   display: flex;
   justify-content: space-between;
-  align-items: end;
+  align-items: flex-end;
   margin-bottom: 24px;
 }
 .view-head h2 {
@@ -954,7 +954,7 @@ h3 {
 }
 .shop-head {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-between;
   margin: 32px 0 16px;
 }
