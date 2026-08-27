@@ -15,7 +15,7 @@
 | Intelligence | Owner, manager | Working preview | Explainable demand signals, merchandising brief, reorder decision, trust controls |
 | Welcome | Visitor | Working preview | September 1 grand opening, Prince George’s Plaza location, store hours, African designers, local brands, and luxury experience narrative |
 | Brand partnerships | Prospective vendor | Working preview | Premium recruitment story, operating benefits, onboarding path, trust commitments, and persisted partnership inquiry |
-| Interactive concept | Public, prospective vendor | Working preview | Animated three dimensional marketplace walkthrough, stakeholder benefits, interactive vendor projection, share control, and partnership handoff |
+| Internal marketplace concept | Owner, product, engineering | Local only internal preview | Animated three dimensional marketplace model, stakeholder outcomes, transaction invariants, inventory movement model, fulfillment custody, vendor ledger behavior, tenant boundaries, failure recovery, and release gates. The route is removed from public static deployment artifacts. Remote access remains blocked until server side membership authorization exists. |
 | Checkout | Owner, manager, staff | Working preview | Express sale entry and checkout handoff |
 | Customer bag and checkout | Customer | Working preview | Cross vendor seller attributed bag, pickup and delivery choices, delivery fee calculation, layaway deposit, order persistence, and coordinated confirmation |
 | My Orders | Customer | Working preview | Coordinated order progress, pickup credential, seller attributed items, layaway balance and payment, return eligibility, and persisted return request |

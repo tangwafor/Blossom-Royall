@@ -252,6 +252,26 @@ test("brands printable receipts with tenant and TaTech identity", async ({ page 
   await expect(receipt.getByText("Is not where you have been but where you are going.")).toBeVisible();
 });
 
+test("prints a complete seller attributed receipt after checkout", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("br-tour-complete", "true");
+    localStorage.setItem("br-customer-bag:blossom-royall", JSON.stringify([
+      { name: "Kente Ceremony Coat", vendor: "Africstyle Fashion", price: 284, fulfillment: "Pickup today" },
+    ]));
+    Object.defineProperty(window, "print", { value: () => document.body.dataset.printRequested = "true", configurable: true });
+  });
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Checkout", exact: true }).click();
+  await page.getByRole("button", { name: "Place order" }).click();
+  const receipt = page.getByRole("article", { name: "Receipt for order BR 2053" });
+  await expect(receipt.getByText("Kente Ceremony Coat")).toBeVisible();
+  await expect(receipt.getByText("Sold by Africstyle Fashion")).toBeVisible();
+  await expect(receipt.getByText("Return eligible for 30 days after handoff")).toBeVisible();
+  await page.getByRole("button", { name: "Print receipt" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-print-requested", "true");
+});
+
 test("shows personalized customer recommendations with explanations", async ({
   page,
 }, testInfo) => {
@@ -326,14 +346,17 @@ test("presents a branded luxury mall entrance", async ({ page }) => {
 
 test("explains the shared marketplace through an interactive concept", async ({ page }) => {
   await page.goto("/concept");
+  await expect(page.locator("main[data-concept-ready]")).toHaveAttribute("data-concept-ready", "true");
+  await expect(page.getByLabel("Internal document notice")).toContainText("Confidential internal strategy");
+  await expect(page.getByText("Internal only", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: /One destination/ })).toBeVisible();
   await page.getByRole("button", { name: "One checkout" }).click();
   await expect(page.getByText("The customer pays once.")).toBeVisible();
   await page.getByRole("button", { name: "Vendor payout" }).click();
-  await expect(page.getByText("Every vendor knows what they earned.")).toBeVisible();
-  await page.getByLabel("Estimated monthly marketplace sales").fill("10000");
-  await expect(page.getByText("$120,000")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Introduce a brand" })).toHaveAttribute("href", "/partners");
+  await expect(page.getByText("Every vendor sees what they earned.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "More ways to be discovered. Less to manage alone." })).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+  await expect(page.getByRole("link", { name: "Review vendor inquiries" })).toHaveAttribute("href", "/partners");
 });
 
 test("gives the owner purchase performance by brand", async ({ page }) => {
@@ -343,6 +366,60 @@ test("gives the owner purchase performance by brand", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("Atelier Omi")).toBeVisible();
   await expect(page.getByText("Repeat buyers")).toBeVisible();
+});
+
+test("accepts and approves a vendor supplied logo without developer intervention", async ({ page }, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Vendors", exact: true }).click();
+  await page.getByRole("button", { name: "Submit brand package" }).click();
+  await page.getByLabel("Brand name").fill("Kente House");
+  await page.getByLabel("Vendor contact email").fill("owner@kentehouse.example");
+  await page.getByLabel("Official logo file").setInputFiles("public/vendor-logos/africstyle-fashion.png");
+  await page.getByLabel(/I confirm that I own this logo/).check();
+  await page.getByRole("button", { name: "Send for owner review" }).click();
+  await expect(page.getByText("Logo formatted as WebP and submitted for owner review.")).toBeVisible();
+  await expect(page.getByText(/africstyle-fashion\.png → africstyle-fashion\.webp/)).toBeVisible();
+  await expect(page.getByText("Kente House", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Approve logo" }).click();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+  await page.reload();
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Vendors", exact: true }).click();
+  await expect(page.getByText("Kente House", { exact: true })).toBeVisible();
+  await expect(page.getByText("Approved", { exact: true })).toBeVisible();
+});
+
+test("formats and publishes one item or a bulk vendor collection", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("br-tour-complete", "true"));
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Products" }).click();
+  await page.getByRole("button", { name: "Add one or bulk upload" }).click();
+  await page.getByLabel("Vendor").selectOption({ label: "Africstyle Fashion" });
+  await page.getByLabel("Item photographs").setInputFiles([
+    "public/vendor-logos/africstyle-fashion.png",
+    "public/vendor-logos/sapologie-italiano.png",
+  ]);
+  await page.getByRole("button", { name: "Format and stage items" }).click();
+  await expect(page.getByText("2 items were formatted as WebP and added to the collection studio.")).toBeVisible();
+  await expect(page.getByLabel("Item name for africstyle-fashion.png")).toHaveValue("Africstyle Fashion");
+  await expect(page.getByText("africstyle-fashion.webp")).toBeVisible();
+  await page.getByRole("button", { name: "Publish all" }).click();
+  await expect(page.getByText("Live in storefront")).toHaveCount(2);
+  await page.reload();
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Products" }).click();
+  await expect(page.getByText("Live in storefront")).toHaveCount(2);
+});
+
+test("keeps the readiness experience inside a narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 480, height: 820 });
+  await page.goto("/readiness");
+  await expect(page.getByRole("heading", { name: "Let every brand shine. Let the mall work as one." })).toBeVisible();
+  const dimensions = await page.evaluate(() => ({ viewport: window.innerWidth, page: document.documentElement.scrollWidth, offenders: Array.from(document.querySelectorAll("body *")).map((element) => { const rect = element.getBoundingClientRect(); return { tag: element.tagName, className: element.className, left: rect.left, right: rect.right, width: rect.width }; }).filter((element) => element.right > window.innerWidth + 1 || element.left < -1).slice(0, 12) }));
+  expect(dimensions.offenders).toEqual([]);
+  expect(dimensions.page).toBeLessThanOrEqual(dimensions.viewport);
 });
 
 test("renders branded authentication with safe password controls", async ({

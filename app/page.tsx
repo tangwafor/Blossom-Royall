@@ -20,6 +20,7 @@ import {
   Moon,
   Package,
   Plus,
+  Printer,
   RotateCcw,
   RefreshCw,
   ScanLine,
@@ -32,6 +33,7 @@ import {
   Sun,
   TrendingUp,
   Truck,
+  Upload,
   Users,
   X,
 } from "lucide-react";
@@ -355,28 +357,8 @@ export default function Home() {
             eyebrow="CATALOG"
             title="Products & inventory"
             subtitle="Live stock across every vendor and sales channel."
-            action="Add product"
           >
-            <div className="product-grid">
-              {products.map((p) => (
-                <article className="product" key={p[2] as string}>
-                  <div>
-                    <ShoppingBag />
-                    <span>
-                      {(p[3] as number) === 0 ? "Online only" : (p[3] as number) <= 3 ? "Low stock" : "In stock"}
-                    </span>
-                  </div>
-                  <small>{p[2]}</small>
-                  <h3>{p[0]}</h3>
-                  <p>{p[1]}</p>
-                  <footer>
-                    <b>{p[4]}</b>
-                    <span>{p[3]} onsite{p[5] !== undefined ? ` · ${p[5]} online` : ""}</span>
-                  </footer>
-                  {p[6] && <small className="channel-source">{p[6]}</small>}
-                </article>
-              ))}
-            </div>
+            <ProductCatalogManager />
           </ListView>
         )}
         {active === "Vendors" && (
@@ -387,6 +369,7 @@ export default function Home() {
             action="Invite vendor"
             actionHref="/partners"
           >
+            <VendorBrandManager />
             <div className="vendors">
               {vendors.map((v) => (
                 <article className="panel vendor" key={v[1]}>
@@ -555,6 +538,200 @@ function ListView({
       {children}
     </div>
   );
+}
+
+type VendorBrandSubmission = {
+  id: string;
+  brandName: string;
+  contactEmail: string;
+  logoDataUrl: string;
+  fileName: string;
+  originalFileName: string;
+  width: number;
+  height: number;
+  status: "Awaiting review" | "Approved";
+  submittedAt: string;
+};
+
+async function normalizeVendorLogo(file: File) {
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const candidate = new Image();
+      candidate.onload = () => resolve(candidate);
+      candidate.onerror = () => reject(new Error("This image format cannot be read by your browser. Please export it as PNG, JPG, WebP, or SVG."));
+      candidate.src = sourceUrl;
+    });
+    const maxEdge = 1600;
+    const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Your browser could not prepare this image.");
+    context.drawImage(image, 0, 0, width, height);
+    const logoDataUrl = canvas.toDataURL("image/webp", 0.88);
+    if (logoDataUrl.length > 1_350_000) throw new Error("The optimized logo is still too large. Choose an image with less detail or a smaller resolution.");
+    const safeBase = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "vendor-logo";
+    return { logoDataUrl, fileName: `${safeBase}.webp`, originalFileName: file.name, width, height };
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+type ProductDraft = { id: string; name: string; vendor: string; imageDataUrl: string; fileName: string; originalFileName: string; width: number; height: number; status: "Draft" | "Published" };
+
+function productNameFromFile(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()).trim() || "Untitled item";
+}
+
+async function normalizeProductImage(file: File) {
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const candidate = new Image();
+      candidate.onload = () => resolve(candidate);
+      candidate.onerror = () => reject(new Error(`${file.name} cannot be read. Export it as PNG, JPG, or WebP and try again.`));
+      candidate.src = sourceUrl;
+    });
+    const scale = Math.min(1, 1800 / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Your browser could not prepare this item image.");
+    context.fillStyle = "#f7f3ef";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+    const imageDataUrl = canvas.toDataURL("image/webp", 0.86);
+    if (imageDataUrl.length > 1_750_000) throw new Error(`${file.name} is still too large after formatting.`);
+    const safeBase = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "product";
+    return { imageDataUrl, fileName: `${safeBase}.webp`, originalFileName: file.name, width, height };
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+function ProductCatalogManager() {
+  const storageKey = "br-product-drafts:blossom-royall";
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState<ProductDraft[]>([]);
+  const [message, setMessage] = useState("");
+  const [processing, setProcessing] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) setDrafts(JSON.parse(stored));
+  }, []);
+  const persist = (next: ProductDraft[]) => {
+    setDrafts(next);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+  };
+  const importItems = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const files = Array.from((form.elements.namedItem("itemImages") as HTMLInputElement).files || []);
+    if (!files.length) return setMessage("Choose one item photo or an entire collection.");
+    if (files.length > 40) return setMessage("Import up to 40 item photos at a time.");
+    if (files.some((file) => file.size > 20_000_000)) return setMessage("Each original photo must be smaller than 20 MB.");
+    setProcessing(true);
+    setMessage(`Formatting ${files.length} ${files.length === 1 ? "item" : "items"}...`);
+    try {
+      const normalized = await Promise.all(files.map(normalizeProductImage));
+      const next = normalized.map<ProductDraft>((item) => ({ id: crypto.randomUUID(), name: productNameFromFile(item.originalFileName), vendor: String(data.get("vendor")), ...item, status: "Draft" }));
+      persist([...next, ...drafts]);
+      form.reset();
+      setOpen(false);
+      setMessage(`${next.length} ${next.length === 1 ? "item was" : "items were"} formatted as WebP and added to the collection studio.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The collection could not be formatted.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+  const updateName = (id: string, name: string) => persist(drafts.map((item) => item.id === id ? { ...item, name } : item));
+  const publish = (id: string) => persist(drafts.map((item) => item.id === id ? { ...item, status: "Published" } : item));
+  const publishAll = () => persist(drafts.map((item) => ({ ...item, status: "Published" })));
+  return <>
+    <section className="panel collection-studio">
+      <div className="panel-head"><span><small className="eyebrow">COLLECTION STUDIO</small><h3>Luxury item exposure</h3></span><div><button onClick={() => setOpen((value) => !value)}><Upload />{open ? "Close importer" : "Add one or bulk upload"}</button>{drafts.some((item) => item.status === "Draft") && <button className="primary" onClick={publishAll}><Sparkles />Publish all</button>}</div></div>
+      <p>Drop in one hero item or a complete collection. Every photograph is resized, renamed, and converted to a storefront ready WebP asset automatically.</p>
+      {open && <form className="collection-importer" onSubmit={importItems}>
+        <label>Vendor<select name="vendor" required defaultValue=""><option value="" disabled>Choose the owning vendor</option>{vendors.map((vendor) => <option key={vendor[1]}>{vendor[1]}</option>)}</select></label>
+        <label className="collection-file">Item photographs<input name="itemImages" aria-label="Item photographs" type="file" accept="image/*,.heic,.heif" multiple required /><small>Select one image or up to 40 at once. Filenames become editable item names.</small></label>
+        <button className="primary" disabled={processing}><Upload />{processing ? "Formatting collection" : "Format and stage items"}</button>
+      </form>}
+      {message && <output className="policy-saved" aria-live="polite">{message}</output>}
+      {drafts.length > 0 && <div className="collection-preview">{drafts.map((item) => <article key={item.id}><div className="collection-image"><img src={item.imageDataUrl} alt={item.name} /><em className={item.status === "Draft" ? "warn" : ""}>{item.status}</em></div><small>{item.vendor}</small><input aria-label={`Item name for ${item.originalFileName}`} value={item.name} onChange={(event) => updateName(item.id, event.target.value)} /><p>{item.width} × {item.height} pixels · {item.fileName}</p>{item.status === "Draft" ? <button onClick={() => publish(item.id)}><Sparkles />Publish item</button> : <span><Check />Live in storefront</span>}</article>)}</div>}
+    </section>
+    <div className="product-grid">{products.map((p) => <article className="product" key={p[2] as string}><div><ShoppingBag /><span>{(p[3] as number) === 0 ? "Online only" : (p[3] as number) <= 3 ? "Low stock" : "In stock"}</span></div><small>{p[2]}</small><h3>{p[0]}</h3><p>{p[1]}</p><footer><b>{p[4]}</b><span>{p[3]} onsite{p[5] !== undefined ? ` · ${p[5]} online` : ""}</span></footer>{p[6] && <small className="channel-source">{p[6]}</small>}</article>)}</div>
+  </>;
+}
+
+function VendorBrandManager() {
+  const storageKey = "br-vendor-brand-submissions:blossom-royall";
+  const [open, setOpen] = useState(false);
+  const [submissions, setSubmissions] = useState<VendorBrandSubmission[]>([]);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) setSubmissions(JSON.parse(stored));
+  }, []);
+  const persist = (next: VendorBrandSubmission[]) => {
+    setSubmissions(next);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+  };
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage("");
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const file = data.get("logo") as File;
+    if (!file || !file.size) return setMessage("Choose the official logo file.");
+    if (!file.type.startsWith("image/") && !file.name.match(/\.(heic|heif)$/i)) return setMessage("Choose an image file. We will format it automatically.");
+    if (file.size > 15_000_000) return setMessage("Choose an original image smaller than 15 MB.");
+    setMessage("Formatting logo for the marketplace...");
+    try {
+      const normalized = await normalizeVendorLogo(file);
+      const next: VendorBrandSubmission = {
+        id: crypto.randomUUID(),
+        brandName: String(data.get("brandName") || "").trim(),
+        contactEmail: String(data.get("contactEmail") || "").trim(),
+        logoDataUrl: normalized.logoDataUrl,
+        fileName: normalized.fileName,
+        originalFileName: normalized.originalFileName,
+        width: normalized.width,
+        height: normalized.height,
+        status: "Awaiting review",
+        submittedAt: new Date().toISOString(),
+      };
+      persist([next, ...submissions]);
+      form.reset();
+      setOpen(false);
+      setMessage("Logo formatted as WebP and submitted for owner review.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "We could not format this logo.");
+    }
+  };
+  const approve = (id: string) => persist(submissions.map((item) => item.id === id ? { ...item, status: "Approved" } : item));
+  return <section className="panel vendor-brand-manager">
+    <div className="panel-head"><span><small className="eyebrow">BRAND ASSET QUEUE</small><h3>Vendor supplied logos</h3></span><button onClick={() => setOpen((value) => !value)}><Upload />{open ? "Close submission" : "Submit brand package"}</button></div>
+    <p>Vendors provide their official artwork and confirm permission. Owners approve what appears in the mall without a code change.</p>
+    {open && <form className="vendor-brand-form" onSubmit={submit}>
+      <label>Brand name<input name="brandName" required placeholder="Official customer facing name" /></label>
+      <label>Vendor contact email<input name="contactEmail" type="email" required placeholder="brand@example.com" /></label>
+      <label>Official logo file<input name="logo" type="file" accept="image/*,.heic,.heif" required /><small>PNG, JPG, WebP, SVG, and browser readable images are automatically normalized.</small></label>
+      <label className="brand-rights"><input name="rights" type="checkbox" required /><span>I confirm that I own this logo or am authorized to provide it to Blossom Royall for marketplace use.</span></label>
+      <button className="primary"><Upload />Send for owner review</button>
+    </form>}
+    {message && <output className="policy-saved">{message}</output>}
+    {submissions.length > 0 && <div className="brand-submission-list">{submissions.map((item) => <article key={item.id}><img src={item.logoDataUrl} alt={`${item.brandName} submitted logo`} /><span><b>{item.brandName}</b><small>{item.contactEmail} · {item.originalFileName || item.fileName} → {item.fileName}</small><small>{item.width && item.height ? `${item.width} × ${item.height} pixels · ` : ""}WebP marketplace asset</small></span><em className={item.status === "Awaiting review" ? "warn" : ""}>{item.status}</em>{item.status === "Awaiting review" && <button onClick={() => approve(item.id)}><Check />Approve logo</button>}</article>)}</div>}
+    <small className="control-note"><ShieldCheck />Preview submissions stay in this browser. Production uses tenant scoped private object storage, malware checks, version history, approval audit records, and reversible publishing.</small>
+  </section>;
 }
 
 type CommerceSettings = {
@@ -836,7 +1013,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
     setPlaced(true);
   };
   if (!bag.length && !placed) return <div className="checkout empty-checkout"><section><span className="eyebrow">POINT OF SALE</span><h2>Ready when your customer is.</h2><p>Scan products, split tenders, create layaway plans, and send beautiful receipts.</p><button className="primary large" onClick={openSale}><ScanLine />Start checkout</button></section><div className="receipt"><BrandMark className="receipt-mark" /><h3>Blossom Royall</h3><span /><span /><span /><b>$0.00</b><footer><strong>Powered by TA Tech</strong><small>Is not where you have been but where you are going.</small></footer></div></div>;
-  if (placed) return <div className="checkout-success"><i><Check /></i><span className="eyebrow">ORDER CONFIRMED</span><h2>Your complete look is reserved.</h2><p>Order #BR-2053 is coordinated across every seller. You will receive one update when it is ready for {method === "pickup" ? "pickup" : method}.</p><div><b>${total.toFixed(2)}</b><small>{payment === "layaway" ? `$${deposit.toFixed(2)} deposit collected · balance scheduled` : "Paid in full"}</small></div><button onClick={() => { setBag([]); setPlaced(false); }}>Done</button></div>;
+  if (placed) return <div className="checkout-success receipt-ready"><section className="order-confirmation"><i><Check /></i><span className="eyebrow">ORDER CONFIRMED</span><h2>Your complete look is reserved.</h2><p>Order #BR-2053 is coordinated across every seller. You will receive one update when it is ready for {method === "pickup" ? "pickup" : method}.</p><div><b>${total.toFixed(2)}</b><small>{payment === "layaway" ? `$${deposit.toFixed(2)} deposit collected · balance scheduled` : "Paid in full"}</small></div><div className="receipt-actions"><button className="primary" onClick={() => window.print()}><Printer />Print receipt</button><button onClick={() => { setBag([]); setPlaced(false); }}>Done</button></div></section><article className="sale-receipt" aria-label="Receipt for order BR 2053"><header><BrandMark className="receipt-mark" /><h3>Blossom Royall</h3><small>Fashion Mall OS</small></header><div className="receipt-meta"><span><b>Order</b>#BR-2053</span><span><b>Date</b>{new Date().toLocaleDateString()}</span><span><b>Fulfillment</b>{method}</span></div><section>{bag.map((item) => <div className="receipt-line" key={item.name}><span><b>{item.name}</b><small>Sold by {item.vendor}</small><small>Return eligible for 30 days after handoff</small></span><strong>${item.price.toFixed(2)}</strong></div>)}</section><dl><div><dt>Merchandise</dt><dd>${subtotal.toFixed(2)}</dd></div>{deliveryFee > 0 && <div><dt>Delivery</dt><dd>${deliveryFee.toFixed(2)}</dd></div>}<div className="receipt-total"><dt>{payment === "layaway" ? "Deposit paid" : "Total paid"}</dt><dd>${(payment === "layaway" ? deposit : total).toFixed(2)}</dd></div>{payment === "layaway" && <div><dt>Remaining balance</dt><dd>${(total - deposit).toFixed(2)}</dd></div>}</dl><footer><strong>Powered by TA Tech</strong><small>Is not where you have been but where you are going.</small></footer></article></div>;
   return <div className="customer-checkout content inner"><div className="view-head"><div><span className="eyebrow">ONE BAG · EVERY BRAND</span><h2>Your complete edit</h2><p>Review the sellers, arrival promise, and customer protections before paying once.</p></div></div><div className="customer-checkout-grid"><section className="panel bag-lines"><div className="panel-head"><span><small className="eyebrow">{bag.length} ITEMS</small><h3>Seller attributed bag</h3></span><ShieldCheck /></div>{bag.map((item) => <article key={item.name}><i><ShoppingBag /></i><span><b>{item.name}</b><small>Sold by {item.vendor}</small><em>{item.fulfillment}</em></span><strong>${item.price.toFixed(2)}</strong></article>)}<p><ShieldCheck />Every product is tied to its seller, policy snapshot, and inventory reservation.</p></section><aside className="panel checkout-summary"><span className="eyebrow">FULFILLMENT</span><h3>How would you like it?</h3><div className="fulfillment-choices"><button className={method === "pickup" ? "active" : ""} onClick={() => setMethod("pickup")}><Store /><b>Pickup</b><small>Saturday · Free</small></button><button className={method === "delivery" ? "active" : ""} onClick={() => setMethod("delivery")}><MapPin /><b>Local delivery</b><small>Saturday · {subtotal >= 150 ? "Free" : "$9"}</small></button><button className={method === "shipping" ? "active" : ""} onClick={() => setMethod("shipping")}><Truck /><b>Shipping</b><small>2 to 4 days · $12</small></button></div><span className="eyebrow payment-title">PAYMENT</span><div className="payment-choices"><button className={payment === "pay_now" ? "active" : ""} onClick={() => setPayment("pay_now")}><b>Pay in full</b><small>${total.toFixed(2)} today</small></button><button className={payment === "layaway" ? "active" : ""} onClick={() => setPayment("layaway")}><b>Layaway</b><small>${deposit.toFixed(2)} today · 60 days</small></button></div><dl><div><dt>Merchandise</dt><dd>${subtotal.toFixed(2)}</dd></div><div><dt>Delivery</dt><dd>{deliveryFee ? `$${deliveryFee.toFixed(2)}` : "Free"}</dd></div><div><dt>{payment === "layaway" ? "Deposit due" : "Total"}</dt><dd>${(payment === "layaway" ? deposit : total).toFixed(2)}</dd></div></dl><button className="primary place-order" onClick={placeOrder}>{payment === "layaway" ? "Start secure layaway" : "Place order"}<ArrowUpRight /></button><p>Return eligibility and deadlines appear by item on your receipt. Final sale exceptions are shown before payment.</p></aside></div></div>;
 }
 

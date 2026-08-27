@@ -1,0 +1,27 @@
+[build]
+  command = "npm run build:sites"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NEXT_PUBLIC_APP_URL = "https://join.blossomroyall.com"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[redirects]]
+  from = "/concept"
+  to = "/404.html"
+  status = 404
+  force = true
+

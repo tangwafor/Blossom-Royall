@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "prepush": "npm run typecheck && npm run build && npm test"
+    "prepush": "npm run typecheck && npm run build:sites && npm test",
+    "verify:public": "npm run build:sites && node scripts/verify-public-build.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
