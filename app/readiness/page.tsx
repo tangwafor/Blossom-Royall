@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, Copy, ExternalLink, LockKeyhole, MapPin, Moon, Plus, Share2, Sparkles, Store, Sun, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, ExternalLink, LockKeyhole, MapPin, Moon, Play, Plus, Share2, Sparkles, Store, Sun, Trash2, Users, X } from "lucide-react";
 import BrandMark from "../brand-mark";
 import { createClient } from "../../lib/supabase/client";
 
@@ -77,6 +77,7 @@ export default function ReadinessPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
+  const [filmOpen, setFilmOpen] = useState(false);
   const fields = path === "owner" ? ownerFields : vendorFields;
   const storageKey = path ? `br-readiness:${path}` : "";
   useEffect(() => {
@@ -91,6 +92,18 @@ export default function ReadinessPage() {
     setAnswers(saved ? JSON.parse(saved) : {});
     setSubmitted(false);
   }, [storageKey]);
+  useEffect(() => {
+    if (!filmOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFilmOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [filmOpen]);
   const completed = useMemo(() => fields.filter(([id]) => answers[id]?.trim()).length, [answers, fields]);
   const progress = fields.length ? Math.round(completed / fields.length * 100) : 0;
   const update = (id: string, value: string) => {
@@ -126,7 +139,8 @@ export default function ReadinessPage() {
   };
   return <main className="readiness-page">
     <header className="readiness-nav"><Link href="/welcome"><ArrowLeft />Back</Link><span><BrandMark /><b>Blossom Royall</b><small>Readiness experience</small></span><div className="readiness-nav-actions"><button type="button" aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`} onClick={toggleTheme}>{theme === "light" ? <Moon /> : <Sun />}</button><button onClick={share}><Share2 />Share</button></div></header>
-    {!path && <section className="readiness-vision"><div className="readiness-copy"><span className="eyebrow">ONE DESTINATION · MANY REMARKABLE BRANDS</span><h1>Let every brand shine. Let the mall work as one.</h1><p>Customers discover independent fashion, shop onsite or online, pay once, and receive coordinated pickup, delivery, returns, and care. Every item stays connected to its vendor, inventory, policies, earnings, and story.</p><div><span><Check />Shared cashier</span><span><Check />Online and onsite</span><span><Check />Clear vendor earnings</span></div></div><aside className="readiness-entry"><header><BrandMark /><span><small>START HERE</small><b>Tell us who you are.</b></span></header><div>{paths.map(({ id, icon: Icon, title, copy }) => <button key={id} onClick={() => setPath(id)}><Icon /><span><b>{title}</b><small>{copy}</small></span><ArrowRight /></button>)}</div><p><LockKeyhole />Private, role specific, and saved as you type.</p></aside></section>}
+    {!path && <section className="readiness-vision"><div className="readiness-copy"><span className="eyebrow">ONE DESTINATION · MANY REMARKABLE BRANDS</span><h1>Let every brand shine. Let the mall work as one.</h1><p>Customers discover independent fashion, shop onsite or online, pay once, and receive coordinated pickup, delivery, returns, and care. Every item stays connected to its vendor, inventory, policies, earnings, and story.</p><div><span><Check />Shared cashier</span><span><Check />Online and onsite</span><span><Check />Clear vendor earnings</span></div><button className="readiness-film-trigger" type="button" onClick={() => setFilmOpen(true)}><span><i /><Play /></span><b>Watch the Blossom Royall vision</b><small>35 seconds · Natural British narration</small></button></div><aside className="readiness-entry"><header><BrandMark /><span><small>START HERE</small><b>Tell us who you are.</b></span></header><div>{paths.map(({ id, icon: Icon, title, copy }) => <button key={id} onClick={() => setPath(id)}><Icon /><span><b>{title}</b><small>{copy}</small></span><ArrowRight /></button>)}</div><p><LockKeyhole />Private, role specific, and saved as you type.</p></aside></section>}
+    {filmOpen && <section className="readiness-film-shell"><button type="button" className="film-backdrop" aria-label="Close vision film" onClick={() => setFilmOpen(false)} /><div className="readiness-film readiness-video" role="dialog" aria-modal="true" aria-label="Blossom Royall vision film"><header><span><BrandMark /><b>Blossom Royall</b></span><small>THE VISION · 00:36</small><button type="button" aria-label="Close vision film" onClick={() => setFilmOpen(false)}><X /></button></header><div className="readiness-video-stage"><video autoPlay playsInline controls preload="metadata" poster="/media/readiness-welcome-2026-08-27-poster.jpg"><source src="/media/readiness-welcome-2026-08-27-natural-british.mp4" type="video/mp4" /><track kind="captions" src="/media/readiness-welcome-2026-08-27.vtt" srcLang="en" label="English" />Your browser does not support this video.</video></div><footer><span>Captions are optional and remain off unless selected in the player.</span><b>Sound on · British female narration</b></footer></div></section>}
     {!path ? <section className="readiness-proof"><article><b>One customer experience</b><p>Every seller remains clear while checkout, delivery, returns, and support feel beautifully coordinated.</p></article><article><b>Less repeated work</b><p>We start with what Blossom Royall and each vendor already own, use, and understand.</p></article><article><b>Built around each brand</b><p>Identity, products, policies, inventory, and earnings stay connected without becoming invisible.</p></article></section> : <section className="readiness-form"><header><button onClick={() => setPath(null)}><ArrowLeft />Choose another role</button><span className="eyebrow">{path === "owner" ? "OWNER READINESS" : path === "vendor" ? "VENDOR READINESS" : "PARTNERSHIP INTRODUCTION"}</span><h2>{path === "owner" ? "Show us what Blossom Royall already has." : "Help us present your brand beautifully."}</h2><p>{path === "owner" ? "We will reuse existing vendors, systems, equipment, policies, and information wherever practical." : "Your answers help prepare the right storefront, inventory setup, customer promises, and partnership conversation."}</p><div className="readiness-progress"><i style={{ width: `${progress}%` }} /><span>{progress}% complete · {notice || "Answers save as you type"}</span></div></header>{submitted ? <div className="readiness-complete"><Check /><h3>Your readiness profile was securely delivered.</h3><p>Delly and the Blossom Royall team can now review these answers. A copy remains saved on this device.</p><button onClick={share}><Copy />Share this experience</button></div> : <form onSubmit={(event) => { event.preventDefault(); void submitReadiness(); }}>{fields.map(([id, label, type]) => type === "vendors" ? <VendorRoster key={id} value={answers[id] || ""} onChange={(value) => update(id, value)} /> : type === "address" ? <AddressField key={id} label={label} value={answers[id] || ""} onChange={(value) => update(id, value)} /> : readinessSuggestions[id] ? <MultiChoiceField key={id} label={label} options={readinessSuggestions[id]} value={answers[id] || ""} onChange={(value) => update(id, value)} /> : <label key={id}>{label}{type === "textarea" ? <textarea rows={4} value={answers[id] || ""} onChange={(event) => update(id, event.target.value)} /> : <input type={type} value={answers[id] || ""} onChange={(event) => update(id, event.target.value)} />}</label>)}<label className="readiness-consent"><input type="checkbox" required />I confirm that I am authorized to provide this business information to Blossom Royall.</label><button className="primary" type="submit" disabled={submitting}>{submitting ? "Sending securely" : "Complete readiness profile"}<ArrowRight /></button></form>}</section>}
     <footer className="readiness-footer"><BrandMark /><span><b>Powered by TA Tech</b><small>Is not where you have been but where you are going.</small></span></footer>
   </main>;

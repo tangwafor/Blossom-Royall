@@ -425,11 +425,18 @@ test("keeps the readiness experience inside a narrow viewport", async ({ page })
   expect(dimensions.page).toBeLessThanOrEqual(dimensions.viewport);
 });
 
-test("keeps unapproved synthetic narration out of the public experience", async ({ page }) => {
+test("plays the approved vision film with optional captions kept out of the way", async ({ page }) => {
   await page.goto("/readiness");
   await expect(page.locator("video")).toHaveCount(0);
-  await expect(page.getByText("Narrated", { exact: false })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /I am a participating vendor/ })).toBeVisible();
+  await page.getByRole("button", { name: /Watch the Blossom Royall vision/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Blossom Royall vision film" });
+  await expect(dialog).toBeVisible();
+  const video = dialog.locator("video");
+  await expect(video).toHaveAttribute("poster", "/media/readiness-welcome-2026-08-27-poster.jpg");
+  await expect(video.locator("source")).toHaveAttribute("src", "/media/readiness-welcome-2026-08-27-natural-british.mp4");
+  await expect(video.locator("track")).not.toHaveAttribute("default", "");
+  await dialog.getByRole("button", { name: "Close vision film" }).click();
+  await expect(dialog).toHaveCount(0);
 });
 
 test("lets owners select and persist multiple readiness propositions", async ({ page }) => {
