@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  Check,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -10,8 +11,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
+import BrandMark from "../brand-mark";
 
 const authErrors: Record<string, string> = {
   "Invalid login credentials": "The email or password is not correct.",
@@ -23,9 +25,20 @@ const authErrors: Record<string, string> = {
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [method, setMethod] = useState<"password" | "magic">("password");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(false);
+  useEffect(() => {
+    const remembered = localStorage.getItem("br-remembered-email");
+    localStorage.removeItem("br-saved-credentials");
+    if (remembered) {
+      setEmail(remembered);
+      setRememberEmail(true);
+    }
+  }, []);
   const sendRecovery = async (event: FormEvent<HTMLButtonElement>) => {
     const form = event.currentTarget.form;
     const email = String(new FormData(form ?? undefined).get("email") || "");
@@ -58,6 +71,19 @@ export default function AuthPage() {
       return;
     }
     const supabase = createClient();
+    if (mode === "signin" && method === "magic") {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: `${location.origin}/auth/callback` },
+      });
+      setLoading(false);
+      setMessage(
+        error
+          ? authErrors[error.message] || "We could not send your secure sign in link."
+          : "Your private sign in link is on its way. Check your email.",
+      );
+      return;
+    }
     const result =
       mode === "signin"
         ? await supabase.auth.signInWithPassword({ email, password })
@@ -74,22 +100,43 @@ export default function AuthPage() {
       );
       return;
     }
+    if (rememberEmail) localStorage.setItem("br-remembered-email", email);
+    else localStorage.removeItem("br-remembered-email");
     if (mode === "signup") {
       setMessage("Check your email to confirm your Blossom Royall account.");
       return;
     }
     location.assign("/");
   };
+  const signInWithGoogle = async () => {
+    setLoading(true);
+    setMessage("");
+    const { data, error } = await createClient().auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${location.origin}/auth/callback` },
+    });
+    if (error) {
+      setLoading(false);
+      setMessage("Google sign in is unavailable right now. Please use email instead.");
+      return;
+    }
+    if (data.url) location.assign(data.url);
+  };
   return (
     <main className="auth-page">
       <section className="auth-story">
-        <div className="auth-mark">BR</div>
-        <span className="eyebrow">BLOSSOM ROYALL</span>
-        <h1>One beautiful place to run it all.</h1>
-        <p>
-          Commerce, customers, vendors, staff, and intelligence, working
-          together.
-        </p>
+        <div className="auth-story-shade" />
+        <div className="auth-story-copy">
+          <BrandMark className="auth-mark" />
+          <span className="eyebrow">THE PRIVATE ENTRANCE</span>
+          <h1>Where beautiful retail begins.</h1>
+          <p>Step into one connected world for fashion, people, places, and every thoughtful detail behind the experience.</p>
+          <div className="auth-promises">
+            <span><Check />Your entire mall, beautifully connected</span>
+            <span><Check />Private, role scoped access</span>
+            <span><Check />Intelligence shaped around your business</span>
+          </div>
+        </div>
         <footer>
           <b>Powered by TA Tech</b>
           <span>Is not where you have been but where you are going.</span>
@@ -111,6 +158,16 @@ export default function AuthPage() {
               ? "Sign in to continue to your workspace."
               : "Start your secure Blossom Royall profile."}
           </p>
+          {mode === "signin" && (
+            <>
+              <button type="button" className="auth-google" onClick={signInWithGoogle} disabled={loading}><b>G</b>Continue with Google</button>
+              <div className="auth-divider"><span>or continue with email</span></div>
+              <div className="auth-methods" aria-label="Sign in method">
+                <button type="button" className={method === "password" ? "active" : ""} onClick={() => setMethod("password")}>Password</button>
+                <button type="button" className={method === "magic" ? "active" : ""} onClick={() => setMethod("magic")}>Email link</button>
+              </div>
+            </>
+          )}
           <label>
             Email address
             <div>
@@ -118,13 +175,15 @@ export default function AuthPage() {
               <input
                 name="email"
                 type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 required
                 placeholder="you@example.com"
               />
             </div>
           </label>
-          <label>
+          {(mode === "signup" || method === "password") && <label>
             Password
             <div>
               <LockKeyhole />
@@ -146,7 +205,7 @@ export default function AuthPage() {
                 {show ? <EyeOff /> : <Eye />}
               </button>
             </div>
-          </label>
+          </label>}
           {mode === "signup" && (
             <label className="agreement">
               <input
@@ -161,14 +220,10 @@ export default function AuthPage() {
             </label>
           )}
           {mode === "signin" && (
-            <button
-              type="button"
-              className="auth-recovery"
-              onClick={sendRecovery}
-              disabled={loading}
-            >
-              Forgot password?
-            </button>
+            <div className="auth-options">
+              {method === "password" && <label className="remember-email"><input type="checkbox" checked={rememberEmail} onChange={(event) => setRememberEmail(event.target.checked)} />Remember my email</label>}
+              {method === "password" && <button type="button" className="auth-recovery" onClick={sendRecovery} disabled={loading}>Forgot password?</button>}
+            </div>
           )}
           {message && <output className="auth-message">{message}</output>}
           <button className="primary auth-submit" disabled={loading}>
@@ -178,7 +233,7 @@ export default function AuthPage() {
                 Please wait
               </>
             ) : mode === "signin" ? (
-              "Sign in"
+              method === "magic" ? "Send secure sign in link" : "Sign in"
             ) : (
               "Create account"
             )}
@@ -188,6 +243,7 @@ export default function AuthPage() {
             className="auth-switch"
             onClick={() => {
               setMode((value) => (value === "signin" ? "signup" : "signin"));
+              setMethod("password");
               setMessage("");
             }}
           >
