@@ -317,7 +317,7 @@ test("tracks a multi seller order and starts an eligible return", async ({
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "My Orders" }).click();
-  await expect(page.getByText("SECURE RECEIPT")).toBeVisible();
+  await expect(page.getByText("SECURE RECEIPT", { exact: true })).toBeVisible();
   await expect(page.locator(".pickup-pass b")).toHaveText(/^BR-/);
   await expect(page.getByText("Sold by Africstyle Fashion")).toBeVisible();
   await page.getByRole("button", { name: "Return or exchange" }).click();

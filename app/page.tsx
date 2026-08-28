@@ -3716,7 +3716,7 @@ function AftercareCenter() {
           {notice}
         </div>
       )}
-      <section className="aftercare-metrics">
+      {!productionMode && <section className="aftercare-metrics">
         {[
           ["Open returns", "6", "2 need review"],
           ["Exchange value", "$684", "Revenue retained"],
@@ -3729,7 +3729,7 @@ function AftercareCenter() {
             <span>{note}</span>
           </article>
         ))}
-      </section>
+      </section>}
       {productionMode && (
         <section className="panel care-timeline" aria-label="Production return queue">
           <div>
@@ -3867,7 +3867,7 @@ function AftercareCenter() {
           </div>
         </article>
       </section>}
-      <section className="panel care-timeline">
+      {!productionMode && <section className="panel care-timeline">
         <div>
           <span className="eyebrow">ACCOUNTABLE HISTORY</span>
           <h3>Every decision leaves a clear trail</h3>
@@ -3901,7 +3901,7 @@ function AftercareCenter() {
             </span>
           </li>
         </ol>
-      </section>
+      </section>}
     </div>
   );
 }
@@ -4430,6 +4430,13 @@ function CustomerOrders() {
       </ListView>
     );
   const orderPolicy = order.policySnapshot || currentPolicy;
+  const orderStage = order.status === "completed" || order.status === "fulfilled"
+    ? 3
+    : order.status === "ready"
+      ? 2
+      : order.status === "confirmed"
+        ? 1
+        : 0;
   const deposit =
     order.deposit ??
     Math.round(order.total * orderPolicy.layawayDepositPercent) / 100;
@@ -4513,33 +4520,33 @@ function CustomerOrders() {
         </div>
       </section>
       <section className="order-progress panel" aria-label="Order progress">
-        <div className="complete">
+        <div className={orderStage >= 0 ? "complete" : ""}>
           <i>
             <Check />
           </i>
-          <b>Order confirmed</b>
-          <small>Payment and inventory secured</small>
+          <b>Order recorded</b>
+          <small>Your secure receipt is available</small>
         </div>
-        <div className="complete">
+        <div className={orderStage > 1 ? "complete" : orderStage === 1 ? "active" : ""}>
           <i>
-            <Check />
+            {orderStage > 1 ? <Check /> : <Clock3 />}
           </i>
-          <b>Seller items located</b>
-          <small>Every item scanned</small>
+          <b>Payment confirmed</b>
+          <small>{orderStage >= 1 ? "The order is cleared for preparation" : "Verification may still be required"}</small>
         </div>
-        <div className="active">
+        <div className={orderStage > 2 ? "complete" : orderStage === 2 ? "active" : ""}>
           <i>
             <Package />
           </i>
-          <b>Consolidating</b>
-          <small>Quality and packing check</small>
+          <b>Ready for handoff</b>
+          <small>{orderStage >= 2 ? "The team has marked this order ready" : "Preparation status has not been recorded yet"}</small>
         </div>
-        <div>
+        <div className={orderStage === 3 ? "complete" : ""}>
           <i>
-            <Store />
+            {orderStage === 3 ? <Check /> : <Store />}
           </i>
-          <b>Ready for pickup</b>
-          <small>We will notify you</small>
+          <b>Handoff completed</b>
+          <small>{orderStage === 3 ? "Fulfillment is complete" : "Awaiting a recorded customer handoff"}</small>
         </div>
       </section>
       <div className="customer-order-grid">
