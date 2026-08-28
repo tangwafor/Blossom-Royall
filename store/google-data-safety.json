@@ -1,0 +1,30 @@
+{
+  "lastReviewed": "2026-08-28",
+  "applicationId": "com.blossomroyall.app",
+  "collectsData": true,
+  "sharesData": true,
+  "dataEncryptedInTransit": true,
+  "accountDeletionAvailable": true,
+  "accountDeletionUrl": "https://app.blossomroyall.com/account/delete",
+  "reviewRequiredBeforeSubmission": true,
+  "dataTypes": [
+    { "category": "Personal info", "type": "Name", "collected": true, "shared": false, "required": true, "purposes": ["Account management", "App functionality"] },
+    { "category": "Personal info", "type": "Email address", "collected": true, "shared": false, "required": true, "purposes": ["Account management", "App functionality", "Fraud prevention, security, and compliance"] },
+    { "category": "Personal info", "type": "User IDs", "collected": true, "shared": false, "required": true, "purposes": ["Account management", "App functionality", "Fraud prevention, security, and compliance"] },
+    { "category": "Personal info", "type": "Address", "collected": true, "shared": true, "required": false, "purposes": ["App functionality"], "sharingNote": "Only relevant fulfillment details go to the independent seller or delivery participant selected for the physical goods order. Confirm the user initiated transaction exception in Play Console." },
+    { "category": "Personal info", "type": "Phone number", "collected": true, "shared": true, "required": false, "purposes": ["Account management", "App functionality"], "sharingNote": "Confirm whether any final seller, delivery, SMS, or WhatsApp workflow receives the phone number." },
+    { "category": "Financial info", "type": "User payment info", "collected": true, "shared": false, "required": false, "purposes": ["App functionality", "Fraud prevention, security, and compliance"], "note": "Includes payment method, transaction reference, and optional proof. Blossom Royall does not store card credentials." },
+    { "category": "Financial info", "type": "Purchase history", "collected": true, "shared": true, "required": false, "purposes": ["App functionality", "Personalization"], "sharingNote": "A responsible seller receives only its attributed order details. Confirm the user initiated transaction exception in Play Console." },
+    { "category": "Files and docs", "type": "Files and docs", "collected": true, "shared": false, "required": false, "purposes": ["App functionality", "Fraud prevention, security, and compliance"], "note": "Includes optional payment proof and role dependent business documents." },
+    { "category": "Photos and videos", "type": "Photos", "collected": true, "shared": false, "required": false, "purposes": ["App functionality", "Fraud prevention, security, and compliance"], "note": "Only a photo the user explicitly selects as optional payment proof or authorized storefront media." },
+    { "category": "App activity", "type": "Other actions", "collected": true, "shared": false, "required": true, "purposes": ["Fraud prevention, security, and compliance"], "note": "Limited to audit records created when an authenticated user performs a write. Reconcile if analytics or diagnostics are activated." },
+    { "category": "Other", "type": "Other user generated content", "collected": true, "shared": false, "required": false, "purposes": ["App functionality", "Personalization"], "note": "Includes optional clothing fit measurements, preferences, customer support content, and role dependent storefront content." }
+  ],
+  "sharingReviewRequired": ["Address", "Phone number", "Purchase history"],
+  "finalReview": [
+    "Reconcile the declaration against every production service and software development kit.",
+    "Confirm whether seller and delivery disclosures qualify for the user initiated action or service provider exceptions. Keep shared set to true unless the exception is confirmed.",
+    "Add diagnostics, analytics, messaging, delivery, or payment provider data before activating those providers.",
+    "Confirm the privacy policy and deletion page exactly match these answers."
+  ]
+}

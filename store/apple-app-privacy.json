@@ -1,0 +1,27 @@
+{
+  "lastReviewed": "2026-08-28",
+  "appId": "com.blossomroyall.app",
+  "tracking": false,
+  "privacyPolicyUrl": "https://app.blossomroyall.com/privacy",
+  "privacyChoicesUrl": "https://app.blossomroyall.com/account/delete",
+  "reviewRequiredBeforeSubmission": true,
+  "dataTypes": [
+    { "type": "Name", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"] },
+    { "type": "Email Address", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"] },
+    { "type": "Phone Number", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"] },
+    { "type": "Physical Address", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"] },
+    { "type": "Payment Info", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"], "note": "Includes selected payment method, transaction reference, and optional proof. Card credentials are not stored by Blossom Royall." },
+    { "type": "Purchase History", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality", "Product Personalization"] },
+    { "type": "Customer Support", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"] },
+    { "type": "Photos", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"], "note": "Only a photo the user explicitly selects as optional payment proof or authorized storefront media." },
+    { "type": "Other User Content", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"], "note": "Includes optional payment proof and role dependent storefront content." },
+    { "type": "User ID", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality"] },
+    { "type": "Other Data Types", "collected": true, "linkedToUser": true, "tracking": false, "purposes": ["App Functionality", "Product Personalization"], "note": "Includes optional clothing fit measurements and preferences. Final reviewer must confirm whether Apple classifies the exact release behavior differently." }
+  ],
+  "notCollectedInCurrentBuild": ["Precise Location", "Coarse Location", "Contacts", "Emails or Text Messages", "Videos", "Audio Data", "Browsing History", "Search History", "Device ID", "Advertising Data", "Crash Data", "Performance Data"],
+  "finalReview": [
+    "Reconcile every selected type with the production database, Netlify, Supabase, native plugins, and any newly activated monitoring provider.",
+    "Confirm optional fit measurements remain correctly classified as Other Data Types and are not represented as health or fitness information.",
+    "If diagnostics or analytics are activated, add their data types and purposes before submission."
+  ]
+}

@@ -34,6 +34,8 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 13. A machine readable submission status, reviewer access plan, store asset manifest, and native submission runbook now make every outstanding Apple and Google requirement explicit. Native structure verification intentionally requires submission readiness to remain false until signed builds and external evidence exist.
 
+14. Console ready Apple App Privacy, Google Data safety, and Google policy declaration maps are staged under `store`. They are derived from current release behavior, declare no tracking or advertising, distinguish physical goods payments from digital purchases, and preserve human review gates for seller sharing, target audience, financial features, content rating, and any provider activated before submission.
+
 ## Required before public submission
 
 1. Activate and monitor `privacy@blossomroyall.com`.

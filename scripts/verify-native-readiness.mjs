@@ -15,6 +15,9 @@ const requiredFiles = [
   "store/submission-readiness.json",
   "store/reviewer-access.json",
   "store/asset-manifest.json",
+  "store/apple-app-privacy.json",
+  "store/google-data-safety.json",
+  "store/google-policy-declarations.json",
   "docs/NATIVE_SUBMISSION_RUNBOOK.md",
 ];
 
@@ -37,6 +40,9 @@ const privacyInventory = JSON.parse(await read("store/privacy-data-inventory.jso
 const submission = JSON.parse(await read("store/submission-readiness.json"));
 const reviewerAccess = JSON.parse(await read("store/reviewer-access.json"));
 const assetManifest = JSON.parse(await read("store/asset-manifest.json"));
+const applePrivacy = JSON.parse(await read("store/apple-app-privacy.json"));
+const googleSafety = JSON.parse(await read("store/google-data-safety.json"));
+const googlePolicy = JSON.parse(await read("store/google-policy-declarations.json"));
 
 const requireText = (source, value, label) => { if (!source.includes(value)) failures.push(`${label} is missing ${value}`); };
 requireText(config, 'appId: "com.blossomroyall.app"', "Capacitor configuration");
@@ -68,7 +74,7 @@ for (const locale of ["en-US", "fr-FR", "es-ES"]) {
   if (listing.apple.subtitle.length > 30) failures.push(`${locale} Apple subtitle exceeds 30 characters`);
   if (listing.google.shortDescription.length > 80) failures.push(`${locale} Google short description exceeds 80 characters`);
 }
-for (const urlName of ["supportUrl", "privacyPolicyUrl", "accountDeletionUrl"]) {
+for (const urlName of ["supportUrl", "privacyPolicyUrl", "accountDeletionUrl", "privacyChoicesUrl"]) {
   if (!String(listings[urlName] || "").startsWith("https://app.blossomroyall.com/")) failures.push(`${urlName} is not on the branded application domain`);
 }
 if (privacyInventory.tracking !== false || privacyInventory.dataSold !== false) failures.push("Privacy inventory tracking or sale declaration is unsafe");
@@ -84,6 +90,14 @@ for (const role of ["customer", "owner"]) {
 if (assetManifest.apple.iphone69.size !== "1320x2868") failures.push("Apple iPhone screenshot target is not current");
 if (assetManifest.apple.ipad13.size !== "2064x2752") failures.push("Apple iPad screenshot target is not current");
 if (assetManifest.google.featureGraphic.size !== "1024x500") failures.push("Google feature graphic target is incorrect");
+if (applePrivacy.appId !== listings.appId || applePrivacy.tracking !== false) failures.push("Apple privacy answers have an unsafe identity or tracking declaration");
+if (!applePrivacy.reviewRequiredBeforeSubmission || !applePrivacy.dataTypes.length) failures.push("Apple privacy answers are incomplete");
+if (applePrivacy.dataTypes.some((item) => item.tracking !== false)) failures.push("Apple privacy answers contain tracking");
+if (googleSafety.applicationId !== listings.appId || !googleSafety.collectsData) failures.push("Google Data safety answers are incomplete");
+if (!googleSafety.dataEncryptedInTransit || !googleSafety.accountDeletionAvailable) failures.push("Google Data safety security answers are incomplete");
+if (!googleSafety.reviewRequiredBeforeSubmission || !googleSafety.dataTypes.length) failures.push("Google Data safety answers need review evidence");
+if (googlePolicy.applicationId !== listings.appId || googlePolicy.ads !== false) failures.push("Google policy declarations have an unsafe identity or ads declaration");
+if (googlePolicy.contentRating.questionnaireComplete !== false || googlePolicy.contentRating.humanReviewRequired !== true) failures.push("Google content rating must remain blocked for human review");
 
 async function pngSize(file) {
   const data = await readFile(join(root, file));

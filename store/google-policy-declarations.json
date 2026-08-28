@@ -1,0 +1,25 @@
+{
+  "lastReviewed": "2026-08-28",
+  "applicationId": "com.blossomroyall.app",
+  "ads": false,
+  "targetAudience": "Adults operating or shopping with independent fashion stores. Final age selections require owner and legal review.",
+  "financialFeatures": {
+    "provisionalAnswer": "My app does not provide any financial features",
+    "reason": "The current app records payments for physical fashion goods and does not offer banking, lending, money transfer, digital wallet custody, investment, insurance, or financial advice.",
+    "humanReviewRequired": true
+  },
+  "payments": {
+    "goodsType": "Physical goods",
+    "googlePlayBillingUsed": false,
+    "reason": "Checkout is for physical fashion products, pickup, delivery, and shipping. No digital content or native feature is sold."
+  },
+  "appAccess": {
+    "restrictedFeatures": true,
+    "reviewerAccessArtifact": "store/reviewer-access.json",
+    "credentialsMustNotBeCommitted": true
+  },
+  "contentRating": {
+    "questionnaireComplete": false,
+    "humanReviewRequired": true
+  }
+}
