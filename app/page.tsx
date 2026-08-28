@@ -24,6 +24,7 @@ import {
   Plus,
   Printer,
   RotateCcw,
+  Ruler,
   RefreshCw,
   ScanLine,
   Search,
@@ -64,6 +65,7 @@ import {
 const nav = [
   ["Command Center", LayoutDashboard],
   ["Customer Shop", Sparkles],
+  ["My Fit", Ruler],
   ["Checkout", CircleDollarSign],
   ["Orders", ShoppingBag],
   ["My Orders", ClipboardList],
@@ -681,6 +683,7 @@ export default function Home() {
           </div>
         )}
         {active === "Customer Shop" && <CustomerShop go={go} />}
+        {active === "My Fit" && <MyFit go={go} />}
         {active === "Orders" && (
           <ListView
             eyebrow="FULFILLMENT"
@@ -4275,6 +4278,270 @@ function CustomerOrders() {
   );
 }
 
+type FitUnit = "imperial" | "metric";
+
+type FitProfile = {
+  unit: FitUnit;
+  measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder", number>;
+  recommendedSize: string;
+  consent: boolean;
+  shareWithVendors: boolean;
+  updatedAt: string;
+};
+
+const fitStorageKey = "br-my-fit:blossom-royall";
+const fitQueueKey = "br-offline-writes:blossom-royall";
+
+const fitCopy = {
+  en: {
+    eyebrow: "PRIVATE FIT PROFILE",
+    title: "Measure once. Shop with confidence.",
+    intro: "A calm guided fitting creates your private profile and explains how each measurement improves a recommendation.",
+    unit: "Measurement unit",
+    imperial: "Inches",
+    metric: "Centimeters",
+    guide: "Guided self measurement",
+    step: "Step",
+    of: "of",
+    previous: "Previous",
+    next: "Next measurement",
+    consent: "I consent to saving this private fit profile on this device.",
+    vendor: "Allow approved vendors to receive only the measurements needed for an order.",
+    save: "Save My Fit",
+    saved: "My Fit saved",
+    queued: "Saved offline. My Fit will sync after reconnecting.",
+    synced: "My Fit synced after reconnecting.",
+    shop: "Shop with My Fit",
+    privacy: "Your measurements stay private. Vendor sharing is off unless you choose it.",
+    recommended: "Recommended starting size",
+    fields: {
+      bust: ["Bust", "Wrap the tape around the fullest part, level across your back."],
+      waist: ["Natural waist", "Measure where your body bends naturally without pulling the tape tight."],
+      hips: ["Hips", "Stand with feet together and measure the fullest part of your hips."],
+      inseam: ["Inseam", "Measure from the top of the inner leg to the desired trouser hem."],
+      shoulder: ["Shoulder width", "Measure straight across your back from shoulder point to shoulder point."],
+    },
+  },
+  fr: {
+    eyebrow: "PROFIL DE TAILLE PRIVÉ",
+    title: "Mesurez une fois. Achetez en confiance.",
+    intro: "Un guide calme crée votre profil privé et explique comment chaque mesure améliore les recommandations.",
+    unit: "Unité de mesure",
+    imperial: "Pouces",
+    metric: "Centimètres",
+    guide: "Prise de mesures guidée",
+    step: "Étape",
+    of: "sur",
+    previous: "Précédent",
+    next: "Mesure suivante",
+    consent: "J’accepte d’enregistrer ce profil privé sur cet appareil.",
+    vendor: "Autoriser les vendeurs approuvés à recevoir uniquement les mesures nécessaires à une commande.",
+    save: "Enregistrer Mon Ajustement",
+    saved: "Profil enregistré",
+    queued: "Enregistré hors ligne. La synchronisation suivra la reconnexion.",
+    synced: "Profil synchronisé après la reconnexion.",
+    shop: "Acheter avec Mon Ajustement",
+    privacy: "Vos mesures restent privées. Le partage vendeur est désactivé sauf si vous le choisissez.",
+    recommended: "Taille de départ recommandée",
+    fields: {
+      bust: ["Poitrine", "Passez le ruban autour de la partie la plus forte, bien horizontal dans le dos."],
+      waist: ["Taille naturelle", "Mesurez là où le corps se plie naturellement sans serrer le ruban."],
+      hips: ["Hanches", "Pieds joints, mesurez la partie la plus forte des hanches."],
+      inseam: ["Entrejambe", "Mesurez du haut de la jambe intérieure jusqu’à l’ourlet souhaité."],
+      shoulder: ["Largeur des épaules", "Mesurez droit dans le dos d’une pointe d’épaule à l’autre."],
+    },
+  },
+  es: {
+    eyebrow: "PERFIL DE TALLA PRIVADO",
+    title: "Mídete una vez. Compra con confianza.",
+    intro: "Una guía tranquila crea tu perfil privado y explica cómo cada medida mejora las recomendaciones.",
+    unit: "Unidad de medida",
+    imperial: "Pulgadas",
+    metric: "Centímetros",
+    guide: "Automedición guiada",
+    step: "Paso",
+    of: "de",
+    previous: "Anterior",
+    next: "Siguiente medida",
+    consent: "Acepto guardar este perfil privado en este dispositivo.",
+    vendor: "Permitir que vendedores aprobados reciban solo las medidas necesarias para un pedido.",
+    save: "Guardar Mi Talla",
+    saved: "Perfil guardado",
+    queued: "Guardado sin conexión. Se sincronizará al reconectar.",
+    synced: "Perfil sincronizado después de reconectar.",
+    shop: "Comprar con Mi Talla",
+    privacy: "Tus medidas son privadas. No se comparten con vendedores salvo que lo elijas.",
+    recommended: "Talla inicial recomendada",
+    fields: {
+      bust: ["Busto", "Rodea la parte más llena con la cinta nivelada en la espalda."],
+      waist: ["Cintura natural", "Mide donde el cuerpo se dobla naturalmente sin apretar la cinta."],
+      hips: ["Caderas", "Con los pies juntos, mide la parte más llena de las caderas."],
+      inseam: ["Entrepierna", "Mide desde la parte superior de la pierna interior hasta el bajo deseado."],
+      shoulder: ["Ancho de hombros", "Mide recto por la espalda de un hombro al otro."],
+    },
+  },
+} as const;
+
+const fitFields = ["bust", "waist", "hips", "inseam", "shoulder"] as const;
+
+const convertFitValue = (value: number, from: FitUnit, to: FitUnit) => {
+  if (!value || from === to) return value;
+  return Number((to === "metric" ? value * 2.54 : value / 2.54).toFixed(1));
+};
+
+const recommendFitSize = (waist: number, unit: FitUnit) => {
+  const inches = unit === "metric" ? waist / 2.54 : waist;
+  if (inches <= 27) return "4";
+  if (inches <= 29) return "6";
+  if (inches <= 31) return "8";
+  if (inches <= 33) return "10";
+  if (inches <= 35) return "12";
+  return "Custom fit review";
+};
+
+function MyFit({ go }: { go: (destination: string) => void }) {
+  const [locale, setLocale] = useState<keyof typeof fitCopy>("en");
+  const [unit, setUnit] = useState<FitUnit>("imperial");
+  const [measurements, setMeasurements] = useState<FitProfile["measurements"]>({
+    bust: 0,
+    waist: 0,
+    hips: 0,
+    inseam: 0,
+    shoulder: 0,
+  });
+  const [step, setStep] = useState(0);
+  const [consent, setConsent] = useState(false);
+  const [shareWithVendors, setShareWithVendors] = useState(false);
+  const [notice, setNotice] = useState("");
+  const copy = fitCopy[locale];
+  const field = fitFields[step];
+  const recommendedSize = recommendFitSize(measurements.waist, unit);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(fitStorageKey);
+    if (!saved) return;
+    const profile = JSON.parse(saved) as FitProfile;
+    setUnit(profile.unit);
+    setMeasurements(profile.measurements);
+    setConsent(profile.consent);
+    setShareWithVendors(profile.shareWithVendors);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const queued = localStorage.getItem(fitQueueKey);
+      if (!queued) return;
+      localStorage.removeItem(fitQueueKey);
+      setNotice(copy.synced);
+    };
+    window.addEventListener("online", sync);
+    return () => window.removeEventListener("online", sync);
+  }, [copy.synced]);
+
+  const changeUnit = (next: FitUnit) => {
+    setMeasurements((current) =>
+      Object.fromEntries(
+        fitFields.map((key) => [key, convertFitValue(current[key], unit, next)]),
+      ) as FitProfile["measurements"],
+    );
+    setUnit(next);
+  };
+
+  const save = () => {
+    if (!consent || fitFields.some((key) => measurements[key] <= 0)) return;
+    const profile: FitProfile = {
+      unit,
+      measurements,
+      recommendedSize,
+      consent,
+      shareWithVendors,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(fitStorageKey, JSON.stringify(profile));
+    if (!navigator.onLine) {
+      localStorage.setItem(fitQueueKey, JSON.stringify({ type: "fit_profile", profile }));
+      setNotice(copy.queued);
+    } else {
+      setNotice(`${copy.saved}. ${copy.recommended}: ${recommendedSize}.`);
+    }
+  };
+
+  return (
+    <div className="content my-fit">
+      <section className="fit-hero panel">
+        <div>
+          <small className="eyebrow">{copy.eyebrow}</small>
+          <h2>{copy.title}</h2>
+          <p>{copy.intro}</p>
+        </div>
+        <label>
+          Language
+          <select aria-label="My Fit language" value={locale} onChange={(event) => setLocale(event.target.value as keyof typeof fitCopy)}>
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+            <option value="es">Español</option>
+          </select>
+        </label>
+      </section>
+      <section className="fit-workspace panel">
+        <header>
+          <span>
+            <small className="eyebrow">{copy.guide}</small>
+            <h3>{copy.fields[field][0]}</h3>
+          </span>
+          <b>{copy.step} {step + 1} {copy.of} {fitFields.length}</b>
+        </header>
+        <div className="fit-progress" aria-label={`${copy.step} ${step + 1} ${copy.of} ${fitFields.length}`}>
+          {fitFields.map((item, index) => <i key={item} className={index <= step ? "active" : ""} />)}
+        </div>
+        <div className="fit-measure-card">
+          <div className={`fit-figure fit-${field}`} aria-hidden="true"><Ruler /></div>
+          <div>
+            <p>{copy.fields[field][1]}</p>
+            <label>
+              {copy.fields[field][0]}
+              <span>
+                <input
+                  aria-label={copy.fields[field][0]}
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  value={measurements[field] || ""}
+                  onChange={(event) => setMeasurements((current) => ({ ...current, [field]: Number(event.target.value) }))}
+                />
+                <b>{unit === "metric" ? "cm" : "in"}</b>
+              </span>
+            </label>
+            <fieldset>
+              <legend>{copy.unit}</legend>
+              <button type="button" className={unit === "imperial" ? "active" : ""} onClick={() => changeUnit("imperial")}>{copy.imperial}</button>
+              <button type="button" className={unit === "metric" ? "active" : ""} onClick={() => changeUnit("metric")}>{copy.metric}</button>
+            </fieldset>
+          </div>
+        </div>
+        <footer>
+          <button type="button" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>{copy.previous}</button>
+          <button type="button" disabled={!measurements[field] || step === fitFields.length - 1} onClick={() => setStep((current) => Math.min(fitFields.length - 1, current + 1))}>{copy.next}</button>
+        </footer>
+      </section>
+      <section className="fit-summary panel">
+        <div className="fit-values">
+          {fitFields.map((item) => <span key={item}><small>{copy.fields[item][0]}</small><b>{measurements[item] || "—"} {measurements[item] ? unit === "metric" ? "cm" : "in" : ""}</b></span>)}
+        </div>
+        <div className="fit-size"><small>{copy.recommended}</small><b>{measurements.waist ? recommendedSize : "—"}</b></div>
+        <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />{copy.consent}</label>
+        <label><input type="checkbox" checked={shareWithVendors} onChange={(event) => setShareWithVendors(event.target.checked)} />{copy.vendor}</label>
+        <p className="fit-privacy"><ShieldCheck />{copy.privacy}</p>
+        <footer>
+          <button className="primary" type="button" disabled={!consent || fitFields.some((item) => measurements[item] <= 0)} onClick={save}><Check />{copy.save}</button>
+          <button type="button" disabled={!notice} onClick={() => go("Customer Shop")}>{copy.shop}<ArrowUpRight /></button>
+        </footer>
+        {notice && <output className="policy-saved" role="status">{notice}</output>}
+      </section>
+    </div>
+  );
+}
+
 function CustomerShop({ go }: { go: (destination: string) => void }) {
   const picks = [
     [
@@ -4307,6 +4574,11 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
   const [needBy, setNeedBy] = useState("Saturday");
   const [missionReady, setMissionReady] = useState(false);
   const [completeLookAdded, setCompleteLookAdded] = useState(false);
+  const [fitProfile, setFitProfile] = useState<FitProfile | null>(null);
+  useEffect(() => {
+    const savedFit = localStorage.getItem(fitStorageKey);
+    if (savedFit) setFitProfile(JSON.parse(savedFit) as FitProfile);
+  }, []);
   const visiblePicks = picks.filter((pick) => !hidden.includes(pick[0]));
   const missionSavings = budget - 312;
   const hidePick = (name: string) => setHidden((current) => [...current, name]);
@@ -4359,6 +4631,17 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
           <button key={collection}>{collection}</button>
         ))}
       </nav>
+      <section className="shop-fit-bridge panel" aria-label="My Fit shopping status">
+        <span>
+          <Ruler />
+          <span>
+            <small className="eyebrow">MY FIT</small>
+            <b>{fitProfile ? `Size ${fitProfile.recommendedSize} is ready for matching` : "Add your private fit profile"}</b>
+            <small>{fitProfile ? "Recommendations now use your saved measurements without exposing them to vendors." : "Follow a calm self measurement guide before choosing a size."}</small>
+          </span>
+        </span>
+        <button onClick={() => go("My Fit")}>{fitProfile ? "Review My Fit" : "Start My Fit"}<ArrowUpRight /></button>
+      </section>
       <section className="shopping-mission panel">
         <div className="mission-copy">
           <Sparkles />
@@ -4442,7 +4725,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
             <div className="mission-items">
               <span>
                 <b>Aurelia Satin Midi</b>
-                <small>Africstyle Fashion · Size 8</small>
+                <small>Africstyle Fashion · Size {fitProfile?.recommendedSize || "8"}{fitProfile ? " from My Fit" : ""}</small>
                 <em>$168</em>
               </span>
               <span>
@@ -4496,7 +4779,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
             <div className="style-signals" aria-label="Style signals">
               <span>Emerald</span>
               <span>Occasionwear</span>
-              <span>Size 8</span>
+              <span>Size {fitProfile?.recommendedSize || "8"}</span>
               <span>Atelier Omi</span>
             </div>
           )}
@@ -4583,6 +4866,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
             </div>
             <small>{p[1]}</small>
             <h3>{p[0]}</h3>
+            {fitProfile && index !== 1 && <span className="fit-match"><Ruler />My Fit recommends size {fitProfile.recommendedSize}</span>}
             <div className="pick-confidence">
               <span>
                 <ShieldCheck />
@@ -5371,6 +5655,18 @@ function HelpCenter({
         "Review the current return and exchange window.",
         "Configure final sale, fees, layaway, grace, and inventory holding rules.",
         "Publish only after confirming the customer facing preview.",
+      ],
+    },
+    {
+      title: "Create and use My Fit",
+      summary:
+        "Follow private self measurement guidance, save your preferred unit, and shop with a fit recommendation.",
+      destination: "My Fit",
+      roles: ["Customer"],
+      steps: [
+        "Choose inches or centimeters and follow each measurement illustration.",
+        "Review privacy choices before saving the fit profile.",
+        "Return to Customer Shop and review the size recommendation before adding an item.",
       ],
     },
     {

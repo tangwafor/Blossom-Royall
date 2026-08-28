@@ -1234,6 +1234,62 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+.my-fit { max-width: 1120px; margin-inline: auto; }
+.fit-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 30px; background: linear-gradient(135deg, var(--panel), var(--blush)); }
+.fit-hero h2 { margin: 6px 0 8px; font-family: var(--font-serif); font-size: clamp(30px, 4vw, 46px); }
+.fit-hero p { max-width: 680px; margin: 0; color: var(--muted); line-height: 1.6; }
+.fit-hero label { display: grid; min-width: 170px; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.fit-hero select { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); color: var(--ink); }
+.fit-workspace, .fit-summary { padding: 26px; }
+.fit-workspace > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.fit-workspace h3 { margin: 4px 0 0; font-family: var(--font-serif); font-size: 28px; }
+.fit-workspace > header > b { color: var(--muted); font-size: 12px; }
+.fit-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 18px 0 24px; }
+.fit-progress i { height: 5px; border-radius: 6px; background: var(--line); }
+.fit-progress i.active { background: var(--wine); }
+.fit-measure-card { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(280px, 1fr); gap: 28px; align-items: center; }
+.fit-figure { min-height: 270px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 22px; background: radial-gradient(circle at 50% 35%, var(--blush), var(--soft)); color: var(--wine); }
+.fit-figure svg { width: 82px; height: 82px; stroke-width: 1.1; }
+.fit-measure-card > div:last-child { display: grid; gap: 18px; }
+.fit-measure-card p { margin: 0; color: var(--muted); line-height: 1.65; }
+.fit-measure-card label { display: grid; gap: 8px; font-size: 12px; font-weight: 800; }
+.fit-measure-card label > span { display: flex; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.fit-measure-card input { width: 100%; min-height: 52px; padding: 0 14px; border: 0; background: transparent; color: var(--ink); font-size: 20px; outline: 0; }
+.fit-measure-card label > span b { padding: 0 15px; color: var(--muted); }
+.fit-measure-card fieldset { display: flex; gap: 8px; border: 0; padding: 0; }
+.fit-measure-card legend { margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.fit-measure-card fieldset button.active { border-color: var(--wine); background: var(--wine); color: white; }
+.fit-workspace > footer, .fit-summary > footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.fit-workspace button:disabled, .fit-summary button:disabled { cursor: not-allowed; opacity: .45; }
+.fit-values { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.fit-values span, .fit-size { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--soft); }
+.fit-values small, .fit-size small { color: var(--muted); }
+.fit-size { margin: 14px 0; grid-template-columns: 1fr auto; align-items: center; }
+.fit-size b { color: var(--wine); font-family: var(--font-serif); font-size: 25px; }
+.fit-summary > label { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; color: var(--muted); line-height: 1.45; }
+.fit-summary > label input { width: 19px; height: 19px; flex: 0 0 auto; accent-color: var(--wine); }
+.fit-privacy { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; }
+.fit-privacy svg { width: 18px; color: var(--wine); }
+.fit-summary footer button, .shop-fit-bridge button { display: inline-flex; align-items: center; gap: 7px; }
+.shop-fit-bridge { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 22px; }
+.shop-fit-bridge > span { display: flex; align-items: center; gap: 14px; }
+.shop-fit-bridge > span > svg { width: 30px; color: var(--wine); }
+.shop-fit-bridge > span > span { display: grid; gap: 4px; }
+.shop-fit-bridge > span small:last-child { color: var(--muted); }
+.fit-match { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 6px 9px; border-radius: 20px; background: var(--sage); color: var(--ink); font-size: 11px; font-weight: 800; }
+.fit-match svg { width: 14px; height: 14px; }
+
+@media (max-width: 680px) {
+  .fit-hero, .shop-fit-bridge { align-items: stretch; flex-direction: column; }
+  .fit-hero { padding: 22px; }
+  .fit-measure-card { grid-template-columns: 1fr; }
+  .fit-figure { min-height: 190px; }
+  .fit-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fit-workspace, .fit-summary { padding: 18px; }
+  .fit-workspace > footer, .fit-summary > footer { flex-direction: column; }
+  .shop-fit-bridge button { justify-content: center; }
+}
 @media (max-width: 440px) {
   .metrics article {
     display: block;

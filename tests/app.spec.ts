@@ -208,6 +208,51 @@ test("builds a transparent occasion edit across independent brands", async ({
   await expect(result).toContainText("$88 under your $400 budget");
 });
 
+test("guides self measurement and uses My Fit while shopping", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile")
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "My Fit", exact: true }).click();
+
+  await page.getByLabel("My Fit language").selectOption("fr");
+  await expect(page.getByText("Mesurez une fois. Achetez en confiance.")).toBeVisible();
+  await page.getByLabel("My Fit language").selectOption("en");
+
+  await page.getByLabel("Bust").fill("36");
+  await page.getByRole("button", { name: "Next measurement" }).click();
+  await page.getByLabel("Natural waist").fill("30");
+  await page.getByRole("button", { name: "Next measurement" }).click();
+  await page.getByLabel("Hips").fill("40");
+  await page.getByRole("button", { name: "Next measurement" }).click();
+  await page.getByLabel("Inseam").fill("30");
+  await page.getByRole("button", { name: "Next measurement" }).click();
+  await page.getByLabel("Shoulder width").fill("15");
+  await page.getByLabel(/I consent to saving/).check();
+
+  await page.context().setOffline(true);
+  await page.getByRole("button", { name: "Save My Fit" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved offline");
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("br-offline-writes:blossom-royall"),
+    ),
+  ).toContain("fit_profile");
+  await page.context().setOffline(false);
+  await expect(page.getByRole("status")).toContainText("synced after reconnecting");
+
+  await page.getByRole("button", { name: "Shop with My Fit" }).click();
+  await expect(page.getByText("Size 8 is ready for matching")).toBeVisible();
+  await expect(page.getByText("My Fit recommends size 8").first()).toBeVisible();
+
+  await page.reload();
+  if (testInfo.project.name === "mobile")
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Customer Shop" }).click();
+  await expect(page.getByText("Size 8 is ready for matching")).toBeVisible();
+});
+
 test("checks out one coordinated bag across multiple sellers", async ({
   page,
 }, testInfo) => {
