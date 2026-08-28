@@ -29,7 +29,24 @@ export async function resolveTenantContext(): Promise<TenantContext> {
       .eq("user_id", user.id)
       .limit(1)
       .maybeSingle();
-    if (membershipError || !membership?.store_id) return previewContext("This account does not yet have a Blossom Royall store membership.");
+    if (membershipError) return previewContext("Blossom Royall could not verify this account's store access.");
+    if (!membership?.store_id) {
+      const storefrontSlug = process.env.NEXT_PUBLIC_STOREFRONT_SLUG || "blossom-royall";
+      const { data: storefront, error: storefrontError } = await client.rpc("resolve_customer_store", {
+        p_slug: storefrontSlug,
+      });
+      const publicStore = Array.isArray(storefront) ? storefront[0] : storefront;
+      if (storefrontError || !publicStore?.store_id) {
+        return previewContext("This customer account cannot access the published Blossom Royall storefront yet.");
+      }
+      return {
+        mode: "production",
+        storeId: publicStore.store_id,
+        userId: user.id,
+        role: "customer",
+        reason: "Published customer storefront records are active.",
+      };
+    }
     return {
       mode: "production",
       storeId: membership.store_id,
@@ -65,12 +82,38 @@ export type TenantOrderSummary = {
   time: string;
 };
 
+export type CustomerOrderRecord = {
+  id: string;
+  receiptNo: string;
+  status: string;
+  fulfillmentMethod: string;
+  total: number;
+  paymentStatus: string;
+  paymentMethod: string;
+  verificationStatus: string;
+  policySnapshot: Record<string, unknown>;
+  placedAt: string;
+  items: Array<{
+    variantId?: string;
+    name: string;
+    vendor: string;
+    price: number;
+    fulfillment: string;
+    quantity: number;
+  }>;
+};
+
 export async function loadTenantOrders(context: TenantContext): Promise<TenantOrderSummary[]> {
   if (context.mode !== "production" || !context.storeId) return [];
-  const { data, error } = await createClient()
+  let query = createClient()
     .from("orders")
     .select("id, total, status, created_at")
-    .eq("store_id", context.storeId)
+    .eq("store_id", context.storeId);
+  if (context.role === "customer") {
+    if (!context.userId) return [];
+    query = query.eq("customer_id", context.userId);
+  }
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -81,6 +124,47 @@ export async function loadTenantOrders(context: TenantContext): Promise<TenantOr
     status: String(order.status || "Open"),
     time: new Date(order.created_at).toLocaleString(),
   }));
+}
+
+export async function loadCustomerOrderHistory(context: TenantContext): Promise<CustomerOrderRecord[]> {
+  if (context.mode !== "production" || context.role !== "customer" || !context.storeId || !context.userId) return [];
+  const { data, error } = await createClient()
+    .from("orders")
+    .select("id, receipt_no, status, fulfillment_method, total, payment_status, policy_snapshot, created_at, order_items(qty, unit_price, product_variants(id, products(name)), vendors(name)), payments(method, verification_status)")
+    .eq("store_id", context.storeId)
+    .eq("customer_id", context.userId)
+    .order("created_at", { ascending: false })
+    .limit(25);
+  if (error) throw error;
+  return (data || []).map((order) => {
+    const payments = (order.payments || []) as Array<{ method?: string; verification_status?: string }>;
+    const items = (order.order_items || []) as Array<{
+      qty: number;
+      unit_price: number | string;
+      product_variants?: { id?: string; products?: { name?: string } | null } | null;
+      vendors?: { name?: string } | null;
+    }>;
+    return {
+      id: order.id,
+      receiptNo: order.receipt_no || order.id,
+      status: order.status || "open",
+      fulfillmentMethod: order.fulfillment_method || "pickup",
+      total: Number(order.total || 0),
+      paymentStatus: order.payment_status || "pending",
+      paymentMethod: payments[0]?.method || "unknown",
+      verificationStatus: payments[0]?.verification_status || "not_required",
+      policySnapshot: (order.policy_snapshot || {}) as Record<string, unknown>,
+      placedAt: order.created_at,
+      items: items.map((item) => ({
+        variantId: item.product_variants?.id,
+        name: item.product_variants?.products?.name || "Purchased item",
+        vendor: item.vendors?.name || "Blossom Royall seller",
+        price: Number(item.unit_price || 0),
+        fulfillment: order.fulfillment_method || "pickup",
+        quantity: Number(item.qty || 1),
+      })),
+    };
+  });
 }
 
 export type TenantProductSummary = {
@@ -94,10 +178,12 @@ export type TenantProductSummary = {
 
 export async function loadTenantProducts(context: TenantContext): Promise<TenantProductSummary[]> {
   if (context.mode !== "production" || !context.storeId) return [];
-  const { data, error } = await createClient()
+  let query = createClient()
     .from("products")
     .select("id, name, category, status, vendors(name), product_variants(id, sku, size, color, price, qty_on_hand)")
-    .eq("store_id", context.storeId)
+    .eq("store_id", context.storeId);
+  if (context.role === "customer") query = query.eq("status", "published");
+  const { data, error } = await query
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data || []).map((product) => ({

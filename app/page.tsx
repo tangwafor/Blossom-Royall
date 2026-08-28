@@ -48,6 +48,7 @@ import {
   loadAccountFitProfile,
   loadTenantVendors,
   loadTenantOrders,
+  loadCustomerOrderHistory,
   loadTenantProducts,
   loadTenantVendorStorefronts,
   removeTenantVendor,
@@ -4305,15 +4306,55 @@ function CustomerOrders() {
     total: number;
     deposit?: number;
     policySnapshot?: RetailPolicy;
+    status?: string;
+    paymentStatus?: string;
+    placedAt?: string;
+    source?: "device" | "production";
   } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [returnItem, setReturnItem] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState("Fit was not right");
   const [returnStarted, setReturnStarted] = useState(false);
   const [paymentMade, setPaymentMade] = useState(false);
   useEffect(() => {
     const stored = localStorage.getItem("br-latest-order:blossom-royall");
-    if (stored) setOrder(JSON.parse(stored));
+    if (stored) setOrder({ ...JSON.parse(stored), source: "device" });
+    void resolveTenantContext().then(async (context) => {
+      if (context.mode === "production" && context.role === "customer") {
+        try {
+          const [latest] = await loadCustomerOrderHistory(context);
+          if (latest) {
+            setOrder({
+              id: latest.receiptNo,
+              items: latest.items,
+              method: latest.fulfillmentMethod,
+              payment: "pay_now",
+              total: latest.total,
+              policySnapshot: latest.policySnapshot as unknown as RetailPolicy,
+              status: latest.status,
+              paymentStatus: latest.paymentStatus,
+              placedAt: latest.placedAt,
+              source: "production",
+            });
+          }
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+      }
+    });
   }, []);
+  if (loading && !order)
+    return (
+      <ListView
+        eyebrow="YOUR PURCHASES"
+        title="Loading your orders"
+        subtitle="Your secure Blossom Royall purchase history is being prepared."
+      >
+        {null}
+      </ListView>
+    );
   if (!order)
     return (
       <ListView
@@ -4359,19 +4400,24 @@ function CustomerOrders() {
         <div>
           <span className="eyebrow">ORDER {order.id.replace("#", "")}</span>
           <h3>
-            {order.method === "pickup"
-              ? "Preparing your coordinated pickup"
-              : "Preparing your delivery"}
+            {order.status === "confirmed"
+              ? "Your order is confirmed"
+              : order.paymentStatus === "pending_verification"
+                ? "Payment verification is pending"
+                : order.method === "pickup"
+                  ? "Preparing your coordinated pickup"
+                  : "Preparing your delivery"}
           </h3>
           <p>
-            All sellers have confirmed their items. Blossom Royall is bringing
-            the order together before handoff.
+            {order.source === "production"
+              ? `Recorded ${order.placedAt ? new Date(order.placedAt).toLocaleString() : "in your account"}. Current status: ${order.status || "open"}.`
+              : "This device has your latest checkout receipt. Sign in to keep order history available across devices."}
           </p>
         </div>
         <div className="pickup-pass">
-          <small>PICKUP CREDENTIAL</small>
-          <b>482 915</b>
-          <span>Show only when the team asks</span>
+          <small>SECURE RECEIPT</small>
+          <b>{order.id.replace("#", "")}</b>
+          <span>Use this reference when contacting the team</span>
         </div>
       </section>
       <section className="order-progress panel" aria-label="Order progress">

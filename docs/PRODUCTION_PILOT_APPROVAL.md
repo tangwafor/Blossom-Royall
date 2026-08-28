@@ -34,7 +34,9 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 8. `20260828173500_account_deletion_operations.sql`
 
-The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T16-21-55Z.sql`. A second fresh snapshot must be captured immediately before production execution if the production schema has changed since that file was created.
+9. `20260828175500_customer_storefront_access.sql`
+
+The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T17-53-05Z.sql`. It differs from the previous baseline only by a trailing blank line, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
 
 ## Proven local checks
 
@@ -50,6 +52,14 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T16-21-55Z.sql`. A
 
 6. The production build, static export, synthetic monitor fixture, type checks, and Playwright suite pass. The latest result is 96 passed and 2 intentionally skipped.
 
+7. Customer storefront discovery requires a customer profile and a published Blossom Royall store. Internal roles do not resolve through the public customer function.
+
+8. Customer catalog reads return only published products. A direct checkout attempt against a draft variant fails in the database function.
+
+9. Customer checkout creates an order owned by the authenticated customer, decrements inventory atomically, and remains invisible to a second customer.
+
+10. My Orders reloads the latest production order from the customer account instead of depending only on browser storage. The interface displays the real secure receipt reference and does not fabricate a pickup credential.
+
 ## Pilot activation sequence
 
 1. Confirm Delly's production authentication identity and multifactor enrollment.
@@ -62,17 +72,19 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T16-21-55Z.sql`. A
 
 5. Run information schema, grants, row level security, function execution, storage policy, and Supabase advisor checks.
 
-6. Create only the approved Blossom Collections vendor and storefront records. Keep publication status in review until Delly confirms spelling, content, media rights, and catalog.
+6. Confirm the canonical store slug is `blossom-royall`, confirm commerce status is published, and confirm only intended products have published status.
 
-7. Execute one low value cash pilot sale and one referenced electronic payment pilot. Confirm receipt, stock, ledger, audit, payment verification, and evidence privacy.
+7. Create only the approved Blossom Collections vendor and storefront records. Keep publication status in review until Delly confirms spelling, content, media rights, and catalog.
 
-8. Push the verified branch and inspect the Netlify deploy preview before production promotion.
+8. Execute one low value cash pilot sale and one referenced electronic payment pilot. Confirm receipt, stock, ledger, audit, payment verification, evidence privacy, customer order reload, and cross customer isolation.
 
-9. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
+9. Push the verified branch and inspect the Netlify deploy preview before production promotion.
 
-10. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+10. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
 
-11. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
+11. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+
+12. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
 
 ## Stop conditions
 
@@ -86,12 +98,12 @@ Do not drop newly created tables or columns during the pilot. If a defect appear
 
 ## Known work after pilot activation
 
-1. Implement the reviewed account deletion processor and overdue operator queue.
+1. Deploy and activate the reviewed account deletion processor and overdue operator queue after the controlled lifecycle test.
 
 2. Activate and monitor `privacy@blossomroyall.com`.
 
 3. Complete production error capture, metrics, and alert routing beyond the zero cost synthetic monitor.
 
-4. Complete customer catalog persistence, authorization backed card payments, production layaway, fulfillment notifications, and refund contracts.
+4. Complete authorization backed card payments, production layaway, fulfillment notifications, customer return persistence, and refund contracts.
 
 5. Complete native packaging, signing, privacy manifest, store declarations, screenshots, reviewer account, and human reviewed multilingual walkthroughs.
