@@ -7,6 +7,7 @@ const attempts = Number(process.env.MONITOR_ATTEMPTS || 3);
 const checks = [
   { path: "/workspace", content: ["Blossom Royall", "Opening your workspace"] },
   { path: "/privacy", content: ["Privacy", "information"] },
+  { path: "/support", content: ["Support", "Help"] },
   { path: "/account/delete", content: ["Delete", "account"] },
   { path: "/manifest.webmanifest", contentType: "application/manifest+json" },
   { path: "/sw.js", contentType: "javascript" },

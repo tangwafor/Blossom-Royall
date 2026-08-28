@@ -2848,8 +2848,8 @@ h3 {
 .mfa-signin { display: inline-block; margin-top: 16px; color: var(--wine); font-weight: 800; }
 .mfa-card footer { display: grid; gap: 3px; margin-top: 28px; color: var(--muted); font-size: 9px; }
 .mfa-card footer b { color: var(--wine); }
-.deletion-page, .privacy-page { min-height: 100vh; padding: 28px; background: var(--bg); color: var(--ink); }
-.deletion-card, .privacy-page > article { width: min(720px, 100%); margin: auto; padding: clamp(24px, 5vw, 52px); border: 1px solid var(--line); border-radius: 24px; background: var(--card); box-shadow: 0 22px 70px rgba(42, 15, 25, 0.12); }
+.deletion-page, .privacy-page, .support-page { min-height: 100vh; padding: 28px; background: var(--bg); color: var(--ink); }
+.deletion-card, .privacy-page > article, .support-page > article { width: min(720px, 100%); margin: auto; padding: clamp(24px, 5vw, 52px); border: 1px solid var(--line); border-radius: 24px; background: var(--card); box-shadow: 0 22px 70px rgba(42, 15, 25, 0.12); }
 .deletion-card > header, .privacy-page article > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 30px; }
 .deletion-card header a, .privacy-page header a { display: flex; align-items: center; gap: 7px; color: var(--muted); text-decoration: none; font-size: 11px; font-weight: 800; }
 .deletion-card header svg, .privacy-page header svg { width: 17px; }
@@ -2872,14 +2872,26 @@ h3 {
 .privacy-page section h2 { margin: 0 0 10px; font-size: 20px; }
 .privacy-page section p, .privacy-page section li { color: var(--muted); font-size: 11px; line-height: 1.7; }
 .privacy-delete { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+.support-page article > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 30px; }
+.support-page header a, .support-page header label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 800; text-decoration: none; }
+.support-page header select { padding: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.support-page h1 { margin: 8px 0; font-size: clamp(35px, 6vw, 54px); line-height: 1.05; }
+.support-intro { color: var(--muted); line-height: 1.7; }
+.support-page article > section { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 20px 0; border-top: 1px solid var(--line); }
+.support-page section > svg { color: var(--wine); }
+.support-page section h2 { margin: 0 0 7px; font-size: 19px; }
+.support-page section p { margin: 0 0 8px; color: var(--muted); line-height: 1.6; }
+.support-page section a { color: var(--wine); font-weight: 800; }
+.support-page article > footer { display: flex; gap: 10px; margin-top: 24px; color: var(--muted); }
+.support-page footer span { display: grid; gap: 3px; }
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 @media (max-width: 760px) {
-  .deletion-page, .privacy-page { padding: 0; }
-  .deletion-card, .privacy-page > article { min-height: 100vh; padding: 22px; border: 0; border-radius: 0; box-shadow: none; }
+  .deletion-page, .privacy-page, .support-page { padding: 0; }
+  .deletion-card, .privacy-page > article, .support-page > article { min-height: 100vh; padding: 22px; border: 0; border-radius: 0; box-shadow: none; }
   .deletion-card > header, .privacy-page article > header { align-items: flex-start; }
   .deletion-card header label, .privacy-page header label { align-items: flex-start; flex-direction: column; }
   .mfa-page { padding: 0; place-items: stretch; background: var(--card); }

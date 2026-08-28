@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 const content = new Map([
   ["/workspace", ["text/html", "<h1>Opening your workspace</h1><p>Blossom Royall</p>"]],
   ["/privacy", ["text/html", "<h1>Privacy</h1><p>Your information belongs to you.</p>"]],
+  ["/support", ["text/html", "<h1>Support</h1><p>Help when you need it.</p>"]],
   ["/account/delete", ["text/html", "<h1>Delete your account</h1>"]],
   ["/manifest.webmanifest", ["application/manifest+json", "{\"name\":\"Blossom Royall\"}"]],
   ["/sw.js", ["text/javascript", "self.addEventListener('fetch', () => {});"]],

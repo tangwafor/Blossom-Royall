@@ -1215,6 +1215,16 @@ test("publishes privacy choices and an external account deletion path", async ({
   await expect(page.getByRole("heading", { name: "Vos informations vous appartiennent." })).toBeVisible();
 });
 
+test("publishes localized public support without requiring an account", async ({ page }) => {
+  await page.goto("/support");
+  await expect(page.getByRole("heading", { name: "Help when you need it." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shopping and orders" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open privacy controls" })).toHaveAttribute("href", "/account/delete");
+  await expect(page.getByRole("link", { name: "support@blossomroyall.com" })).toHaveAttribute("href", "mailto:support@blossomroyall.com");
+  await page.getByLabel("Language").selectOption("es");
+  await expect(page.getByRole("heading", { name: "Ayuda cuando la necesita." })).toBeVisible();
+});
+
 test("requires secure identity before requesting account deletion", async ({ page }) => {
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }));
   await page.goto("/account/delete");
