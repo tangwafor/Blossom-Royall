@@ -32,6 +32,8 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 12. Next 16.3.3 and the native dependency tree report zero known npm audit findings as of August 28, 2026.
 
+13. A machine readable submission status, reviewer access plan, store asset manifest, and native submission runbook now make every outstanding Apple and Google requirement explicit. Native structure verification intentionally requires submission readiness to remain false until signed builds and external evidence exist.
+
 ## Required before public submission
 
 1. Activate and monitor `privacy@blossomroyall.com`.
@@ -48,7 +50,7 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 7. Confirm the Android target application programming interface required on the actual submission date. New applications must target Android 16, application programming interface level 36, beginning August 31, 2026.
 
-8. Prepare store descriptions, screenshots, support URL, privacy URL, deletion URL, age rating, content declarations, and reviewer credentials.
+8. Capture the screenshot scenes and exact device sizes declared in `store/asset-manifest.json`. Complete the support URL, privacy URL, deletion URL, age rating, content declarations, and reviewer accounts. Never commit reviewer passwords or multifactor codes.
 
 9. Verify production account hygiene, row level security, endpoint authorization, bundle secret scanning, Supabase advisors, and concurrency stress tests.
 

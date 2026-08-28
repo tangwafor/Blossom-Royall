@@ -1,0 +1,26 @@
+{
+  "lastReviewed": "2026-08-28",
+  "rules": {
+    "realAppUiOnly": true,
+    "noProductionPersonalData": true,
+    "noTransparency": true,
+    "humanReviewRequired": true
+  },
+  "story": [
+    "Discover independent stores",
+    "Find and save your fit",
+    "Checkout with flexible physical goods payment",
+    "Follow fulfillment and pickup",
+    "Manage your order and return",
+    "Run a secure vendor storefront"
+  ],
+  "apple": {
+    "iphone69": { "directory": "store/assets/apple/iphone-6.9", "size": "1320x2868", "minimum": 1, "maximum": 10 },
+    "ipad13": { "directory": "store/assets/apple/ipad-13", "size": "2064x2752", "minimum": 1, "maximum": 10 }
+  },
+  "google": {
+    "phone": { "directory": "store/assets/google/phone", "minimum": 2, "maximum": 8 },
+    "featureGraphic": { "path": "store/assets/google/feature-graphic.png", "size": "1024x500" },
+    "storeIcon": { "path": "store/assets/google/store-icon.png", "size": "512x512" }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "lastReviewed": "2026-08-28",
+  "containsSecrets": false,
+  "productionBackendRequired": true,
+  "accounts": [
+    {
+      "role": "customer",
+      "required": true,
+      "emailConfiguredInStoreConsole": false,
+      "passwordConfiguredInStoreConsole": false,
+      "multifactorBypassOrCodeInstructionsConfigured": false,
+      "requiredCoverage": ["browse published products", "My Fit", "checkout", "payment evidence", "order history", "fulfillment", "returns", "account deletion"]
+    },
+    {
+      "role": "owner",
+      "required": true,
+      "emailConfiguredInStoreConsole": false,
+      "passwordConfiguredInStoreConsole": false,
+      "multifactorBypassOrCodeInstructionsConfigured": false,
+      "requiredCoverage": ["payment review", "fulfillment", "inventory", "vendor operations", "privacy controls"]
+    }
+  ],
+  "reviewNotes": [
+    "The app sells physical fashion goods. Payment methods shown in checkout pay for physical goods and are not digital content purchases.",
+    "Customer and owner accounts expose different role scoped workflows.",
+    "Provide stable accounts with seeded non sensitive sample data and keep the production review backend available throughout review.",
+    "Place live credentials and any current authentication code instructions only in App Store Connect and Play Console."
+  ]
+}

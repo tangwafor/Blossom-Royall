@@ -1,0 +1,38 @@
+{
+  "lastReviewed": "2026-08-28",
+  "releaseVersion": "1.0.0",
+  "releaseBuild": 1,
+  "submissionReady": false,
+  "currentOfficialRequirementsReviewed": true,
+  "platforms": {
+    "apple": {
+      "bundleId": "com.blossomroyall.app",
+      "iphoneScreenshotSize": "1320x2868",
+      "ipadScreenshotSize": "2064x2752",
+      "screenshotsComplete": false,
+      "privacyResponsesComplete": false,
+      "signedArchiveVerified": false,
+      "deviceTestVerified": false,
+      "appStoreConnectRecordComplete": false
+    },
+    "google": {
+      "applicationId": "com.blossomroyall.app",
+      "targetApi": 36,
+      "phoneScreenshotsComplete": false,
+      "featureGraphicComplete": false,
+      "dataSafetyComplete": false,
+      "signedBundleVerified": false,
+      "deviceTestVerified": false,
+      "playConsoleRecordComplete": false
+    }
+  },
+  "shared": {
+    "privacyMailboxActive": false,
+    "supportContactVerified": false,
+    "reviewerAccountsVerified": false,
+    "accountDeletionProductionVerified": false,
+    "productionBackendVerified": false,
+    "humanReviewedMediaComplete": false
+  },
+  "credentialPolicy": "Reviewer passwords and multifactor recovery information must be stored only in the store consoles or the approved secret manager. Never commit them to this repository."
+}

@@ -12,6 +12,10 @@ const requiredFiles = [
   "ios/App/App/PrivacyInfo.xcprivacy",
   "store/listings.json",
   "store/privacy-data-inventory.json",
+  "store/submission-readiness.json",
+  "store/reviewer-access.json",
+  "store/asset-manifest.json",
+  "docs/NATIVE_SUBMISSION_RUNBOOK.md",
 ];
 
 for (const file of requiredFiles) {
@@ -30,6 +34,9 @@ const iosIgnore = await read("ios/.gitignore");
 const packageJson = JSON.parse(await read("package.json"));
 const listings = JSON.parse(await read("store/listings.json"));
 const privacyInventory = JSON.parse(await read("store/privacy-data-inventory.json"));
+const submission = JSON.parse(await read("store/submission-readiness.json"));
+const reviewerAccess = JSON.parse(await read("store/reviewer-access.json"));
+const assetManifest = JSON.parse(await read("store/asset-manifest.json"));
 
 const requireText = (source, value, label) => { if (!source.includes(value)) failures.push(`${label} is missing ${value}`); };
 requireText(config, 'appId: "com.blossomroyall.app"', "Capacitor configuration");
@@ -66,6 +73,17 @@ for (const urlName of ["supportUrl", "privacyPolicyUrl", "accountDeletionUrl"]) 
 }
 if (privacyInventory.tracking !== false || privacyInventory.dataSold !== false) failures.push("Privacy inventory tracking or sale declaration is unsafe");
 if (!privacyInventory.reviewRequiredBeforeSubmission) failures.push("Privacy inventory must require final human review");
+if (submission.platforms.apple.bundleId !== listings.appId) failures.push("Apple submission identifier does not match listing identifier");
+if (submission.platforms.google.applicationId !== listings.appId) failures.push("Google submission identifier does not match listing identifier");
+if (submission.platforms.google.targetApi !== 36) failures.push("Google submission target API is not 36");
+if (submission.submissionReady !== false) failures.push("Submission readiness must remain false until signed builds and external checks are evidenced");
+if (reviewerAccess.containsSecrets !== false) failures.push("Reviewer access artifact must never contain secrets");
+for (const role of ["customer", "owner"]) {
+  if (!reviewerAccess.accounts.some((account) => account.role === role && account.required)) failures.push(`Missing required ${role} reviewer account plan`);
+}
+if (assetManifest.apple.iphone69.size !== "1320x2868") failures.push("Apple iPhone screenshot target is not current");
+if (assetManifest.apple.ipad13.size !== "2064x2752") failures.push("Apple iPad screenshot target is not current");
+if (assetManifest.google.featureGraphic.size !== "1024x500") failures.push("Google feature graphic target is incorrect");
 
 async function pngSize(file) {
   const data = await readFile(join(root, file));
@@ -84,4 +102,4 @@ if (failures.length) {
   for (const failure of failures) console.error(`ERROR ${failure}`);
   process.exit(1);
 }
-console.log("Native readiness verified: package identity, platform targets, privacy manifest, branded assets, secure platform settings, and localized store metadata are present.");
+console.log("Native structure verified: package identity, platform targets, privacy manifest, launcher assets, localized metadata, and an explicit incomplete submission evidence plan are present.");
