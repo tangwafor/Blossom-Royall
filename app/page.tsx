@@ -54,6 +54,9 @@ import {
   reviewTenantReturnRequest,
   advanceTenantOrderFulfillment,
   loadCustomerPickupCode,
+  loadTenantPendingPayments,
+  createPaymentEvidenceUrl,
+  reviewTenantPendingPayment,
   loadTenantProducts,
   loadTenantVendorStorefronts,
   removeTenantVendor,
@@ -69,6 +72,7 @@ import {
   type TenantProductSummary,
   type TenantVendorStorefront,
   type ReturnRequestRecord,
+  type PendingPaymentReview,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -718,7 +722,10 @@ export default function Home() {
             title="All orders"
             subtitle="Track every purchase from payment to pickup."
           >
-            <OrderTable rows={filtered} context={tenantContext} />
+            <>
+              <PaymentReviewQueue context={tenantContext} />
+              <OrderTable rows={filtered} context={tenantContext} />
+            </>
           </ListView>
         )}
         {active === "My Orders" && <CustomerOrders />}
@@ -6676,5 +6683,86 @@ function OrderTable({ rows, context }: { rows: Order[]; context?: TenantContext 
       {!displayRows.length && <p>No matching orders.</p>}
       </div>
     </div>
+  );
+}
+
+function PaymentReviewQueue({ context }: { context?: TenantContext | null }) {
+  const [payments, setPayments] = useState<PendingPaymentReview[]>([]);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  useEffect(() => {
+    if (!context || context.mode !== "production" || !["owner", "manager", "staff"].includes(context.role || "")) {
+      setLoading(false);
+      return;
+    }
+    void loadTenantPendingPayments(context)
+      .then(setPayments)
+      .catch(() => setNotice("The pending payment queue could not be loaded."))
+      .finally(() => setLoading(false));
+  }, [context]);
+  if (!context || context.mode !== "production" || !["owner", "manager", "staff"].includes(context.role || "")) return null;
+  const openProof = async (payment: PendingPaymentReview) => {
+    if (!payment.proofObjectPath) return;
+    try {
+      const url = await createPaymentEvidenceUrl(context, payment.proofObjectPath);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setNotice(error instanceof Error ? `The private proof could not be opened: ${error.message}` : "The private proof could not be opened.");
+    }
+  };
+  const review = async (payment: PendingPaymentReview, decision: "verified" | "rejected") => {
+    const note = notes[payment.id]?.trim() || "";
+    if (decision === "rejected" && !note) {
+      setNotice("Add a rejection reason before rejecting this payment.");
+      return;
+    }
+    setReviewing(payment.id);
+    setNotice("");
+    try {
+      await reviewTenantPendingPayment(context, payment.id, decision, note);
+      setPayments((current) => current.filter((item) => item.id !== payment.id));
+      setNotice(`${payment.receiptNo} payment ${decision}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `The payment review failed: ${error.message}` : "The payment review failed.");
+    } finally {
+      setReviewing(null);
+    }
+  };
+  return (
+    <section className="panel care-timeline" aria-label="Pending payment verification">
+      <div>
+        <span className="eyebrow">PAYMENT VERIFICATION</span>
+        <h3>{loading ? "Loading pending payments" : `${payments.length} payments awaiting review`}</h3>
+      </div>
+      {notice && <output className="policy-saved">{notice}</output>}
+      {!loading && !payments.length && <p>No electronic payments are waiting for verification.</p>}
+      <ol>
+        {payments.map((payment) => (
+          <li key={payment.id}>
+            <i><ShieldCheck /></i>
+            <span>
+              <b>{payment.receiptNo} · {payment.method.replaceAll("_", " ")} · ${payment.amount.toFixed(2)}</b>
+              <small>{payment.providerReference ? `Reference ${payment.providerReference}` : `Private proof ${payment.proofFileName}`} · {new Date(payment.createdAt).toLocaleString()}</small>
+              <label>
+                Verification note
+                <input
+                  aria-label={`Verification note for ${payment.receiptNo}`}
+                  value={notes[payment.id] || ""}
+                  onChange={(event) => setNotes((current) => ({ ...current, [payment.id]: event.target.value }))}
+                  maxLength={2000}
+                />
+              </label>
+              <span className="care-actions">
+                {payment.proofObjectPath && <button onClick={() => void openProof(payment)}>Open private proof</button>}
+                <button onClick={() => void review(payment, "verified")} disabled={reviewing === payment.id}>{reviewing === payment.id ? "Recording" : "Verify"}</button>
+                <button onClick={() => void review(payment, "rejected")} disabled={reviewing === payment.id}>Reject</button>
+              </span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

@@ -212,6 +212,65 @@ export async function loadCustomerPickupCode(context: TenantContext, orderId: st
   return { code: row.pickup_code as string, expiresAt: row.expires_at as string };
 }
 
+export type PendingPaymentReview = {
+  id: string;
+  orderId: string;
+  receiptNo: string;
+  method: string;
+  amount: number;
+  providerReference: string;
+  proofFileName: string;
+  proofObjectPath: string;
+  createdAt: string;
+};
+
+export async function loadTenantPendingPayments(context: TenantContext): Promise<PendingPaymentReview[]> {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager", "staff"].includes(context.role || "")) return [];
+  const { data, error } = await createClient().from("payments")
+    .select("id, order_id, method, amount, provider_ref, proof_file_name, proof_object_path, created_at, orders!inner(store_id, receipt_no)")
+    .eq("verification_status", "pending")
+    .eq("orders.store_id", context.storeId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data || []).map((payment) => ({
+    id: payment.id,
+    orderId: payment.order_id,
+    receiptNo: (payment.orders as { receipt_no?: string } | null)?.receipt_no || payment.order_id,
+    method: payment.method,
+    amount: Number(payment.amount || 0),
+    providerReference: payment.provider_ref || "",
+    proofFileName: payment.proof_file_name || "",
+    proofObjectPath: payment.proof_object_path || "",
+    createdAt: payment.created_at,
+  }));
+}
+
+export async function createPaymentEvidenceUrl(context: TenantContext, objectPath: string) {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager", "staff"].includes(context.role || "")) throw new Error("Authorized staff access is required.");
+  if (!objectPath.startsWith(`${context.storeId}/pending/`)) throw new Error("The evidence path is outside this tenant.");
+  const { data, error } = await createClient().storage.from("payment-evidence").createSignedUrl(objectPath, 120);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export async function reviewTenantPendingPayment(context: TenantContext, paymentId: string, decision: "verified" | "rejected", note?: string) {
+  if (context.mode !== "production" || !["owner", "manager", "staff"].includes(context.role || "")) throw new Error("Authorized staff access is required.");
+  const { data, error } = await createClient().rpc("review_pending_payment", {
+    p_payment_id: paymentId,
+    p_decision: decision,
+    p_verification_note: note?.trim() || null,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The payment review did not return a result.");
+  return {
+    paymentId: row.payment_id as string,
+    orderId: row.order_id as string,
+    paymentStatus: row.payment_status as string,
+    orderStatus: row.order_status as string,
+  };
+}
+
 export type ReturnRequestRecord = {
   id: string;
   orderItemId: string;

@@ -40,7 +40,9 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 11. `20260828183500_order_fulfillment.sql`
 
-The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-28-42Z.sql`. It has no schema difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
+12. `20260828185000_payment_verification.sql`
+
+The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. It has no schema difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
 
 ## Proven local checks
 
@@ -78,6 +80,14 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-28-42Z.sql`. I
 
 17. The staff Orders view retains real order identifiers and records fulfillment transitions through the protected function. My Orders displays recorded fulfillment history and a real pickup credential only when one exists.
 
+18. Pending electronic payments can be reviewed exactly once by authorized staff. Rejection requires a reason. Approval confirms the order and unlocks fulfillment. Rejection marks the order rejected and keeps fulfillment blocked.
+
+19. Rejected payment evidence restores reserved stock exactly once, records a reservation release movement, and adds a balancing seller ledger debit. Verified payments preserve the original seller credit.
+
+20. Payment proof paths and filenames are removed from audit payloads. Payment decisions, order payment state, product variant quantity changes, inventory movements, and seller ledger entries each produce independent audit records.
+
+21. The production Orders view lists pending payment references or proof filenames, uses two minute signed proof links, requires a rejection reason, and removes completed reviews from the pending queue.
+
 ## Pilot activation sequence
 
 1. Confirm Delly's production authentication identity and multifactor enrollment.
@@ -100,13 +110,15 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-28-42Z.sql`. I
 
 10. Advance one paid pickup order and one paid delivery order through their complete fulfillment paths. Confirm cross customer privacy, pickup credential expiry and redemption, recorded customer history, and fourteen expected fulfillment audit writes.
 
-11. Push the verified branch and inspect the Netlify deploy preview before production promotion.
+11. Verify one referenced electronic payment and reject one proof based payment. Confirm the approved order enters fulfillment, the rejected order remains blocked, stock is restored once, the seller ledger is balanced, and proof metadata is absent from audits.
 
-12. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
+12. Push the verified branch and inspect the Netlify deploy preview before production promotion.
 
-13. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+13. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
 
-14. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
+14. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+
+15. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
 
 ## Stop conditions
 
