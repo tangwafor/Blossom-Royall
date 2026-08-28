@@ -1203,3 +1203,22 @@ test("protects owner authentication app setup from unauthenticated access", asyn
   await expect(page).toHaveURL(/\/auth\?returnTo=%2Fworkspace$/);
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });
+
+test("publishes privacy choices and an external account deletion path", async ({ page }) => {
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "Your information belongs to you." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Information we collect" })).toBeVisible();
+  await expect(page.getByText("We do not sell personal information")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Manage or delete my account" })).toHaveAttribute("href", "/account/delete");
+  await page.getByLabel("Language").selectOption("fr");
+  await expect(page.getByRole("heading", { name: "Vos informations vous appartiennent." })).toBeVisible();
+});
+
+test("requires secure identity before requesting account deletion", async ({ page }) => {
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }));
+  await page.goto("/account/delete");
+  await expect(page.getByRole("heading", { name: "Delete your Blossom Royall account" })).toBeVisible();
+  await expect(page.getByText("Sign in to verify your identity")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in securely" })).toHaveAttribute("href", "/auth?returnTo=%2Faccount%2Fdelete");
+  await expect(page.getByRole("link", { name: "Read privacy policy" })).toHaveAttribute("href", "/privacy");
+});

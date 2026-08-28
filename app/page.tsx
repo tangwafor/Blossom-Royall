@@ -6112,6 +6112,10 @@ function HelpCenter({
           </p>
         </span>
       </section>
+      <section className="panel help-safety">
+        <ShieldCheck />
+        <span><b>Privacy and account control</b><p>Review how information is handled, manage privacy choices, or initiate complete account deletion without contacting support.</p><Link href="/privacy">Open privacy policy</Link><Link href="/account/delete">Manage or delete account</Link></span>
+      </section>
     </div>
   );
 }

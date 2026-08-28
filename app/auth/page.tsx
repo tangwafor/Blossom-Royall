@@ -266,7 +266,7 @@ export default function AuthPage() {
           </button>
           <small className="auth-conditions">
             By continuing, you confirm that you are authorized to use this
-            workspace.
+            workspace. <Link href="/privacy">Privacy policy</Link> · <Link href="/account/delete">Account deletion</Link>
           </small>
         </form>
       </section>

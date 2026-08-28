@@ -56,6 +56,7 @@
 | Authentication callback | Static deployment compatible secure session exchange active |
 | Protected operating workspace | `/workspace` verifies Supabase identity and store membership before rendering the console. Owner sessions require authentication app assurance level two. Unauthenticated visitors return to branded access, and authenticated accounts without membership receive a safe assignment boundary. |
 | Protected password reset | Recovery session validation active |
+| Privacy and account deletion | Public privacy policy and externally reachable account deletion path are active in development. Authenticated users can initiate and cancel an audited seven day deletion request. Sole owners must transfer store ownership first. Row level security and anonymous execution denial are verified locally. Final erasure is a reviewed manual operation until the deletion processor is implemented. |
 | Supabase production persistence | Readiness submissions live with hardened insert policy and audit trigger, core operating workflows remain preview adapters |
 | Full RLS role matrix | Readiness submission roles verified, full operating workflow matrix remains pending |
 | Customer recommendation signals | Working interface, pending persisted consented event model |
@@ -72,7 +73,7 @@
 
 The working preview now exercises the full vendor lifecycle without developer intervention and records each mutation in a tenant keyed browser audit history. This is deliberately not represented as production persistence. Before vendor records control real selling access, the same workflows require authenticated owner and manager authorization, tenant scoped Supabase tables, row level security, database audit triggers, invitation delivery, and revocation tests.
 
-The live schema was checked on August 27, 2026. It already contains RLS enabled `vendors`, `leases`, and `rent_payments` tables, and the Supabase security advisor reported no findings. Production activation still requires Delly's authenticated owner identity, the first Blossom Royall store record, owner membership, approved lease language, signature provider selection, and real vendor data. The missing local `DATABASE_URL` prevents the constitutionally required fresh `pg_dump`, so no new SQL migration was authored.
+The live schema was checked again on August 28, 2026. A fresh production schema dump was captured before the new SQL was authored and showed no drift. Production already contains RLS enabled `vendors`, `leases`, and `rent_payments` tables. Production activation still requires Delly's authenticated owner identity, the first Blossom Royall store record, owner membership, approved lease language, signature provider selection, and real vendor data. All newer migrations remain staged locally until explicit production approval.
 
 ## Staff operations boundary
 
