@@ -52,6 +52,8 @@ import {
   requestOrderItemReturn,
   loadTenantReturnRequests,
   reviewTenantReturnRequest,
+  advanceTenantOrderFulfillment,
+  loadCustomerPickupCode,
   loadTenantProducts,
   loadTenantVendorStorefronts,
   removeTenantVendor,
@@ -127,7 +129,17 @@ const orders = [
     time: "46 min ago",
   },
 ];
-type Order = (typeof orders)[number];
+type Order = {
+  id: string;
+  customer: string;
+  total: string;
+  status: string;
+  time: string;
+  rawId?: string;
+  fulfillmentMethod?: string;
+  fulfillmentStatus?: string;
+  paymentStatus?: string;
+};
 const products = [
   ["Aurelia Satin Midi", "Emerald · 8", "BR-AUR-EM-08", 3, "$168"],
   ["Sloane Sculpted Blazer", "Wine · M", "BR-SLO-WN-M", 7, "$214"],
@@ -706,7 +718,7 @@ export default function Home() {
             title="All orders"
             subtitle="Track every purchase from payment to pickup."
           >
-            <OrderTable rows={filtered} />
+            <OrderTable rows={filtered} context={tenantContext} />
           </ListView>
         )}
         {active === "My Orders" && <CustomerOrders />}
@@ -4358,6 +4370,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
 function CustomerOrders() {
   const { value: currentPolicy } = useRetailPolicy();
   const [order, setOrder] = useState<{
+    rawId?: string;
     id: string;
     items: BagItem[];
     method: string;
@@ -4369,6 +4382,7 @@ function CustomerOrders() {
     paymentStatus?: string;
     placedAt?: string;
     source?: "device" | "production";
+    fulfillmentEvents?: Array<{ id: string; eventType: string; note: string; createdAt: string }>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [returnItem, setReturnItem] = useState<BagItem | null>(null);
@@ -4378,6 +4392,7 @@ function CustomerOrders() {
   const [returnMessage, setReturnMessage] = useState("");
   const [returnSubmitting, setReturnSubmitting] = useState(false);
   const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
+  const [pickupCredential, setPickupCredential] = useState<{ code: string; expiresAt: string } | null>(null);
   const [paymentMade, setPaymentMade] = useState(false);
   useEffect(() => {
     const stored = localStorage.getItem("br-latest-order:blossom-royall");
@@ -4389,6 +4404,7 @@ function CustomerOrders() {
           const [latest] = await loadCustomerOrderHistory(context);
           if (latest) {
             setOrder({
+              rawId: latest.id,
               id: latest.receiptNo,
               items: latest.items,
               method: latest.fulfillmentMethod,
@@ -4399,7 +4415,11 @@ function CustomerOrders() {
               paymentStatus: latest.paymentStatus,
               placedAt: latest.placedAt,
               source: "production",
+              fulfillmentEvents: latest.fulfillmentEvents,
             });
+            if (latest.fulfillmentMethod === "pickup") {
+              setPickupCredential(await loadCustomerPickupCode(context, latest.id));
+            }
           }
         } finally {
           setLoading(false);
@@ -4514,9 +4534,9 @@ function CustomerOrders() {
           </p>
         </div>
         <div className="pickup-pass">
-          <small>SECURE RECEIPT</small>
-          <b>{order.id.replace("#", "")}</b>
-          <span>Use this reference when contacting the team</span>
+          <small>{pickupCredential ? "PICKUP CREDENTIAL" : "SECURE RECEIPT"}</small>
+          <b>{pickupCredential?.code || order.id.replace("#", "")}</b>
+          <span>{pickupCredential ? `Expires ${new Date(pickupCredential.expiresAt).toLocaleString()}` : "Use this reference when contacting the team"}</span>
         </div>
       </section>
       <section className="order-progress panel" aria-label="Order progress">
@@ -4549,6 +4569,25 @@ function CustomerOrders() {
           <small>{orderStage === 3 ? "Fulfillment is complete" : "Awaiting a recorded customer handoff"}</small>
         </div>
       </section>
+      {!!order.fulfillmentEvents?.length && (
+        <section className="panel care-timeline" aria-label="Recorded fulfillment history">
+          <div>
+            <span className="eyebrow">RECORDED FULFILLMENT HISTORY</span>
+            <h3>Updates from the Blossom Royall team</h3>
+          </div>
+          <ol>
+            {order.fulfillmentEvents.map((event) => (
+              <li key={event.id}>
+                <i><Check /></i>
+                <span>
+                  <b>{event.eventType.replaceAll("_", " ")}</b>
+                  <small>{new Date(event.createdAt).toLocaleString()}{event.note ? ` · ${event.note}` : ""}</small>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       <div className="customer-order-grid">
         <section className="panel order-items">
           <div className="panel-head">
@@ -6571,27 +6610,71 @@ function Dashboard({
     </div>
   );
 }
-function OrderTable({ rows }: { rows: Order[] }) {
+function OrderTable({ rows, context }: { rows: Order[]; context?: TenantContext | null }) {
+  const [displayRows, setDisplayRows] = useState(rows);
+  const [notice, setNotice] = useState("");
+  const [updating, setUpdating] = useState<string | null>(null);
+  useEffect(() => setDisplayRows(rows), [rows]);
+  const nextAction = (order: Order): { event: "preparing" | "ready_for_pickup" | "out_for_delivery" | "picked_up" | "delivered"; label: string } | null => {
+    if (!order.rawId || order.paymentStatus !== "succeeded") return null;
+    if (order.fulfillmentStatus === "pending" && order.status === "confirmed") return { event: "preparing", label: "Start preparation" };
+    if (order.fulfillmentStatus === "preparing" && order.fulfillmentMethod === "pickup") return { event: "ready_for_pickup", label: "Mark ready" };
+    if (order.fulfillmentStatus === "preparing" && ["delivery", "shipping"].includes(order.fulfillmentMethod || "")) return { event: "out_for_delivery", label: "Send for delivery" };
+    if (order.fulfillmentStatus === "ready_for_pickup") return { event: "picked_up", label: "Confirm pickup" };
+    if (order.fulfillmentStatus === "out_for_delivery") return { event: "delivered", label: "Confirm delivery" };
+    return null;
+  };
+  const advance = async (order: Order) => {
+    const action = nextAction(order);
+    if (!action || !context || !order.rawId) return;
+    setUpdating(order.rawId);
+    setNotice("");
+    try {
+      const result = await advanceTenantOrderFulfillment(context, order.rawId, action.event);
+      setDisplayRows((current) => current.map((item) => item.rawId === order.rawId ? {
+        ...item,
+        status: result.orderStatus,
+        fulfillmentStatus: result.fulfillmentStatus,
+      } : item));
+      setNotice(result.pickupCode && action.event === "ready_for_pickup"
+        ? `Order ${order.id} is ready. Pickup credential ${result.pickupCode} is available to its customer.`
+        : `Order ${order.id} is now ${result.fulfillmentStatus.replaceAll("_", " ")}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `The fulfillment update failed: ${error.message}` : "The fulfillment update failed.");
+    } finally {
+      setUpdating(null);
+    }
+  };
   return (
-    <div className="table">
+    <div>
+      {notice && <output className="policy-saved">{notice}</output>}
+      <div className="table">
       <div>
         <span>Order</span>
         <span>Customer</span>
         <span>Status</span>
         <span>Total</span>
       </div>
-      {rows.map((o) => (
+      {displayRows.map((o) => (
         <div key={o.id}>
           <span>
             <b>{o.id}</b>
             <small>{o.time}</small>
           </span>
           <span>{o.customer}</span>
-          <em className={o.status.toLowerCase()}>{o.status}</em>
+          <span>
+            <em className={o.status.toLowerCase()}>{o.status}</em>
+            {nextAction(o) && context?.mode === "production" && (
+              <button onClick={() => void advance(o)} disabled={updating === o.rawId}>
+                {updating === o.rawId ? "Recording" : nextAction(o)?.label}
+              </button>
+            )}
+          </span>
           <b>{o.total}</b>
         </div>
       ))}
-      {!rows.length && <p>No matching orders.</p>}
+      {!displayRows.length && <p>No matching orders.</p>}
+      </div>
     </div>
   );
 }

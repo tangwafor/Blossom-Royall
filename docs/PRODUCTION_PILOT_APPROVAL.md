@@ -38,7 +38,9 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 10. `20260828182000_return_requests.sql`
 
-The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-14-07Z.sql`. It has no schema difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
+11. `20260828183500_order_fulfillment.sql`
+
+The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-28-42Z.sql`. It has no schema difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
 
 ## Proven local checks
 
@@ -68,6 +70,14 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-14-07Z.sql`. I
 
 13. Two return creations, one cancellation, one removal, and four staff transitions produce exactly eight return audit records. An invalid transition produces no write.
 
+14. Pickup and delivery orders enforce payment clearance and valid preparation, readiness, transit, and handoff transitions. Invalid shortcuts and uncleared payment advancement are denied.
+
+15. Pickup credentials are random six character codes, visible only through the owning customer function while ready, unexpired, and unredeemed. A second customer sees neither the credential nor the fulfillment events.
+
+16. Pickup and delivery completion produce exactly fourteen fulfillment audit writes in the controlled lifecycle. Pickup codes are removed from audit payloads, and redeemed credentials stop resolving for the customer.
+
+17. The staff Orders view retains real order identifiers and records fulfillment transitions through the protected function. My Orders displays recorded fulfillment history and a real pickup credential only when one exists.
+
 ## Pilot activation sequence
 
 1. Confirm Delly's production authentication identity and multifactor enrollment.
@@ -88,13 +98,15 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-14-07Z.sql`. I
 
 9. Submit one controlled customer return, verify it appears in the staff queue, advance it through inspection and completion, and confirm the seller attribution and eight expected audit events for the complete test lifecycle.
 
-10. Push the verified branch and inspect the Netlify deploy preview before production promotion.
+10. Advance one paid pickup order and one paid delivery order through their complete fulfillment paths. Confirm cross customer privacy, pickup credential expiry and redemption, recorded customer history, and fourteen expected fulfillment audit writes.
 
-11. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
+11. Push the verified branch and inspect the Netlify deploy preview before production promotion.
 
-12. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+12. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
 
-13. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
+13. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+
+14. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
 
 ## Stop conditions
 
@@ -114,6 +126,6 @@ Do not drop newly created tables or columns during the pilot. If a defect appear
 
 3. Complete production error capture, metrics, and alert routing beyond the zero cost synthetic monitor.
 
-4. Complete authorization backed card payments, production layaway, fulfillment notifications, refund execution, and inventory disposition contracts.
+4. Complete authorization backed card payments, production layaway, outbound fulfillment notifications, refund execution, and inventory disposition contracts.
 
 5. Complete native packaging, signing, privacy manifest, store declarations, screenshots, reviewer account, and human reviewed multilingual walkthroughs.

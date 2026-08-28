@@ -75,11 +75,15 @@ export async function loadTenantVendors(context: TenantContext) {
 }
 
 export type TenantOrderSummary = {
+  rawId: string;
   id: string;
   customer: string;
   total: string;
   status: string;
   time: string;
+  fulfillmentMethod: string;
+  fulfillmentStatus: string;
+  paymentStatus: string;
 };
 
 export type CustomerOrderRecord = {
@@ -93,6 +97,7 @@ export type CustomerOrderRecord = {
   verificationStatus: string;
   policySnapshot: Record<string, unknown>;
   placedAt: string;
+  fulfillmentEvents: Array<{ id: string; eventType: string; note: string; createdAt: string }>;
   items: Array<{
     orderItemId?: string;
     variantId?: string;
@@ -108,7 +113,7 @@ export async function loadTenantOrders(context: TenantContext): Promise<TenantOr
   if (context.mode !== "production" || !context.storeId) return [];
   let query = createClient()
     .from("orders")
-    .select("id, total, status, created_at")
+    .select("id, total, status, fulfillment_method, fulfillment_status, payment_status, created_at")
     .eq("store_id", context.storeId);
   if (context.role === "customer") {
     if (!context.userId) return [];
@@ -119,11 +124,15 @@ export async function loadTenantOrders(context: TenantContext): Promise<TenantOr
     .limit(50);
   if (error) throw error;
   return (data || []).map((order) => ({
+    rawId: order.id,
     id: `#${String(order.id).slice(0, 8).toUpperCase()}`,
     customer: "Customer",
     total: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(order.total || 0)),
     status: String(order.status || "Open"),
     time: new Date(order.created_at).toLocaleString(),
+    fulfillmentMethod: order.fulfillment_method || "pickup",
+    fulfillmentStatus: order.fulfillment_status || "pending",
+    paymentStatus: order.payment_status || "pending",
   }));
 }
 
@@ -131,7 +140,7 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
   if (context.mode !== "production" || context.role !== "customer" || !context.storeId || !context.userId) return [];
   const { data, error } = await createClient()
     .from("orders")
-    .select("id, receipt_no, status, fulfillment_method, total, payment_status, policy_snapshot, created_at, order_items(id, qty, unit_price, product_variants(id, products(name)), vendors(name)), payments(method, verification_status)")
+    .select("id, receipt_no, status, fulfillment_method, total, payment_status, policy_snapshot, created_at, order_items(id, qty, unit_price, product_variants(id, products(name)), vendors(name)), payments(method, verification_status), order_fulfillment_events(id, event_type, note, created_at)")
     .eq("store_id", context.storeId)
     .eq("customer_id", context.userId)
     .order("created_at", { ascending: false })
@@ -157,6 +166,12 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
       verificationStatus: payments[0]?.verification_status || "not_required",
       policySnapshot: (order.policy_snapshot || {}) as Record<string, unknown>,
       placedAt: order.created_at,
+      fulfillmentEvents: ((order.order_fulfillment_events || []) as Array<{ id: string; event_type: string; note?: string | null; created_at: string }>).map((event) => ({
+        id: event.id,
+        eventType: event.event_type,
+        note: event.note || "",
+        createdAt: event.created_at,
+      })),
       items: items.map((item) => ({
         orderItemId: item.id,
         variantId: item.product_variants?.id,
@@ -168,6 +183,33 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
       })),
     };
   });
+}
+
+export async function advanceTenantOrderFulfillment(context: TenantContext, orderId: string, eventType: "preparing" | "ready_for_pickup" | "out_for_delivery" | "picked_up" | "delivered", note?: string) {
+  if (context.mode !== "production" || !["owner", "manager", "staff"].includes(context.role || "")) throw new Error("Authorized staff access is required.");
+  const { data, error } = await createClient().rpc("advance_order_fulfillment", {
+    p_order_id: orderId,
+    p_event_type: eventType,
+    p_note: note?.trim() || null,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The fulfillment update did not return an order.");
+  return {
+    orderId: row.order_id as string,
+    orderStatus: row.order_status as string,
+    fulfillmentStatus: row.fulfillment_status as string,
+    pickupCode: (row.pickup_code as string | null) || null,
+  };
+}
+
+export async function loadCustomerPickupCode(context: TenantContext, orderId: string) {
+  if (context.mode !== "production" || context.role !== "customer") return null;
+  const { data, error } = await createClient().rpc("get_customer_pickup_code", { p_order_id: orderId });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.pickup_code) return null;
+  return { code: row.pickup_code as string, expiresAt: row.expires_at as string };
 }
 
 export type ReturnRequestRecord = {

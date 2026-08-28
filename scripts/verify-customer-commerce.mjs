@@ -23,10 +23,11 @@ requireText(runtime, '.rpc("resolve_customer_store"', "Runtime storefront discov
 requireText(runtime, '.eq("customer_id", context.userId)', "Explicit customer order isolation");
 requireText(runtime, 'query = query.eq("status", "published")', "Runtime catalog publication filter");
 requireText(runtime, "loadCustomerOrderHistory", "Persistent customer order loader");
+requireText(runtime, "loadCustomerPickupCode", "Protected customer pickup credential loader");
 requireText(app, "await loadCustomerOrderHistory(context)", "Customer order history screen");
 requireText(app, "SECURE RECEIPT", "Non fabricated production receipt");
 
-if (app.includes("PICKUP CREDENTIAL") || app.includes("482 915")) {
+if (app.includes("482 915")) {
   failures.push("The customer order screen still contains a fabricated pickup credential");
 }
 
