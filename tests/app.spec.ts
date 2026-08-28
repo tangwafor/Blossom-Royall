@@ -780,6 +780,26 @@ test("keeps vendor writes in a clearly identified preview without tenant members
   await expect(runtime).toContainText("authorized Blossom Royall account");
 });
 
+test("manages an isolated Blossom Collections storefront", async ({ page }, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Vendors", exact: true }).click();
+  const studio = page.locator(".storefront-studio");
+  await expect(studio.getByRole("heading", { name: "Blossom Collections" })).toBeVisible();
+  await studio.getByRole("button", { name: "Edit storefront" }).click();
+  await page.getByLabel("Tagline").fill("Curated by Delly for every beautiful arrival");
+  await page.getByLabel("Brand story").fill("An independent fashion and gifting store inside Blossom Royall.");
+  await page.getByLabel("Official Facebook page").fill("https://facebook.com/blossomcollections");
+  await page.getByLabel("Media rights").selectOption("confirmed");
+  await page.getByLabel("Publication status").selectOption("review");
+  await page.getByRole("button", { name: "Save storefront" }).click();
+  await expect(studio.getByText("Curated by Delly for every beautiful arrival")).toBeVisible();
+  await page.reload();
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Vendors", exact: true }).click();
+  await expect(page.locator(".storefront-studio").getByText("Curated by Delly for every beautiful arrival")).toBeVisible();
+});
+
 test("clearly labels sample activity as preview data", async ({ page }) => {
   await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }));
   await page.goto("/");

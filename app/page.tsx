@@ -49,13 +49,17 @@ import {
   loadTenantVendors,
   loadTenantOrders,
   loadTenantProducts,
+  loadTenantVendorStorefronts,
   removeTenantVendor,
+  removeTenantVendorStorefront,
   resolveTenantContext,
   removeAccountFitProfiles,
   saveAccountFitProfile,
   saveTenantVendor,
+  saveTenantVendorStorefront,
   type TenantContext,
   type TenantProductSummary,
+  type TenantVendorStorefront,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -1719,11 +1723,90 @@ function VendorOperations() {
           </details>
         )}
       </section>
+      <VendorStorefrontStudio vendors={records} tenantContext={tenantContext} />
       <AfricstylePilotImport />
       <VendorLeaseRentCenter vendors={records} />
       <VendorBrandManager />
     </>
   );
+}
+
+function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRecord[]; tenantContext: TenantContext }) {
+  const storageKey = "br-vendor-storefronts:blossom-royall";
+  const [profiles, setProfiles] = useState<TenantVendorStorefront[]>([]);
+  const [editing, setEditing] = useState<TenantVendorStorefront | null>(null);
+  const [notice, setNotice] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored) setProfiles(JSON.parse(stored));
+    else {
+      const blossom = vendors.find((vendor) => vendor.id === "blossom-collections" || vendor.name.toLowerCase() === "blossom collections");
+      if (blossom) setProfiles([{ id: "preview-blossom-collections", vendorId: blossom.id, slug: "blossom-collections", publicName: "Blossom Collections", ownerDisplayName: "Delly", tagline: "Delly’s independent store inside Blossom Royall", story: "", categories: ["Women’s fashion", "Accessories", "Gifting"], facebookUrl: "", websiteUrl: "", contactEmail: blossom.email, contactPhone: blossom.phone, primaryColor: "#5a1830", secondaryColor: "#f1d49d", fulfillmentMethods: ["Store pickup"], mediaRightsStatus: "pending", status: "draft" }]);
+    }
+    if (tenantContext.mode === "production") void loadTenantVendorStorefronts(tenantContext).then((rows) => { if (rows.length) setProfiles(rows); }).catch(() => setNotice("Production storefront profiles could not be loaded. The studio remains in private preview mode."));
+  }, [tenantContext.mode, tenantContext.storeId, vendors]);
+  const persist = (next: TenantVendorStorefront[]) => { setProfiles(next); localStorage.setItem(storageKey, JSON.stringify(next)); };
+  const save = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const requestedStatus = String(data.get("status")) as TenantVendorStorefront["status"];
+    const mediaRightsStatus = String(data.get("mediaRightsStatus")) as TenantVendorStorefront["mediaRightsStatus"];
+    if (requestedStatus === "published" && mediaRightsStatus !== "confirmed") { setNotice("Confirm media rights before publishing this storefront."); return; }
+    const vendorId = String(data.get("vendorId"));
+    const current = editing || profiles.find((profile) => profile.vendorId === vendorId);
+    const profile: TenantVendorStorefront = {
+      id: current?.id && !current.id.startsWith("preview") ? current.id : crypto.randomUUID(), vendorId,
+      slug: String(data.get("slug")).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+      publicName: String(data.get("publicName")).trim(), ownerDisplayName: String(data.get("ownerDisplayName")).trim(),
+      tagline: String(data.get("tagline")).trim(), story: String(data.get("story")).trim(),
+      categories: String(data.get("categories")).split(",").map((item) => item.trim()).filter(Boolean),
+      facebookUrl: String(data.get("facebookUrl")).trim(), websiteUrl: String(data.get("websiteUrl")).trim(),
+      contactEmail: String(data.get("contactEmail")).trim().toLowerCase(), contactPhone: String(data.get("contactPhone")).trim(),
+      primaryColor: String(data.get("primaryColor")), secondaryColor: String(data.get("secondaryColor")),
+      fulfillmentMethods: data.getAll("fulfillmentMethods").map(String), mediaRightsStatus, status: requestedStatus,
+    };
+    const next = current ? profiles.map((item) => item.vendorId === vendorId ? profile : item) : [profile, ...profiles];
+    persist(next); setEditing(null); setNotice(`${profile.publicName} storefront saved as ${profile.status}.`);
+    if (tenantContext.mode === "production") void saveTenantVendorStorefront(tenantContext, profile).catch(() => setNotice("The storefront remains saved on this device, but production synchronization needs attention."));
+  };
+  const remove = (profile: TenantVendorStorefront) => {
+    if (deleteId !== profile.id) { setDeleteId(profile.id); setNotice(`Select remove again to confirm deleting ${profile.publicName} storefront.`); return; }
+    persist(profiles.filter((item) => item.id !== profile.id)); setDeleteId(null); setNotice(`${profile.publicName} storefront removed.`);
+    if (tenantContext.mode === "production" && !profile.id.startsWith("preview")) void removeTenantVendorStorefront(tenantContext, profile.id).catch(() => setNotice("The local storefront was removed, but production removal needs attention."));
+  };
+  const selected = editing || profiles[0];
+  const blankProfile = (): TenantVendorStorefront => ({
+    id: `preview-${crypto.randomUUID()}`, vendorId: vendors[0]?.id || "", slug: "", publicName: vendors[0]?.name || "",
+    ownerDisplayName: "", tagline: "", story: "", categories: [], facebookUrl: "", websiteUrl: "",
+    contactEmail: vendors[0]?.email || "", contactPhone: vendors[0]?.phone || "", primaryColor: "#5a1830",
+    secondaryColor: "#f1d49d", fulfillmentMethods: [], mediaRightsStatus: "pending", status: "draft",
+  });
+  return <section className="panel storefront-studio">
+    <div className="panel-head"><span><small className="eyebrow">VENDOR STOREFRONT STUDIO</small><h3>Independent brand homes inside Blossom Royall</h3></span><button className="primary" onClick={() => setEditing(selected || blankProfile())}><Sparkles />{selected ? "Edit storefront" : "Create storefront"}</button></div>
+    <p>Each vendor controls an isolated public identity, catalog story, fulfillment promise, and policy presentation while Blossom Royall remains the mall brand.</p>
+    {editing && <form className="storefront-form" onSubmit={save}>
+      <label>Vendor<select name="vendorId" required defaultValue={editing.vendorId}>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
+      <label>Public store name<input name="publicName" required maxLength={120} defaultValue={editing.publicName} /></label>
+      <label>Store address slug<input name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" defaultValue={editing.slug} /></label>
+      <label>Owner display name<input name="ownerDisplayName" maxLength={120} defaultValue={editing.ownerDisplayName} /></label>
+      <label>Tagline<input name="tagline" maxLength={180} defaultValue={editing.tagline} /></label>
+      <label className="wide">Brand story<textarea name="story" maxLength={4000} defaultValue={editing.story} placeholder="What the store sells, who it serves, and what makes it distinct" /></label>
+      <label className="wide">Categories<input name="categories" required defaultValue={editing.categories.join(", ")} placeholder="Women’s fashion, accessories, gifting" /><small>Separate editable categories with commas.</small></label>
+      <label>Official Facebook page<input name="facebookUrl" type="url" pattern="https://.*" defaultValue={editing.facebookUrl} placeholder="https://facebook.com/..." /></label>
+      <label>Official website<input name="websiteUrl" type="url" pattern="https://.*" defaultValue={editing.websiteUrl} placeholder="https://..." /></label>
+      <label>Public email<input name="contactEmail" type="email" defaultValue={editing.contactEmail} /></label>
+      <label>Public phone<input name="contactPhone" type="tel" defaultValue={editing.contactPhone} /></label>
+      <label>Primary brand color<input name="primaryColor" type="color" defaultValue={editing.primaryColor} /></label>
+      <label>Secondary brand color<input name="secondaryColor" type="color" defaultValue={editing.secondaryColor} /></label>
+      <fieldset className="wide"><legend>Fulfillment methods</legend>{["Store pickup", "Local delivery", "Shipping", "Vendor fulfilled", "Appointment"].map((method) => <label key={method}><input type="checkbox" name="fulfillmentMethods" value={method} defaultChecked={editing.fulfillmentMethods.includes(method)} />{method}</label>)}</fieldset>
+      <label>Media rights<select name="mediaRightsStatus" defaultValue={editing.mediaRightsStatus}><option value="pending">Pending confirmation</option><option value="confirmed">Confirmed</option><option value="restricted">Restricted</option></select></label>
+      <label>Publication status<select name="status" defaultValue={editing.status}><option value="draft">Draft</option><option value="review">Ready for review</option><option value="published">Published</option><option value="suspended">Suspended</option></select></label>
+      <footer className="wide"><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary"><Check />Save storefront</button></footer>
+    </form>}
+    {notice && <output className="policy-saved" role="status">{notice}</output>}
+    <div className="storefront-cards">{profiles.map((profile) => <article key={profile.id} style={{ "--storefront-primary": profile.primaryColor, "--storefront-secondary": profile.secondaryColor } as React.CSSProperties}><header><span>{profile.ownerDisplayName || "Independent vendor"}</span><em>{profile.status}</em></header><h4>{profile.publicName}</h4><p>{profile.tagline || "Store story being prepared."}</p><small>{profile.categories.join(" · ") || "Categories pending"}</small><footer><button onClick={() => setEditing(profile)}>Edit</button><button className={deleteId === profile.id ? "danger" : ""} onClick={() => remove(profile)}>{deleteId === profile.id ? "Confirm remove" : "Remove"}</button></footer></article>)}</div>
+  </section>;
 }
 
 function AfricstylePilotImport() {

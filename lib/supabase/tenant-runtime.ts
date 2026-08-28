@@ -126,6 +126,72 @@ export async function removeTenantVendor(context: TenantContext, vendorId: strin
   if (error) throw error;
 }
 
+export type TenantVendorStorefront = {
+  id: string;
+  vendorId: string;
+  slug: string;
+  publicName: string;
+  ownerDisplayName: string;
+  tagline: string;
+  story: string;
+  categories: string[];
+  facebookUrl: string;
+  websiteUrl: string;
+  contactEmail: string;
+  contactPhone: string;
+  primaryColor: string;
+  secondaryColor: string;
+  fulfillmentMethods: string[];
+  mediaRightsStatus: "pending" | "confirmed" | "restricted";
+  status: "draft" | "review" | "published" | "suspended";
+};
+
+type StorefrontRow = {
+  id: string; vendor_id: string; slug: string; public_name: string; owner_display_name: string | null;
+  tagline: string | null; story: string | null; categories: string[] | null; facebook_url: string | null;
+  website_url: string | null; contact_email: string | null; contact_phone: string | null; primary_color: string;
+  secondary_color: string; fulfillment_methods: string[] | null; media_rights_status: TenantVendorStorefront["mediaRightsStatus"];
+  status: TenantVendorStorefront["status"];
+};
+
+const mapStorefront = (row: StorefrontRow): TenantVendorStorefront => ({
+  id: row.id, vendorId: row.vendor_id, slug: row.slug, publicName: row.public_name,
+  ownerDisplayName: row.owner_display_name || "", tagline: row.tagline || "", story: row.story || "",
+  categories: row.categories || [], facebookUrl: row.facebook_url || "", websiteUrl: row.website_url || "",
+  contactEmail: row.contact_email || "", contactPhone: row.contact_phone || "", primaryColor: row.primary_color,
+  secondaryColor: row.secondary_color, fulfillmentMethods: row.fulfillment_methods || [],
+  mediaRightsStatus: row.media_rights_status, status: row.status,
+});
+
+export async function loadTenantVendorStorefronts(context: TenantContext): Promise<TenantVendorStorefront[]> {
+  if (context.mode !== "production" || !context.storeId) return [];
+  const { data, error } = await createClient().from("vendor_storefronts").select("id, vendor_id, slug, public_name, owner_display_name, tagline, story, categories, facebook_url, website_url, contact_email, contact_phone, primary_color, secondary_color, fulfillment_methods, media_rights_status, status").eq("store_id", context.storeId).order("updated_at", { ascending: false });
+  if (error) throw error;
+  return ((data || []) as StorefrontRow[]).map(mapStorefront);
+}
+
+export async function saveTenantVendorStorefront(context: TenantContext, profile: TenantVendorStorefront) {
+  if (context.mode !== "production" || !context.storeId || !context.userId) throw new Error("Authenticated tenant access is required.");
+  const publishedAt = profile.status === "published" ? new Date().toISOString() : null;
+  const { error } = await createClient().from("vendor_storefronts").upsert({
+    id: profile.id, store_id: context.storeId, vendor_id: profile.vendorId, slug: profile.slug,
+    public_name: profile.publicName, owner_display_name: profile.ownerDisplayName || null, tagline: profile.tagline || null,
+    story: profile.story || null, categories: profile.categories, facebook_url: profile.facebookUrl || null,
+    website_url: profile.websiteUrl || null, contact_email: profile.contactEmail || null, contact_phone: profile.contactPhone || null,
+    primary_color: profile.primaryColor, secondary_color: profile.secondaryColor,
+    fulfillment_methods: profile.fulfillmentMethods, media_rights_status: profile.mediaRightsStatus,
+    status: profile.status, published_at: publishedAt, created_by: context.userId, updated_by: context.userId,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "vendor_id" });
+  if (error) throw error;
+}
+
+export async function removeTenantVendorStorefront(context: TenantContext, storefrontId: string) {
+  if (context.mode !== "production" || !context.storeId) throw new Error("Authenticated tenant access is required.");
+  const { error } = await createClient().from("vendor_storefronts").delete().eq("id", storefrontId).eq("store_id", context.storeId);
+  if (error) throw error;
+}
+
 export type AccountFitProfile = {
   unit: "imperial" | "metric";
   measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder", number>;
