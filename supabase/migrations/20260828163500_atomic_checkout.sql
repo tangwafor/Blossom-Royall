@@ -5,9 +5,28 @@ create sequence if not exists public.order_receipt_number_seq;
 alter table public.orders
   add column if not exists receipt_no text unique,
   add column if not exists fulfillment_method text,
+  add column if not exists delivery_fee numeric(12, 2) not null default 0,
   add column if not exists currency text not null default 'USD',
   add column if not exists policy_snapshot jsonb not null default '{}'::jsonb,
   add column if not exists payment_status text not null default 'pending';
+
+create table public.store_commerce_settings (
+  store_id uuid primary key references public.stores(id) on delete cascade,
+  currency text not null default 'USD' check (currency ~ '^[A-Z]{3}$'),
+  tax_rate_percent numeric(7, 4) not null default 0 check (tax_rate_percent between 0 and 100),
+  tax_inclusive boolean not null default false,
+  delivery_taxable boolean not null default false,
+  pickup_enabled boolean not null default true,
+  local_delivery_enabled boolean not null default false,
+  local_delivery_fee numeric(12, 2) not null default 0 check (local_delivery_fee >= 0),
+  free_local_minimum numeric(12, 2) not null default 0 check (free_local_minimum >= 0),
+  shipping_enabled boolean not null default false,
+  shipping_fee numeric(12, 2) not null default 0 check (shipping_fee >= 0),
+  created_by uuid not null references public.profiles(id),
+  updated_by uuid not null references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 create table public.inventory_movements (
   id uuid primary key default gen_random_uuid(),
@@ -41,6 +60,17 @@ create index vendor_ledger_order_idx on public.vendor_ledger_entries (order_id);
 
 alter table public.inventory_movements enable row level security;
 alter table public.vendor_ledger_entries enable row level security;
+alter table public.store_commerce_settings enable row level security;
+
+create policy store_commerce_settings_read on public.store_commerce_settings for select to authenticated
+using (private.current_store_role(store_id) is not null);
+create policy store_commerce_settings_insert on public.store_commerce_settings for insert to authenticated
+with check (created_by = (select auth.uid()) and updated_by = (select auth.uid()) and private.current_store_role(store_id) in ('owner', 'manager'));
+create policy store_commerce_settings_update on public.store_commerce_settings for update to authenticated
+using (private.current_store_role(store_id) in ('owner', 'manager'))
+with check (updated_by = (select auth.uid()) and private.current_store_role(store_id) in ('owner', 'manager'));
+create policy store_commerce_settings_delete on public.store_commerce_settings for delete to authenticated
+using (private.current_store_role(store_id) in ('owner', 'manager'));
 
 create policy inventory_movements_read on public.inventory_movements for select to authenticated
 using (private.current_store_role(store_id) is not null);
@@ -64,6 +94,27 @@ using (private.current_store_role(store_id) in ('owner', 'manager'));
 
 grant select, insert, update, delete on public.inventory_movements to authenticated;
 grant select, insert, update, delete on public.vendor_ledger_entries to authenticated;
+grant select, insert, update, delete on public.store_commerce_settings to authenticated;
+
+create or replace function private.audit_store_commerce_settings_write()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into public.audit_log (actor_user_id, store_id, action, entity_type, entity_id, before_data, after_data)
+  values (auth.uid(), coalesce(new.store_id, old.store_id), lower(tg_op), 'store_commerce_settings', coalesce(new.store_id, old.store_id)::text,
+    case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end,
+    case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) end);
+  return coalesce(new, old);
+end;
+$$;
+
+revoke all on function private.audit_store_commerce_settings_write() from public, anon, authenticated;
+create trigger store_commerce_settings_audit
+after insert or update or delete on public.store_commerce_settings
+for each row execute function private.audit_store_commerce_settings_write();
 
 create or replace function public.place_tenant_order(
   p_store_id uuid,
@@ -79,7 +130,7 @@ create or replace function public.place_tenant_order(
   p_proof_size_bytes bigint default null,
   p_policy_snapshot jsonb default '{}'::jsonb
 )
-returns table (order_id uuid, receipt_no text, total numeric, payment_status text)
+returns table (order_id uuid, receipt_no text, subtotal numeric, delivery_fee numeric, tax numeric, total numeric, payment_status text)
 language plpgsql
 security definer
 set search_path = public, private, pg_temp
@@ -90,9 +141,13 @@ declare
   created_order_id uuid := gen_random_uuid();
   created_receipt text;
   subtotal_amount numeric(12, 2) := 0;
+  delivery_amount numeric(12, 2) := 0;
+  tax_amount numeric(12, 2) := 0;
+  total_amount numeric(12, 2) := 0;
   payment_state text;
   item record;
   variant_record record;
+  commerce record;
 begin
   if caller_id is null then raise exception 'authentication_required'; end if;
   caller_role := private.current_store_role(p_store_id);
@@ -101,6 +156,12 @@ begin
   if p_fulfillment_method not in ('pickup', 'delivery', 'shipping') then raise exception 'invalid_fulfillment_method'; end if;
   if p_tender_method not in ('cash', 'card', 'bank_transfer', 'zelle', 'venmo', 'paypal', 'cash_app', 'mobile_money', 'check') then raise exception 'invalid_tender_method'; end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception 'items_required'; end if;
+
+  select * into commerce from public.store_commerce_settings where store_id = p_store_id;
+  if not found then raise exception 'commerce_settings_missing'; end if;
+  if p_fulfillment_method = 'pickup' and not commerce.pickup_enabled then raise exception 'pickup_disabled'; end if;
+  if p_fulfillment_method = 'delivery' and not commerce.local_delivery_enabled then raise exception 'local_delivery_disabled'; end if;
+  if p_fulfillment_method = 'shipping' and not commerce.shipping_enabled then raise exception 'shipping_disabled'; end if;
 
   for item in select * from jsonb_to_recordset(p_items) as requested(variant_id uuid, quantity integer)
   loop
@@ -116,8 +177,16 @@ begin
     subtotal_amount := subtotal_amount + (variant_record.price * item.quantity);
   end loop;
 
+  delivery_amount := case
+    when p_fulfillment_method = 'delivery' and subtotal_amount < commerce.free_local_minimum then commerce.local_delivery_fee
+    when p_fulfillment_method = 'shipping' then commerce.shipping_fee
+    else 0
+  end;
+  tax_amount := case when commerce.tax_inclusive then 0 else round((subtotal_amount + case when commerce.delivery_taxable then delivery_amount else 0 end) * commerce.tax_rate_percent / 100, 2) end;
+  total_amount := subtotal_amount + delivery_amount + tax_amount;
+
   if p_tender_method = 'cash' then
-    if p_cash_received is null or p_cash_received < subtotal_amount then raise exception 'insufficient_cash_received'; end if;
+    if p_cash_received is null or p_cash_received < total_amount then raise exception 'insufficient_cash_received'; end if;
     payment_state := 'succeeded';
   elsif p_tender_method = 'card' then
     payment_state := 'pending_authorization';
@@ -133,8 +202,8 @@ begin
   end if;
 
   created_receipt := 'BR-' || lpad(nextval('public.order_receipt_number_seq')::text, 8, '0');
-  insert into public.orders (id, store_id, customer_id, channel, status, subtotal, tax, total, receipt_no, fulfillment_method, policy_snapshot, payment_status)
-  values (created_order_id, p_store_id, case when caller_role = 'customer' then caller_id end, p_channel, case when payment_state = 'succeeded' then 'confirmed' else 'pending_payment' end, subtotal_amount, 0, subtotal_amount, created_receipt, p_fulfillment_method, p_policy_snapshot, payment_state);
+  insert into public.orders (id, store_id, customer_id, channel, status, subtotal, tax, total, receipt_no, fulfillment_method, delivery_fee, currency, policy_snapshot, payment_status)
+  values (created_order_id, p_store_id, case when caller_role = 'customer' then caller_id end, p_channel, case when payment_state = 'succeeded' then 'confirmed' else 'pending_payment' end, subtotal_amount, tax_amount, total_amount, created_receipt, p_fulfillment_method, delivery_amount, commerce.currency, p_policy_snapshot, payment_state);
 
   for item in select * from jsonb_to_recordset(p_items) as requested(variant_id uuid, quantity integer)
   loop
@@ -151,13 +220,13 @@ begin
   end loop;
 
   insert into public.payments (order_id, method, amount, status, provider_ref, cash_received, change_given, verification_status, proof_object_path, proof_file_name, proof_mime_type, proof_size_bytes)
-  values (created_order_id, p_tender_method, subtotal_amount, payment_state, nullif(trim(p_provider_ref), ''), p_cash_received,
-    case when p_tender_method = 'cash' then p_cash_received - subtotal_amount end,
+  values (created_order_id, p_tender_method, total_amount, payment_state, nullif(trim(p_provider_ref), ''), p_cash_received,
+    case when p_tender_method = 'cash' then p_cash_received - total_amount end,
     case when payment_state = 'pending_verification' then 'pending' else 'not_required' end,
     nullif(trim(p_proof_object_path), ''), nullif(trim(p_proof_file_name), ''), nullif(trim(p_proof_mime_type), ''), p_proof_size_bytes);
   insert into public.audit_log (actor_user_id, store_id, action, entity_type, entity_id, after_data)
-  values (caller_id, p_store_id, 'create', 'order', created_order_id::text, jsonb_build_object('receipt_no', created_receipt, 'total', subtotal_amount, 'payment_status', payment_state));
-  return query select created_order_id, created_receipt, subtotal_amount, payment_state;
+  values (caller_id, p_store_id, 'create', 'order', created_order_id::text, jsonb_build_object('receipt_no', created_receipt, 'total', total_amount, 'payment_status', payment_state));
+  return query select created_order_id, created_receipt, subtotal_amount, delivery_amount, tax_amount, total_amount, payment_state;
 end;
 $$;
 

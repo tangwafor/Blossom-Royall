@@ -57,6 +57,8 @@ import {
   saveAccountFitProfile,
   saveTenantVendor,
   saveTenantVendorStorefront,
+  saveTenantCommerceSettings,
+  placeTenantOrder,
   type TenantContext,
   type TenantProductSummary,
   type TenantVendorStorefront,
@@ -1187,6 +1189,17 @@ function ProductCatalogManager() {
     );
   const publishAll = () =>
     persist(drafts.map((item) => ({ ...item, status: "Published" })));
+  const addTenantProductToBag = (product: TenantProductSummary) => {
+    const variant = product.variants.find((item) => item.quantity > 0);
+    if (!variant) { setMessage(`${product.name} has no available variant.`); return; }
+    const storageKey = "br-customer-bag:blossom-royall";
+    const stored = localStorage.getItem(storageKey);
+    const current: BagItem[] = stored ? JSON.parse(stored) : [];
+    if (current.some((item) => item.variantId === variant.id)) { setMessage(`${product.name} is already in the checkout bag.`); return; }
+    const next: BagItem[] = [...current, { variantId: variant.id, name: product.name, vendor: product.vendorName, price: variant.price, quantity: 1, fulfillment: "Tenant inventory" }];
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    setMessage(`${product.name} was added to the production checkout bag.`);
+  };
   return (
     <>
       <section className="panel collection-studio">
@@ -1293,7 +1306,7 @@ function ProductCatalogManager() {
         {tenantProducts.map((product) => {
           const quantity = product.variants.reduce((sum, variant) => sum + variant.quantity, 0);
           const price = product.variants[0]?.price || 0;
-          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer></article>;
+          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer><button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button></article>;
         })}
         {!tenantProducts.length && <section className="panel help-empty"><Package /><h3>No production products yet</h3><p>Vendor and product records will appear here after approved catalog data is added.</p></section>}
       </div> : <div className="product-grid">
@@ -2521,6 +2534,18 @@ function VendorBrandManager() {
 
 function BusinessSetup() {
   const { value: settings, update, save, saved } = useStoreSettings();
+  const { value: delivery } = useDeliverySettings();
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  const [productionNotice, setProductionNotice] = useState("");
+  useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  const saveSettings = async () => {
+    save();
+    if (tenantContext.mode !== "production") { setProductionNotice("Settings remain in the private device preview until an authorized production account signs in."); return; }
+    try {
+      await saveTenantCommerceSettings(tenantContext, { currency: settings.currency, taxRatePercent: settings.taxRatePercent, taxInclusive: settings.taxInclusive, deliveryTaxable: delivery.deliveryTaxable, pickupEnabled: delivery.pickupEnabled, localDeliveryEnabled: delivery.localDeliveryEnabled, localFee: delivery.localFee, freeLocalMinimum: delivery.freeLocalMinimum, shippingEnabled: delivery.shippingEnabled, shippingFee: delivery.shippingFee });
+      setProductionNotice("Authoritative tenant tax and delivery settings were saved with an audit record.");
+    } catch (error) { setProductionNotice(error instanceof Error ? error.message : "Production settings were not saved."); }
+  };
   return (
     <div className="content inner policy-center">
       <div className="view-head">
@@ -2532,7 +2557,7 @@ function BusinessSetup() {
             checkout, customer messages, and printed receipts.
           </p>
         </div>
-        <button className="primary" onClick={save}>
+        <button className="primary" onClick={() => void saveSettings()}>
           <Check />
           {saved ? "Business settings saved" : "Save business settings"}
         </button>
@@ -2543,6 +2568,7 @@ function BusinessSetup() {
           Changes are active throughout this tenant preview.
         </div>
       )}
+      {productionNotice && <p className="policy-saved" aria-live="polite">{productionNotice}</p>}
       <section className="policy-grid">
         <article className="panel policy-form">
           <header>
@@ -2944,8 +2970,18 @@ function SharedCommerceCenter() {
 
 function DeliveryCenter() {
   const { value: settings, update, save, saved } = useDeliverySettings();
+  const { value: storeSettings } = useStoreSettings();
   const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  const [productionNotice, setProductionNotice] = useState("");
   useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  const saveSettings = async () => {
+    save();
+    if (tenantContext.mode !== "production") { setProductionNotice("Delivery settings remain in the private device preview."); return; }
+    try {
+      await saveTenantCommerceSettings(tenantContext, { currency: storeSettings.currency, taxRatePercent: storeSettings.taxRatePercent, taxInclusive: storeSettings.taxInclusive, deliveryTaxable: settings.deliveryTaxable, pickupEnabled: settings.pickupEnabled, localDeliveryEnabled: settings.localDeliveryEnabled, localFee: settings.localFee, freeLocalMinimum: settings.freeLocalMinimum, shippingEnabled: settings.shippingEnabled, shippingFee: settings.shippingFee });
+      setProductionNotice("Authoritative delivery and tax settings were saved with an audit record.");
+    } catch (error) { setProductionNotice(error instanceof Error ? error.message : "Production delivery settings were not saved."); }
+  };
   const routes = tenantContext.mode === "production" ? [] : [
     [
       "#BR-2052",
@@ -2983,12 +3019,18 @@ function DeliveryCenter() {
             customer informed through one Blossom Royall experience.
           </p>
         </div>
-        <button className="primary" onClick={save}>
+        <button className="primary" onClick={() => void saveSettings()}>
           <Check />
           {saved ? "Delivery saved" : "Save delivery"}
         </button>
       </div>
+      {productionNotice && <p className="policy-saved" aria-live="polite">{productionNotice}</p>}
       <section className="delivery-modes">
+        <label className={settings.deliveryTaxable ? "enabled" : ""}>
+          <input type="checkbox" checked={settings.deliveryTaxable} onChange={(event) => update("deliveryTaxable", event.target.checked)} />
+          <CircleDollarSign />
+          <span><b>Tax delivery fees</b><small>Include eligible delivery charges in the configured tax base</small></span>
+        </label>
         <label className={settings.pickupEnabled ? "enabled" : ""}>
           <input
             type="checkbox"
@@ -3806,10 +3848,12 @@ function AftercareCenter() {
 }
 
 type BagItem = {
+  variantId?: string;
   name: string;
   vendor: string;
   price: number;
   fulfillment: string;
+  quantity?: number;
 };
 
 type CheckoutTender = "Cash" | "Card" | "Bank transfer" | "Zelle" | "Venmo" | "PayPal" | "Cash App" | "Mobile money" | "Check";
@@ -3828,14 +3872,19 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
   const [cashReceived, setCashReceived] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentProof, setPaymentProof] = useState<PaymentProof | null>(null);
+  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  const [authoritativeAmounts, setAuthoritativeAmounts] = useState<{ subtotal: number; deliveryFee: number; tax: number; total: number; paymentStatus: string } | null>(null);
   const [placed, setPlaced] = useState(false);
-  const [orderId] = useState(
+  const [orderId, setOrderId] = useState(
     () => `${store.orderPrefix || "ORDER"}-${Date.now().toString().slice(-6)}`,
   );
   useEffect(() => {
     const stored = localStorage.getItem("br-customer-bag:blossom-royall");
     if (stored) setBag(JSON.parse(stored));
+    void resolveTenantContext().then(setTenantContext);
   }, []);
   const subtotal = bag.reduce((sum, item) => sum + item.price, 0);
   const deliveryFee =
@@ -3858,7 +3907,12 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
       style: "currency",
       currency: store.currency,
     }).format(amount);
-  const placeOrder = () => {
+  const receiptSubtotal = authoritativeAmounts?.subtotal ?? subtotal;
+  const receiptDeliveryFee = authoritativeAmounts?.deliveryFee ?? deliveryFee;
+  const receiptTax = authoritativeAmounts?.tax ?? tax;
+  const receiptTotal = authoritativeAmounts?.total ?? total;
+  const receiptChange = tender === "Cash" ? Math.max(0, received - receiptTotal) : 0;
+  const placeOrder = async () => {
     if (tender === "Cash" && received < amountDue) {
       setPaymentMessage(`Enter at least ${money(amountDue)} received in cash.`);
       return;
@@ -3867,17 +3921,43 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
       setPaymentMessage("Add a payment reference or proof of payment before placing the order.");
       return;
     }
-    const verificationStatus = requiresEvidence ? "Pending staff verification" : "Recorded at checkout";
+    let finalizedOrderId = orderId;
+    let finalizedAmounts = { subtotal, deliveryFee, tax, total, paymentStatus: requiresEvidence ? "pending_verification" : "recorded" };
+    if (tenantContext.mode === "production") {
+      if (payment === "layaway") { setPaymentMessage("Production layaway activation is pending its schedule and balance transaction contract."); return; }
+      if (tender === "Card") { setPaymentMessage("Card authorization is not connected yet. Use cash or a reference based payment during the controlled pilot."); return; }
+      if (bag.some((item) => !item.variantId)) { setPaymentMessage("Production checkout accepts only products loaded from the tenant catalog."); return; }
+      setSubmitting(true);
+      try {
+        const tenderMethod = ({ Cash: "cash", Card: "card", "Bank transfer": "bank_transfer", Zelle: "zelle", Venmo: "venmo", PayPal: "paypal", "Cash App": "cash_app", "Mobile money": "mobile_money", Check: "check" } as const)[tender];
+        const result = await placeTenantOrder(tenantContext, {
+          channel: tenantContext.role === "customer" ? "online" : "onsite", fulfillmentMethod: method, tenderMethod,
+          items: bag.map((item) => ({ variantId: item.variantId!, quantity: item.quantity || 1 })),
+          cashReceived: tender === "Cash" ? received : undefined, providerReference: paymentReference || undefined,
+          proof: paymentProofFile || undefined, policySnapshot: policy as unknown as Record<string, unknown>,
+        });
+        finalizedOrderId = result.receiptNo;
+        finalizedAmounts = { subtotal: result.subtotal, deliveryFee: result.deliveryFee, tax: result.tax, total: result.total, paymentStatus: result.paymentStatus };
+        setOrderId(result.receiptNo);
+        setAuthoritativeAmounts(finalizedAmounts);
+      } catch (error) {
+        setPaymentMessage(error instanceof Error ? `Production checkout was not completed: ${error.message}` : "Production checkout was not completed.");
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+    const verificationStatus = finalizedAmounts.paymentStatus === "pending_verification" ? "Pending staff verification" : "Recorded at checkout";
     const order = {
-      id: `#${orderId}`,
+      id: `#${finalizedOrderId}`,
       items: bag,
       method,
       payment,
-      total,
+      total: finalizedAmounts.total,
       deposit,
       tender,
       cashReceived: tender === "Cash" ? received : undefined,
-      changeDue: tender === "Cash" ? changeDue : undefined,
+      changeDue: tender === "Cash" ? Math.max(0, received - finalizedAmounts.total) : undefined,
       paymentReference: paymentReference || undefined,
       paymentProof,
       verificationStatus,
@@ -3889,7 +3969,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
       JSON.stringify(order),
     );
     localStorage.removeItem("br-customer-bag:blossom-royall");
-    localStorage.setItem("br-payment-audit:blossom-royall", JSON.stringify({ orderId, tender, amount: amountDue, verificationStatus, recordedAt: new Date().toISOString() }));
+    localStorage.setItem("br-payment-audit:blossom-royall", JSON.stringify({ orderId: finalizedOrderId, tender, amount: finalizedAmounts.total, verificationStatus, recordedAt: new Date().toISOString() }));
     setPlaced(true);
   };
   if (!bag.length && !placed)
@@ -3935,7 +4015,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
             one update when it is ready for {method}.
           </p>
           <div>
-            <b>{money(total)}</b>
+            <b>{money(receiptTotal)}</b>
             <small>
               {payment === "layaway"
                 ? `${money(deposit)} deposit collected, balance scheduled`
@@ -4004,23 +4084,23 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
           <dl>
             <div>
               <dt>Merchandise</dt>
-              <dd>{money(subtotal)}</dd>
+              <dd>{money(receiptSubtotal)}</dd>
             </div>
-            {deliveryFee > 0 && (
+            {receiptDeliveryFee > 0 && (
               <div>
                 <dt>Delivery</dt>
-                <dd>{money(deliveryFee)}</dd>
+                <dd>{money(receiptDeliveryFee)}</dd>
               </div>
             )}
-            {tax > 0 && (
+            {receiptTax > 0 && (
               <div>
                 <dt>Tax</dt>
-                <dd>{money(tax)}</dd>
+                <dd>{money(receiptTax)}</dd>
               </div>
             )}
             <div className="receipt-total">
               <dt>{payment === "layaway" ? "Deposit paid" : "Total paid"}</dt>
-              <dd>{money(payment === "layaway" ? deposit : total)}</dd>
+              <dd>{money(payment === "layaway" ? deposit : receiptTotal)}</dd>
             </div>
             {payment === "layaway" && (
               <div>
@@ -4031,7 +4111,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
             {tender === "Cash" && (
               <>
                 <div><dt>Cash received</dt><dd>{money(received)}</dd></div>
-                <div><dt>Change given</dt><dd>{money(changeDue)}</dd></div>
+                <div><dt>Change given</dt><dd>{money(receiptChange)}</dd></div>
               </>
             )}
             {paymentReference && <div><dt>Payment reference</dt><dd>{paymentReference}</dd></div>}
@@ -4175,6 +4255,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
               if (!file) return;
               if (file.size > 5 * 1024 * 1024) { setPaymentMessage("Proof of payment must be 5 MB or smaller."); event.target.value = ""; return; }
               setPaymentProof({ name: file.name, type: file.type, size: file.size });
+              setPaymentProofFile(file);
               setPaymentMessage("");
             }} /></label>
             <small className="verification-note"><ShieldCheck />Evidence remains pending until an authorized staff member verifies it.</small>
@@ -4200,8 +4281,8 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
             </div>
           </dl>
           {paymentMessage && <output className="payment-warning">{paymentMessage}</output>}
-          <button className="primary place-order" onClick={placeOrder}>
-            {payment === "layaway" ? "Start secure layaway" : "Place order"}
+          <button className="primary place-order" onClick={placeOrder} disabled={submitting}>
+            {submitting ? "Recording secure order" : payment === "layaway" ? "Start secure layaway" : "Place order"}
             <ArrowUpRight />
           </button>
           <p>

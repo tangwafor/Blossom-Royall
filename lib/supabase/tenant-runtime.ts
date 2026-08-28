@@ -86,25 +86,28 @@ export async function loadTenantOrders(context: TenantContext): Promise<TenantOr
 export type TenantProductSummary = {
   id: string;
   name: string;
+  vendorName: string;
   category: string;
   status: string;
-  variants: Array<{ sku: string; size: string | null; color: string | null; price: number; quantity: number }>;
+  variants: Array<{ id: string; sku: string; size: string | null; color: string | null; price: number; quantity: number }>;
 };
 
 export async function loadTenantProducts(context: TenantContext): Promise<TenantProductSummary[]> {
   if (context.mode !== "production" || !context.storeId) return [];
   const { data, error } = await createClient()
     .from("products")
-    .select("id, name, category, status, product_variants(sku, size, color, price, qty_on_hand)")
+    .select("id, name, category, status, vendors(name), product_variants(id, sku, size, color, price, qty_on_hand)")
     .eq("store_id", context.storeId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data || []).map((product) => ({
     id: product.id,
     name: product.name,
+    vendorName: (product.vendors as { name?: string } | null)?.name || "Tenant vendor",
     category: product.category || "Uncategorized",
     status: product.status || "draft",
-    variants: (product.product_variants || []).map((variant: { sku: string; size: string | null; color: string | null; price: number | string; qty_on_hand: number }) => ({
+    variants: (product.product_variants || []).map((variant: { id: string; sku: string; size: string | null; color: string | null; price: number | string; qty_on_hand: number }) => ({
+      id: variant.id,
       sku: variant.sku,
       size: variant.size,
       color: variant.color,
@@ -192,6 +195,32 @@ export async function removeTenantVendorStorefront(context: TenantContext, store
   if (error) throw error;
 }
 
+export type TenantCommerceSettingsInput = {
+  currency: string;
+  taxRatePercent: number;
+  taxInclusive: boolean;
+  deliveryTaxable: boolean;
+  pickupEnabled: boolean;
+  localDeliveryEnabled: boolean;
+  localFee: number;
+  freeLocalMinimum: number;
+  shippingEnabled: boolean;
+  shippingFee: number;
+};
+
+export async function saveTenantCommerceSettings(context: TenantContext, settings: TenantCommerceSettingsInput) {
+  if (context.mode !== "production" || !context.storeId || !context.userId || !canManageTenant(context.role)) throw new Error("Owner or manager production access is required.");
+  const { error } = await createClient().from("store_commerce_settings").upsert({
+    store_id: context.storeId, currency: settings.currency, tax_rate_percent: settings.taxRatePercent,
+    tax_inclusive: settings.taxInclusive, delivery_taxable: settings.deliveryTaxable,
+    pickup_enabled: settings.pickupEnabled, local_delivery_enabled: settings.localDeliveryEnabled,
+    local_delivery_fee: settings.localFee, free_local_minimum: settings.freeLocalMinimum,
+    shipping_enabled: settings.shippingEnabled, shipping_fee: settings.shippingFee,
+    created_by: context.userId, updated_by: context.userId, updated_at: new Date().toISOString(),
+  }, { onConflict: "store_id" });
+  if (error) throw error;
+}
+
 export type TenantCheckoutRequest = {
   channel: "onsite" | "online";
   fulfillmentMethod: "pickup" | "delivery" | "shipping";
@@ -203,7 +232,7 @@ export type TenantCheckoutRequest = {
   policySnapshot?: Record<string, unknown>;
 };
 
-export type TenantCheckoutResult = { orderId: string; receiptNo: string; total: number; paymentStatus: string };
+export type TenantCheckoutResult = { orderId: string; receiptNo: string; subtotal: number; deliveryFee: number; tax: number; total: number; paymentStatus: string };
 
 export async function placeTenantOrder(context: TenantContext, request: TenantCheckoutRequest): Promise<TenantCheckoutResult> {
   if (context.mode !== "production" || !context.storeId || !context.userId) throw new Error("Authenticated tenant access is required.");
@@ -235,7 +264,7 @@ export async function placeTenantOrder(context: TenantContext, request: TenantCh
   }
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("The order did not return a receipt.");
-  return { orderId: row.order_id, receiptNo: row.receipt_no, total: Number(row.total), paymentStatus: row.payment_status };
+  return { orderId: row.order_id, receiptNo: row.receipt_no, subtotal: Number(row.subtotal), deliveryFee: Number(row.delivery_fee), tax: Number(row.tax), total: Number(row.total), paymentStatus: row.payment_status };
 }
 
 export type AccountFitProfile = {

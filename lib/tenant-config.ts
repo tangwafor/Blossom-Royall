@@ -33,6 +33,7 @@ export type CommerceSettings = {
 };
 
 export type DeliverySettings = {
+  deliveryTaxable: boolean;
   pickupEnabled: boolean;
   localDeliveryEnabled: boolean;
   shippingEnabled: boolean;
@@ -94,6 +95,7 @@ export const commerceDefaults: CommerceSettings = {
 };
 
 export const deliveryDefaults: DeliverySettings = {
+  deliveryTaxable: false,
   pickupEnabled: true,
   localDeliveryEnabled: true,
   shippingEnabled: true,
