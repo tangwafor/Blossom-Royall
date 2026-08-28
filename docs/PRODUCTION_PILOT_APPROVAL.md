@@ -32,6 +32,8 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 7. `20260828170000_account_deletion_requests.sql`
 
+8. `20260828173500_account_deletion_operations.sql`
+
 The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T16-21-55Z.sql`. A second fresh snapshot must be captured immediately before production execution if the production schema has changed since that file was created.
 
 ## Proven local checks
@@ -69,6 +71,8 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T16-21-55Z.sql`. A
 9. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
 
 10. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+
+11. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
 
 ## Stop conditions
 

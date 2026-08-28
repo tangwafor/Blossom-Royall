@@ -14,6 +14,12 @@ const words = {
   es: { back: "Volver", language: "Idioma", eyebrow: "OPCIONES DE PRIVACIDAD", title: "Eliminar su cuenta de Blossom Royall", intro: "Solicite la eliminación de su cuenta y datos personales. La solicitud se completará en un plazo de siete días.", signedOut: "Inicie sesión para verificar su identidad y solicitar la eliminación.", signIn: "Inicio de sesión seguro", consequences: "Qué sucede", one: "Se eliminan su perfil, medidas, preferencias, mensajes y contenido personal.", two: "Los registros exigidos por impuestos, fraude, disputas o ley pueden conservarse de forma anónima.", three: "El único propietario debe transferir la propiedad antes de eliminar la cuenta.", confirm: "Entiendo que perderé el acceso y que la eliminación no puede revertirse tras completarse.", type: "Escriba DELETE para confirmar", request: "Solicitar eliminación", requesting: "Enviando solicitud", pending: "Eliminación programada", scheduled: "Finalización prevista", cancel: "Cancelar solicitud", canceled: "Su solicitud fue cancelada.", privacy: "Leer la política de privacidad", error: "No se pudo completar la solicitud.", transfer: "Transfiera la propiedad de la tienda antes de eliminar esta cuenta." },
 } as const;
 
+const statusWords = {
+  en: { processing: "Deletion in progress", processingNote: "Verified deletion has begun and can no longer be canceled. Private content is being removed safely.", review: "Operator review in progress", reviewNote: "The privacy team has been alerted and will complete the request. No new request is needed." },
+  fr: { processing: "Suppression en cours", processingNote: "La suppression v\u00e9rifi\u00e9e a commenc\u00e9 et ne peut plus \u00eatre annul\u00e9e. Le contenu priv\u00e9 est supprim\u00e9 en toute s\u00e9curit\u00e9.", review: "Examen par l\u2019\u00e9quipe en cours", reviewNote: "L\u2019\u00e9quipe de confidentialit\u00e9 a \u00e9t\u00e9 alert\u00e9e et terminera la demande. Aucune nouvelle demande n\u2019est n\u00e9cessaire." },
+  es: { processing: "Eliminaci\u00f3n en curso", processingNote: "La eliminaci\u00f3n verificada ha comenzado y ya no puede cancelarse. El contenido privado se est\u00e1 eliminando de forma segura.", review: "Revisi\u00f3n del equipo en curso", reviewNote: "El equipo de privacidad ha sido avisado y completar\u00e1 la solicitud. No es necesaria una nueva solicitud." },
+} as const;
+
 export default function DeleteAccountPage() {
   const [locale, setLocale] = useState<Locale>("en");
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
@@ -21,6 +27,7 @@ export default function DeleteAccountPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const t = words[locale];
+  const statusText = statusWords[locale];
   useEffect(() => {
     const browserLocale = navigator.language.slice(0, 2) as Locale;
     if (browserLocale in words) setLocale(browserLocale);
@@ -30,7 +37,7 @@ export default function DeleteAccountPage() {
       setSignedIn(Boolean(user));
       if (!user) return;
       const { data } = await client.from("account_deletion_requests").select("status, scheduled_for, retention_summary").eq("user_id", user.id).maybeSingle();
-      if (data?.status === "pending") setRequest(data as RequestState);
+      if (data && ["pending", "processing", "retry_pending", "blocked_operator_review", "blocked_legal_retention"].includes(data.status)) setRequest(data as RequestState);
     };
     void load();
   }, []);
@@ -48,12 +55,14 @@ export default function DeleteAccountPage() {
     setLoading(true); const { error } = await createClient().rpc("cancel_account_deletion"); setLoading(false);
     if (error) { setMessage(t.error); return; } setRequest(null); setMessage(t.canceled);
   };
+  const processing = request?.status === "processing" || request?.status === "retry_pending";
+  const operatorReview = request?.status === "blocked_operator_review" || request?.status === "blocked_legal_retention";
   return <main className="deletion-page"><section className="deletion-card">
     <header><Link href="/workspace"><ArrowLeft />{t.back}</Link><label>{t.language}<select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label></header>
     <BrandMark className="deletion-mark" /><span className="eyebrow">{t.eyebrow}</span><h1>{t.title}</h1><p>{t.intro}</p>
     {signedIn === null && <LoaderCircle className="spin" />}
     {signedIn === false && <div className="deletion-signin"><ShieldCheck /><p>{t.signedOut}</p><Link className="primary" href="/auth?returnTo=%2Faccount%2Fdelete">{t.signIn}</Link></div>}
-    {signedIn && request && <div className="deletion-pending"><Check /><h2>{t.pending}</h2><p>{t.scheduled}: {new Date(request.scheduled_for).toLocaleString(locale)}</p><button onClick={() => void cancel()} disabled={loading}>{t.cancel}</button></div>}
+    {signedIn && request && <div className="deletion-pending"><Check /><h2>{operatorReview ? statusText.review : processing ? statusText.processing : t.pending}</h2>{operatorReview ? <p>{statusText.reviewNote}</p> : processing ? <p>{statusText.processingNote}</p> : <><p>{t.scheduled}: {new Date(request.scheduled_for).toLocaleString(locale)}</p><button onClick={() => void cancel()} disabled={loading}>{t.cancel}</button></>}</div>}
     {signedIn && !request && <><section className="deletion-effects"><h2>{t.consequences}</h2><ol><li>{t.one}</li><li>{t.two}</li><li>{t.three}</li></ol></section><form onSubmit={submit}><label className="agreement"><input name="confirmation" type="checkbox" value="accepted" required /><span>{t.confirm}</span></label><label>{t.type}<input name="phrase" autoComplete="off" required pattern="DELETE" /></label>{message && <output className="auth-message">{message}</output>}<button className="danger deletion-submit" disabled={loading}><Trash2 />{loading ? t.requesting : t.request}</button></form></>}
     {message && request && <output className="auth-message">{message}</output>}
     <footer><Link href="/privacy">{t.privacy}</Link><b>Powered by TA Tech</b><span>Is not where you have been but where you are going.</span></footer>

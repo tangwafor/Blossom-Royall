@@ -1,0 +1,50 @@
+name: Account deletion processor
+
+on:
+  schedule:
+    # The workflow remains disabled until the production migration, function, secrets, and operator review are complete.
+    - cron: "41 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: blossom-royall-account-deletion-processor
+  cancel-in-progress: false
+
+jobs:
+  process:
+    if: ${{ vars.ACCOUNT_DELETION_PROCESSOR_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Process due deletion requests
+        env:
+          AUTOMATION_RUNNER_SECRET: ${{ secrets.AUTOMATION_RUNNER_SECRET }}
+        run: |
+          test -n "$AUTOMATION_RUNNER_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "x-automation-secret: $AUTOMATION_RUNNER_SECRET" \
+            https://app.blossomroyall.com/automation/account-deletions
+      - name: Open or update an operator incident
+        if: failure()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = "Account deletion processor failed";
+            const body = `The Blossom Royall account deletion processor failed.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nReview due requests, worker claims, storage cleanup, authentication deletion, and completion evidence. Do not mark a request complete manually without evidence.`;
+            const labelName = "privacy-operations";
+            const labels = await github.paginate(github.rest.issues.listLabelsForRepo, { owner: context.repo.owner, repo: context.repo.repo });
+            if (!labels.some((label) => label.name === labelName)) {
+              await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: labelName, color: "7A3048", description: "Privacy request operations incident" });
+            }
+            const existing = await github.paginate(github.rest.issues.listForRepo, { owner: context.repo.owner, repo: context.repo.repo, state: "open", labels: labelName });
+            const incident = existing.find((issue) => issue.title === title);
+            if (incident) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: incident.number, body });
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body, labels: [labelName] });
+            }

@@ -44,3 +44,9 @@
   to = "/404.html"
   status = 404
   force = true
+
+[[redirects]]
+  from = "/automation/account-deletions"
+  to = "https://ggncqdgpadglvvfxbcng.supabase.co/functions/v1/process-account-deletions"
+  status = 200
+  force = true

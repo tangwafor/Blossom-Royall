@@ -38,7 +38,7 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 2. Implement the reviewed deletion processor that removes or anonymizes eligible personal data while preserving only legally required transaction records.
 
-3. Add an operator queue, completion evidence, and overdue deletion request monitoring. The public route synthetic alert is staged locally.
+3. Deploy and activate the staged account deletion worker after production migration approval, secret configuration, and operator review. The worker is disabled by default. Its local database suite verifies due claims, durable retries, cancellation lockout after preparation, private evidence discovery, identity anonymization, atomic authentication deletion, and completion evidence.
 
 4. Compile, test, and sign the staged native projects for Apple and Google. Android compilation still requires a working Java 21 and Android software development kit environment. iOS compilation and signing require macOS, Xcode, and the Apple team credentials.
 
@@ -56,7 +56,7 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 ## Production boundary
 
-The account deletion migration is staged locally. It has not been applied to production. Production database promotion still requires explicit approval.
+The account deletion migrations and processor are staged locally. They have not been applied or deployed to production. Production database and function promotion still require explicit approval.
 
 The controlled activation sequence and approval boundary are maintained in `docs/PRODUCTION_PILOT_APPROVAL.md`.
 
