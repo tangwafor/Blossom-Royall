@@ -2879,6 +2879,12 @@ h3 {
 .notification-center article button { min-height: 34px; }
 .notification-center footer { display: flex; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--line); }
 .notification-center footer button { display: flex; align-items: center; gap: 6px; }
+.preview-data-banner, .production-data-banner { margin: 14px 3.2% 0; padding: 12px 16px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--soft); color: var(--ink); }
+.preview-data-banner > svg, .production-data-banner > svg { width: 19px; color: var(--wine); flex: 0 0 auto; }
+.preview-data-banner > span, .production-data-banner > span { display: grid; gap: 2px; flex: 1; }
+.preview-data-banner small, .production-data-banner small { color: var(--muted); line-height: 1.4; }
+.preview-data-banner a { color: var(--wine); font-weight: 800; white-space: nowrap; }
+.production-data-banner { background: var(--panel); }
 .staff-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .staff-summary article { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); display: grid; gap: 7px; }
 .staff-summary small { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
@@ -2923,6 +2929,8 @@ h3 {
   .staff-roster article > div { grid-column: 1 / -1; justify-content: flex-start; }
 }
 @media (max-width: 680px) {
+  .preview-data-banner, .production-data-banner { margin: 10px 16px 0; align-items: flex-start; flex-wrap: wrap; }
+  .preview-data-banner a { width: 100%; padding-left: 30px; }
   .assistant-launcher { right: 14px; bottom: 14px; }
   .assistant-panel { right: 10px; bottom: 76px; width: calc(100vw - 20px); max-height: calc(100vh - 92px); }
   .help-controls, .help-grid { grid-template-columns: 1fr; }

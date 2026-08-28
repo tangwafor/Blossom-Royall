@@ -30,6 +30,7 @@
 | Staff | Owner, manager, staff | Working preview | Tenant staff directory, invitation and employment lifecycle, editable schedules and breaks, clock activity, weekly pay estimates, leave requests and decisions, local persistence, and accountable change history |
 | Policy Center | Owner, manager | Working preview | Tenant keyed returns, exchanges, final sale, fees, eligibility preview, layaway terms, and local persistence |
 | Business Setup | Owner, manager | Working preview | Public and legal identity, owner display name, address, receipt contacts, currency, locale, timezone, tax treatment, tax rate, and generated order prefix |
+| Tenant data boundary | All operating roles | Production connected | Public preview records are visibly labeled. Authenticated workspaces load tenant scoped orders, products, and vendors, with honest empty states instead of sample activity |
 | Aftercare | Owner, manager, staff | Working preview | Return approval, exchange reservation, exception review, layaway reminders, grace periods, and accountable history |
 | Signed vendor research | Owner, manager | Four video confirmed labels documented with verification status, public evidence, positioning, and onboarding gaps |
 | Established mall retail research | Owner, manager | Nine neighboring retail benchmarks covering policy rules, loyalty, fulfillment, marketplace boundaries, services, and a Blossom Royall capability blueprint |

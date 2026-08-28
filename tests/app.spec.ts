@@ -681,6 +681,15 @@ test("keeps vendor writes in a clearly identified preview without tenant members
   await expect(runtime).toContainText("authorized Blossom Royall account");
 });
 
+test("clearly labels sample activity as preview data", async ({ page }) => {
+  await page.route("**/auth/v1/user", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }));
+  await page.goto("/");
+  const boundary = page.getByRole("complementary", { name: "Data source" });
+  await expect(boundary).toBeVisible();
+  await expect(boundary).toContainText("Figures and names on operating screens are examples");
+  await expect(boundary.getByRole("link", { name: "Open secure workspace" })).toHaveAttribute("href", "/auth");
+});
+
 test("configures a vendor agreement and issues a rent receipt", async ({
   page,
 }, testInfo) => {

@@ -25,3 +25,13 @@ The public prototype uses tenant keyed device persistence and synchronizes chang
 ## Engineering boundary
 
 Infrastructure secrets, schema migrations, row level security, payment webhooks, and security controls remain engineering managed. Business configuration belongs in the authorized owner or vendor interface.
+
+## Preview and production boundary
+
+1. Public operating screens identify example figures and names as preview data.
+
+2. Authenticated tenant workspaces query orders, products, and vendors by the membership store identifier.
+
+3. A production tenant with no records sees zero values and actionable empty states. It never inherits preview sales, products, fulfillment routes, settlement figures, or intelligence.
+
+4. Production product publishing remains unavailable until private media storage and database backed audit writes are active. Device only drafts cannot be presented as production records.

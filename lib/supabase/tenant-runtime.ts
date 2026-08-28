@@ -57,6 +57,63 @@ export async function loadTenantVendors(context: TenantContext) {
   return data || [];
 }
 
+export type TenantOrderSummary = {
+  id: string;
+  customer: string;
+  total: string;
+  status: string;
+  time: string;
+};
+
+export async function loadTenantOrders(context: TenantContext): Promise<TenantOrderSummary[]> {
+  if (context.mode !== "production" || !context.storeId) return [];
+  const { data, error } = await createClient()
+    .from("orders")
+    .select("id, total, status, created_at")
+    .eq("store_id", context.storeId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data || []).map((order) => ({
+    id: `#${String(order.id).slice(0, 8).toUpperCase()}`,
+    customer: "Customer",
+    total: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(order.total || 0)),
+    status: String(order.status || "Open"),
+    time: new Date(order.created_at).toLocaleString(),
+  }));
+}
+
+export type TenantProductSummary = {
+  id: string;
+  name: string;
+  category: string;
+  status: string;
+  variants: Array<{ sku: string; size: string | null; color: string | null; price: number; quantity: number }>;
+};
+
+export async function loadTenantProducts(context: TenantContext): Promise<TenantProductSummary[]> {
+  if (context.mode !== "production" || !context.storeId) return [];
+  const { data, error } = await createClient()
+    .from("products")
+    .select("id, name, category, status, product_variants(sku, size, color, price, qty_on_hand)")
+    .eq("store_id", context.storeId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((product) => ({
+    id: product.id,
+    name: product.name,
+    category: product.category || "Uncategorized",
+    status: product.status || "draft",
+    variants: (product.product_variants || []).map((variant: { sku: string; size: string | null; color: string | null; price: number | string; qty_on_hand: number }) => ({
+      sku: variant.sku,
+      size: variant.size,
+      color: variant.color,
+      price: Number(variant.price),
+      quantity: Number(variant.qty_on_hand),
+    })),
+  }));
+}
+
 export async function saveTenantVendor(context: TenantContext, vendor: { id: string; name: string; status: string }) {
   if (context.mode !== "production" || !context.storeId || !canManageTenant(context.role)) throw new Error("Owner or manager production access is required.");
   const { error } = await createClient().from("vendors").upsert({ id: vendor.id, store_id: context.storeId, name: vendor.name, status: vendor.status }, { onConflict: "id" });

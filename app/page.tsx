@@ -43,10 +43,13 @@ import BrandMark from "./brand-mark";
 import Link from "next/link";
 import {
   loadTenantVendors,
+  loadTenantOrders,
+  loadTenantProducts,
   removeTenantVendor,
   resolveTenantContext,
   saveTenantVendor,
   type TenantContext,
+  type TenantProductSummary,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -302,6 +305,8 @@ export default function Home() {
     [assistantAnswer, setAssistantAnswer] = useState(""),
     [tourStep, setTourStep] = useState<number | null>(null);
   const { value: storeSettings } = useStoreSettings();
+  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
+  const [visibleOrders, setVisibleOrders] = useState<Order[]>(orders);
   useEffect(() => {
     const saved = localStorage.getItem("br-theme");
     const next =
@@ -323,6 +328,16 @@ export default function Home() {
       setAssistantNameDraft(savedAssistantName);
     }
     if (!localStorage.getItem("br-tour-complete")) setTourStep(0);
+    void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
+      if (context.mode === "production") {
+        try {
+          setVisibleOrders((await loadTenantOrders(context)) as Order[]);
+        } catch {
+          setVisibleOrders([]);
+        }
+      }
+    });
   }, []);
   const toggleTheme = () => {
     const next = theme === "light" ? "dark" : "light";
@@ -332,10 +347,10 @@ export default function Home() {
   };
   const filtered = useMemo(
     () =>
-      orders.filter((o) =>
+      visibleOrders.filter((o) =>
         (o.id + o.customer).toLowerCase().includes(query.toLowerCase()),
       ),
-    [query],
+    [query, visibleOrders],
   );
   const go = (v: string) => {
     setActive(v);
@@ -410,7 +425,7 @@ export default function Home() {
             >
               <Icon />
               {label}
-              {label === "Orders" && <em>9</em>}
+              {label === "Orders" && visibleOrders.length > 0 && <em>{visibleOrders.length}</em>}
             </button>
           ))}
         </nav>
@@ -493,6 +508,19 @@ export default function Home() {
             </button>
           </section>
         </header>
+        {tenantContext?.mode === "preview" && (
+          <aside className="preview-data-banner" aria-label="Data source">
+            <ShieldCheck />
+            <span><b>Preview data</b><small>{tenantContext.reason} Figures and names on operating screens are examples until production records are connected.</small></span>
+            <Link href="/auth">Open secure workspace</Link>
+          </aside>
+        )}
+        {tenantContext?.mode === "production" && (
+          <aside className="production-data-banner" aria-label="Data source">
+            <ShieldCheck />
+            <span><b>Live tenant records</b><small>Only records authorized for this store membership appear here.</small></span>
+          </aside>
+        )}
         {notificationsOpen && (
           <section
             className="notification-center"
@@ -561,7 +589,7 @@ export default function Home() {
           </section>
         )}
         {active === "Command Center" && (
-          <Dashboard go={go} orders={filtered} openSale={() => setSale(true)} />
+          <Dashboard go={go} orders={filtered} openSale={() => setSale(true)} preview={tenantContext?.mode !== "production"} />
         )}
         {tourStep !== null && (
           <div className="tour-wrap" role="presentation">
@@ -1040,9 +1068,21 @@ function ProductCatalogManager() {
   const [drafts, setDrafts] = useState<ProductDraft[]>([]);
   const [message, setMessage] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  const [tenantProducts, setTenantProducts] = useState<TenantProductSummary[]>([]);
   useEffect(() => {
     const stored = localStorage.getItem(storageKey);
     if (stored) setDrafts(JSON.parse(stored));
+    void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
+      if (context.mode === "production") {
+        try {
+          setTenantProducts(await loadTenantProducts(context));
+        } catch {
+          setTenantProducts([]);
+        }
+      }
+    });
   }, []);
   const persist = (next: ProductDraft[]) => {
     setDrafts(next);
@@ -1103,12 +1143,13 @@ function ProductCatalogManager() {
   return (
     <>
       <section className="panel collection-studio">
+        <div className={`tenant-runtime ${tenantContext.mode}`}><ShieldCheck /><span><b>{tenantContext.mode === "production" ? "Tenant catalog active" : "Private preview mode"}</b><small>{tenantContext.reason}</small></span></div>
         <div className="panel-head">
           <span>
             <small className="eyebrow">COLLECTION STUDIO</small>
             <h3>Luxury item exposure</h3>
           </span>
-          <div>
+          {tenantContext.mode === "preview" && <div>
             <button onClick={() => setOpen((value) => !value)}>
               <Upload />
               {open ? "Close importer" : "Add one or bulk upload"}
@@ -1119,14 +1160,15 @@ function ProductCatalogManager() {
                 Publish all
               </button>
             )}
-          </div>
+          </div>}
         </div>
         <p>
           Drop in one hero item or a complete collection. Every photograph is
           resized, renamed, and converted to a storefront ready WebP asset
           automatically.
         </p>
-        {open && (
+        {tenantContext.mode === "production" && <p className="control-note"><ShieldCheck />Production displays only tenant catalog records. New product publishing activates after private media storage and the mandatory fresh database snapshot are available.</p>}
+        {tenantContext.mode === "preview" && open && (
           <form className="collection-importer" onSubmit={importItems}>
             <label>
               Vendor
@@ -1200,7 +1242,14 @@ function ProductCatalogManager() {
           </div>
         )}
       </section>
-      <div className="product-grid">
+      {tenantContext.mode === "production" ? <div className="product-grid">
+        {tenantProducts.map((product) => {
+          const quantity = product.variants.reduce((sum, variant) => sum + variant.quantity, 0);
+          const price = product.variants[0]?.price || 0;
+          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer></article>;
+        })}
+        {!tenantProducts.length && <section className="panel help-empty"><Package /><h3>No production products yet</h3><p>Vendor and product records will appear here after approved catalog data is added.</p></section>}
+      </div> : <div className="product-grid">
         {products.map((p) => (
           <article className="product" key={p[2] as string}>
             <div>
@@ -1225,7 +1274,7 @@ function ProductCatalogManager() {
             {p[6] && <small className="channel-source">{p[6]}</small>}
           </article>
         ))}
-      </div>
+      </div>}
     </>
   );
 }
@@ -2370,7 +2419,9 @@ function BusinessSetup() {
 
 function SharedCommerceCenter() {
   const { value: settings, update, save, saved } = useCommerceSettings();
-  const payouts = [
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  const payouts = tenantContext.mode === "production" ? [] : [
     ["Africstyle Fashion", "$6,842.20", "$547.38", "$6,294.82", "Ready"],
     ["Blossom Collections", "$4,118.00", "$329.44", "$3,788.56", "Ready"],
     ["Jose Kako", "$3,764.50", "$301.16", "$3,463.34", "Review"],
@@ -2524,7 +2575,7 @@ function SharedCommerceCenter() {
             record.
           </p>
         </article>
-        <article className="panel rebalance-card">
+        {tenantContext.mode === "preview" ? <article className="panel rebalance-card">
           <div className="panel-head">
             <span>
               <small className="eyebrow">SMART REBALANCE</small>
@@ -2564,7 +2615,7 @@ function SharedCommerceCenter() {
               <button>Review</button>
             </li>
           </ol>
-        </article>
+        </article> : <article className="panel help-empty"><RefreshCw /><h3>No live rebalance proposals</h3><p>Recommendations will use this tenant's real inventory and demand history when those records are available.</p></article>}
       </section>
       <section className="panel payout-ledger">
         <div className="panel-head">
@@ -2597,6 +2648,7 @@ function SharedCommerceCenter() {
               )}
             </div>
           ))}
+          {!payouts.length && <div><span>No vendor settlements recorded</span><span>0</span><span>0</span><span>0</span><em>Waiting</em></div>}
         </div>
         <footer>
           <span>Customer tender</span>
@@ -2613,7 +2665,9 @@ function SharedCommerceCenter() {
 
 function DeliveryCenter() {
   const { value: settings, update, save, saved } = useDeliverySettings();
-  const routes = [
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  const routes = tenantContext.mode === "production" ? [] : [
     [
       "#BR-2052",
       "Amara N.",
@@ -2882,7 +2936,7 @@ function DeliveryCenter() {
           </ol>
         </article>
       </section>
-      <section className="panel channel-board">
+      {tenantContext.mode === "preview" ? <section className="panel channel-board">
         <div className="panel-head">
           <span>
             <small className="eyebrow">CHANNEL AVAILABILITY</small>
@@ -2920,7 +2974,7 @@ function DeliveryCenter() {
             <span>Ships September 18</span>
           </div>
         </div>
-      </section>
+      </section> : <section className="panel help-empty"><Package /><h3>No live channel inventory yet</h3><p>Onsite, online, preorder, and vendor fulfilled availability will appear only from authorized tenant product records.</p></section>}
       <section className="panel route-board">
         <div className="panel-head">
           <span>
@@ -2949,6 +3003,7 @@ function DeliveryCenter() {
               )}
             </div>
           ))}
+          {!routes.length && <div><span>No active fulfillment</span><span /><span /><em>Waiting</em><span /><span /></div>}
         </div>
       </section>
     </div>
@@ -5341,11 +5396,24 @@ function Dashboard({
   go,
   orders,
   openSale,
+  preview,
 }: {
   go: (x: string) => void;
   orders: Order[];
   openSale: () => void;
+  preview: boolean;
 }) {
+  if (!preview) {
+    const netSales = orders.reduce((sum, order) => sum + Number(order.total.replace(/[^0-9.-]/g, "")), 0);
+    const averageOrder = orders.length ? netSales / orders.length : 0;
+    return <div className="content">
+      <section className="welcome"><div><span className="eyebrow">WELCOME, DELLY</span><h2>Your live command center is ready.</h2><p>{orders.length ? "Current tenant orders are shown below." : "No production orders have been recorded yet. Preview sales never appear in this workspace."}</p></div><button onClick={openSale}>Open checkout <ArrowUpRight /></button></section>
+      <section className="metrics">
+        {[['Net sales', `$${netSales.toFixed(2)}`, 'Recorded'], ['Orders', String(orders.length), 'Recorded'], ['Avg. order', `$${averageOrder.toFixed(2)}`, 'Calculated'], ['Mall traffic', 'Not connected', 'Awaiting source']].map((metric, index) => <article key={metric[0]}><i className={`m${index}`}>{index === 0 ? '$' : index === 1 ? '↗' : index === 2 ? '◌' : '◇'}</i><span><small>{metric[0]}</small><b>{metric[1]}</b><em>{metric[2]}</em></span></article>)}
+      </section>
+      <section className="dashboard-grid lower"><article className="panel orders"><div className="panel-head"><span><small className="eyebrow">LIVE TENANT DATA</small><h3>Recent orders</h3></span><button onClick={() => go("Orders")}>View all <ChevronRight /></button></div><OrderTable rows={orders} /></article><article className="panel intelligence"><div className="panel-head"><span><small className="eyebrow">INTELLIGENCE</small><h3>Waiting for operating history</h3></span><Sparkles /></div><div><p>Recommendations activate after real sales, inventory, fitting, and fulfillment events are available.</p><button onClick={() => go("Products")}>Prepare inventory <ArrowUpRight /></button></div></article></section>
+    </div>;
+  }
   return (
     <div className="content">
       <section className="welcome">
