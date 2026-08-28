@@ -67,6 +67,7 @@
 | Owner intelligence actions | Working interface, pending role scoped database persistence |
 | Tenant AI enhancement | Zero cost deterministic guidance is active. Gemini first automation and Anthropic fallback remain optional pending credentials, role enforcement, measured usage threshold, and budget approval. |
 | Tenant retail policy persistence | Working local tenant adapter, pending production snapshot and database connection |
+| Native application shell | Capacitor 8.5.0 Android and iOS projects staged with `com.blossomroyall.app`, Android target level 36, iOS target 15, portrait presentation, secure transport settings, branded icons and splash assets, Apple privacy manifest, and localized listing metadata. Structural verification is green. Android compilation awaits a working Java 21 and Android software development kit environment. iOS compilation and signing require macOS, Xcode, and Apple credentials. |
 | Native store signing | Pending Apple and Google credentials |
 | Production synthetic monitoring | Staged locally | Six hourly branded route, privacy, deletion, PWA asset, content and security header checks with GitHub incident creation on failure. Activation begins when the workflow reaches the production branch. |
 

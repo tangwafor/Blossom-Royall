@@ -11,26 +11,37 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "sync:africstyle": "node scripts/sync-africstyle-public-catalog.mjs",
-    "prepush": "npm run typecheck && npm run build:sites && npm run test:monitor && npm test",
+    "prepush": "npm run typecheck && npm run build:sites && npm run test:monitor && npm run native:verify && npm test",
     "monitor:production": "node scripts/synthetic-monitor.mjs",
     "test:monitor": "node scripts/synthetic-monitor-test.mjs",
+    "native:sync": "npm run build:sites && node scripts/run-capacitor.cjs sync",
+    "native:doctor": "node scripts/run-capacitor.cjs doctor",
+    "native:verify": "node scripts/verify-native-readiness.mjs",
     "verify:public": "npm run build:sites && node scripts/verify-public-build.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
     "lucide-react": "^0.468.0",
-    "next": "^15.2.4",
+    "next": "^16.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@playwright/test": "^1.55.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
     "prettier": "^3.9.6",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "tar": "7.5.22",
+    "uuid": "14.0.2"
   }
 }

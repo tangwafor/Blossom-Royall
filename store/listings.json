@@ -1,0 +1,44 @@
+{
+  "appId": "com.blossomroyall.app",
+  "supportUrl": "https://app.blossomroyall.com/privacy",
+  "privacyPolicyUrl": "https://app.blossomroyall.com/privacy",
+  "accountDeletionUrl": "https://app.blossomroyall.com/account/delete",
+  "locales": {
+    "en-US": {
+      "apple": {
+        "name": "Blossom Royall",
+        "subtitle": "Your fashion mall, connected",
+        "keywords": "fashion,mall,fit,shopping,vendors,inventory,style"
+      },
+      "google": {
+        "name": "Blossom Royall",
+        "shortDescription": "Shop, find your fit, and connect with independent fashion stores."
+      },
+      "description": "Discover independent fashion stores, build coordinated looks, save your fit preferences, shop across sellers, and follow each order from checkout to fulfillment. Blossom Royall also gives approved owners, staff, and vendors one secure place to manage products, inventory, payments, receipts, and storefront operations."
+    },
+    "fr-FR": {
+      "apple": {
+        "name": "Blossom Royall",
+        "subtitle": "Votre centre mode connecté",
+        "keywords": "mode,centre commercial,taille,boutiques,style"
+      },
+      "google": {
+        "name": "Blossom Royall",
+        "shortDescription": "Achetez, trouvez votre taille et découvrez des boutiques indépendantes."
+      },
+      "description": "Découvrez des boutiques de mode indépendantes, composez des tenues, enregistrez vos préférences de taille, achetez auprès de plusieurs vendeurs et suivez chaque commande. Blossom Royall réunit aussi les produits, stocks, paiements, reçus et opérations des propriétaires, employés et vendeurs autorisés."
+    },
+    "es-ES": {
+      "apple": {
+        "name": "Blossom Royall",
+        "subtitle": "Tu centro de moda conectado",
+        "keywords": "moda,centro comercial,talla,tiendas,estilo"
+      },
+      "google": {
+        "name": "Blossom Royall",
+        "shortDescription": "Compra, encuentra tu talla y descubre tiendas de moda independientes."
+      },
+      "description": "Descubre tiendas de moda independientes, crea conjuntos, guarda tus preferencias de talla, compra a varios vendedores y sigue cada pedido. Blossom Royall también reúne productos, inventario, pagos, recibos y operaciones para propietarios, personal y vendedores autorizados."
+    }
+  }
+}

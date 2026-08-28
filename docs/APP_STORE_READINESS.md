@@ -26,6 +26,12 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 9. A scheduled zero cost synthetic monitor checks the branded workspace, privacy and deletion routes, PWA assets, certificate path, expected content, and security headers every six hours. Failures create or update a GitHub incident.
 
+10. Capacitor 8.5.0 Android and iOS projects are staged with application identifier `com.blossomroyall.app`, branded launcher and splash assets, portrait orientation, secure transport settings, Android target level 36, iOS deployment target 15, and an Apple privacy manifest.
+
+11. English, French, and Spanish store listing metadata and a submission review data inventory are staged under `store`.
+
+12. Next 16.3.3 and the native dependency tree report zero known npm audit findings as of August 28, 2026.
+
 ## Required before public submission
 
 1. Activate and monitor `privacy@blossomroyall.com`.
@@ -34,9 +40,9 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 3. Add an operator queue, completion evidence, and overdue deletion request monitoring. The public route synthetic alert is staged locally.
 
-4. Complete native packaging and signing for Apple and Google.
+4. Compile, test, and sign the staged native projects for Apple and Google. Android compilation still requires a working Java 21 and Android software development kit environment. iOS compilation and signing require macOS, Xcode, and the Apple team credentials.
 
-5. Add the Apple privacy manifest when the native shell and its final software development kits are selected.
+5. Reconcile the staged Apple privacy manifest after the final native plugins and software development kits are selected.
 
 6. Complete Apple privacy nutrition labels and Google Data safety declarations from the final production data inventory.
 

@@ -1,0 +1,45 @@
+{
+  "lastReviewed": "2026-08-28",
+  "tracking": false,
+  "dataSold": false,
+  "reviewRequiredBeforeSubmission": true,
+  "categories": [
+    {
+      "category": "Contact information",
+      "examples": ["name", "email", "phone", "delivery address"],
+      "linkedToIdentity": true,
+      "required": "Account contact information is required. Phone and delivery address depend on the selected workflow.",
+      "purposes": ["account management", "commerce", "fulfillment", "support", "security"]
+    },
+    {
+      "category": "Health and fitness",
+      "examples": ["optional body measurements", "fit preferences"],
+      "linkedToIdentity": true,
+      "required": "optional",
+      "purposes": ["fit recommendations", "customer requested vendor sharing"]
+    },
+    {
+      "category": "Purchases and financial information",
+      "examples": ["orders", "receipts", "payment method", "transaction reference", "optional payment proof"],
+      "linkedToIdentity": true,
+      "required": "Required when completing a purchase or recording a payment.",
+      "purposes": ["commerce", "fraud prevention", "accounting", "support"]
+    },
+    {
+      "category": "User content",
+      "examples": ["payment proof", "storefront media", "support and messaging content"],
+      "linkedToIdentity": true,
+      "required": "optional or role dependent",
+      "purposes": ["payment verification", "store operation", "support"]
+    },
+    {
+      "category": "Identifiers and diagnostics",
+      "examples": ["account identifier", "tenant membership", "audit events", "device and error diagnostics"],
+      "linkedToIdentity": true,
+      "required": "Security and account identifiers are required. Diagnostics depend on the final monitoring configuration.",
+      "purposes": ["authentication", "tenant isolation", "security", "application reliability"]
+    }
+  ],
+  "thirdPartiesToReview": ["Supabase", "Netlify", "final payment processor", "final messaging providers", "final error monitoring provider"],
+  "submissionNote": "Reconcile this inventory with the final production build, selected native plugins, vendor contracts, Apple privacy labels, and Google Data safety answers immediately before submission."
+}
