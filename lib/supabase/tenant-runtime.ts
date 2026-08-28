@@ -192,6 +192,52 @@ export async function removeTenantVendorStorefront(context: TenantContext, store
   if (error) throw error;
 }
 
+export type TenantCheckoutRequest = {
+  channel: "onsite" | "online";
+  fulfillmentMethod: "pickup" | "delivery" | "shipping";
+  tenderMethod: "cash" | "card" | "bank_transfer" | "zelle" | "venmo" | "paypal" | "cash_app" | "mobile_money" | "check";
+  items: Array<{ variantId: string; quantity: number }>;
+  cashReceived?: number;
+  providerReference?: string;
+  proof?: File;
+  policySnapshot?: Record<string, unknown>;
+};
+
+export type TenantCheckoutResult = { orderId: string; receiptNo: string; total: number; paymentStatus: string };
+
+export async function placeTenantOrder(context: TenantContext, request: TenantCheckoutRequest): Promise<TenantCheckoutResult> {
+  if (context.mode !== "production" || !context.storeId || !context.userId) throw new Error("Authenticated tenant access is required.");
+  const client = createClient();
+  let proofPath: string | null = null;
+  if (request.proof) {
+    const safeName = request.proof.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+    proofPath = `${context.storeId}/pending/${context.userId}/${crypto.randomUUID()}-${safeName}`;
+    const { error: uploadError } = await client.storage.from("payment-evidence").upload(proofPath, request.proof, { contentType: request.proof.type, upsert: false });
+    if (uploadError) throw uploadError;
+  }
+  const { data, error } = await client.rpc("place_tenant_order", {
+    p_store_id: context.storeId,
+    p_channel: request.channel,
+    p_fulfillment_method: request.fulfillmentMethod,
+    p_tender_method: request.tenderMethod,
+    p_items: request.items.map((item) => ({ variant_id: item.variantId, quantity: item.quantity })),
+    p_cash_received: request.cashReceived ?? null,
+    p_provider_ref: request.providerReference?.trim() || null,
+    p_proof_object_path: proofPath,
+    p_proof_file_name: request.proof?.name || null,
+    p_proof_mime_type: request.proof?.type || null,
+    p_proof_size_bytes: request.proof?.size || null,
+    p_policy_snapshot: request.policySnapshot || {},
+  });
+  if (error) {
+    if (proofPath) await client.storage.from("payment-evidence").remove([proofPath]);
+    throw error;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The order did not return a receipt.");
+  return { orderId: row.order_id, receiptNo: row.receipt_no, total: Number(row.total), paymentStatus: row.payment_status };
+}
+
 export type AccountFitProfile = {
   unit: "imperial" | "metric";
   measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder", number>;
