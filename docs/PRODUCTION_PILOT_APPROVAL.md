@@ -4,7 +4,7 @@ Prepared August 28, 2026.
 
 ## Current boundary
 
-Production remains on commit `980ecf5`. The verified local branch contains the controlled pilot work. No migration in this packet has been applied to production and no newer commit has been pushed.
+The last recorded production boundary is commit `980ecf5`. The verified local branch now ends at commit `881cced` and contains the controlled pilot work. Production must be rechecked immediately before execution. No migration in this packet has been approved for production and no newer commit has been intentionally pushed through this packet.
 
 Two explicit approvals are required:
 
@@ -56,7 +56,7 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 5. Account deletion request, cancellation, audit evidence, sole owner protection, row level security, and four policy presence checks pass.
 
-6. The production build, static export, synthetic monitor fixture, type checks, and Playwright suite pass. The latest result is 96 passed and 2 intentionally skipped.
+6. The complete prepush gate passed on August 28, 2026 at local commit `881cced`: type checks, production build, static site build, synthetic monitor fixture, account deletion processor verifier, customer commerce verifier, return verifier, fulfillment verifier, payment verifier, native structure verifier, and Playwright behavior tests. The Playwright result is 98 passed and 2 intentionally skipped across desktop and mobile projects.
 
 7. Customer storefront discovery requires a customer profile and a published Blossom Royall store. Internal roles do not resolve through the public customer function.
 
@@ -88,6 +88,10 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 21. The production Orders view lists pending payment references or proof filenames, uses two minute signed proof links, requires a rejection reason, and removes completed reviews from the pending queue.
 
+22. Public privacy, account deletion, and localized support routes are present. The synthetic monitor verifies `/support` in addition to the existing production routes.
+
+23. Apple and Google listing metadata, privacy declaration maps, policy declaration maps, reviewer access requirements, and screenshot dimensions are staged and structurally verified. Final screenshots refuse preview data and remain blocked on authenticated production capture plus human review.
+
 ## Pilot activation sequence
 
 1. Confirm Delly's production authentication identity and multifactor enrollment.
@@ -114,7 +118,7 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 12. Push the verified branch and inspect the Netlify deploy preview before production promotion.
 
-13. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
+13. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/support`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
 
 14. Trigger the production monitor manually and confirm it is green before inviting pilot users.
 
@@ -134,7 +138,7 @@ Do not drop newly created tables or columns during the pilot. If a defect appear
 
 1. Deploy and activate the reviewed account deletion processor and overdue operator queue after the controlled lifecycle test.
 
-2. Activate and monitor `privacy@blossomroyall.com`.
+2. Activate and monitor `privacy@blossomroyall.com` and `support@blossomroyall.com`.
 
 3. Complete production error capture, metrics, and alert routing beyond the zero cost synthetic monitor.
 
