@@ -161,6 +161,41 @@ type VendorRecord = {
   createdAt: string;
 };
 
+type VendorImportProduct = {
+  sourceId: string;
+  name: string;
+  price: number;
+  currency: string;
+  categories: string[];
+  options: { name: string; values: string[] }[];
+  image: string;
+  sourceUrl: string;
+  sourceAvailability: string;
+};
+
+type VendorImportDraft = {
+  vendor: {
+    publicName: string;
+    website: string;
+    email: string;
+    phone: string;
+    description: string;
+  };
+  provenance: {
+    retrievedAt: string;
+    publicCatalogTotal: number;
+    note: string;
+    confirmation?: {
+      status: string;
+      confirmedBy: string;
+      confirmedAt: string;
+      scope: string;
+    };
+  };
+  categories: string[];
+  products: VendorImportProduct[];
+};
+
 type VendorAuditEvent = {
   id: string;
   vendorName: string;
@@ -252,9 +287,9 @@ const defaultVendorRecords: VendorRecord[] = [
     name: "Africstyle Fashion",
     category: "African heritage fashion",
     contactName: "",
-    email: "",
-    phone: "",
-    status: "Launch ready",
+    email: "africstyle@yahoo.ca",
+    phone: "+1 647 677 9440",
+    status: "Onboarding",
     roster: "Confirmed",
     createdAt: "2026-08-26T09:00:00.000Z",
   },
@@ -1676,9 +1711,162 @@ function VendorOperations() {
           </details>
         )}
       </section>
+      <AfricstylePilotImport />
       <VendorLeaseRentCenter vendors={records} />
       <VendorBrandManager />
     </>
+  );
+}
+
+function AfricstylePilotImport() {
+  const storageKey = "br-import-draft:africstyle-fashion";
+  const [draft, setDraft] = useState<VendorImportDraft | null>(null);
+  const [category, setCategory] = useState("All categories");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    void fetch("/vendor-imports/africstyle-fashion.json")
+      .then((response) => {
+        if (!response.ok) throw new Error("Catalog draft is unavailable");
+        return response.json() as Promise<VendorImportDraft>;
+      })
+      .then(setDraft)
+      .catch(() => setNotice("The Africstyle research draft could not be loaded."));
+    const saved = localStorage.getItem(storageKey);
+    if (saved) setSelected(JSON.parse(saved));
+  }, []);
+
+  const visible = useMemo(() => {
+    if (!draft) return [];
+    const search = query.trim().toLowerCase();
+    return draft.products.filter(
+      (product) =>
+        (category === "All categories" || product.categories.includes(category)) &&
+        (!search ||
+          product.name.toLowerCase().includes(search) ||
+          product.categories.some((item) => item.toLowerCase().includes(search))),
+    );
+  }, [category, draft, query]);
+
+  const toggle = (id: string) =>
+    setSelected((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+
+  const saveDraft = () => {
+    localStorage.setItem(storageKey, JSON.stringify(selected));
+    setNotice(
+      `${selected.length} verbally confirmed products are staged for Blossom Royall review. Nothing has been published.`,
+    );
+  };
+
+  return (
+    <section className="panel vendor-pilot-import">
+      <div className="panel-head">
+        <span>
+          <small className="eyebrow">CONFIRMED CATALOG STAGING</small>
+          <h3>Delly catalog staging</h3>
+        </span>
+        <a href="https://africstylefashion.com/" target="_blank" rel="noreferrer">
+          Visit official website
+          <ArrowUpRight />
+        </a>
+      </div>
+      <p>
+        Delly verbally confirmed that the public Africstyle catalog may be
+        staged for Blossom Royall review. Inventory, fulfillment, and final
+        publication remain pending.
+      </p>
+      {draft && (
+        <>
+          <div className="pilot-facts">
+            <span><b>{draft.products.length}</b><small>staged products</small></span>
+            <span><b>{draft.categories.length}</b><small>source categories</small></span>
+            <span><b>{selected.length}</b><small>selected for staging</small></span>
+            <span><b>Staged</b><small>publication status</small></span>
+          </div>
+          <div className="pilot-contact">
+            <a href={`mailto:${draft.vendor.email}`}>{draft.vendor.email}</a>
+            <a href={`tel:${draft.vendor.phone.replace(/\s/g, "")}`}>{draft.vendor.phone}</a>
+            <time>
+              Researched {new Date(draft.provenance.retrievedAt).toLocaleDateString()}
+            </time>
+          </div>
+          <div className="pilot-controls">
+            <label>
+              Search catalog
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Toghu, Kente, activewear"
+              />
+            </label>
+            <label>
+              Catalog filter
+              <select value={category} onChange={(event) => setCategory(event.target.value)}>
+                <option>All categories</option>
+                {draft.categories.map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setSelected((current) => [
+                  ...new Set([...current, ...visible.map((product) => product.sourceId)]),
+                ])
+              }
+            >
+              Select visible
+            </button>
+          </div>
+          <div className="pilot-product-list">
+            {visible.slice(0, 24).map((product) => (
+              <article key={product.sourceId}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(product.sourceId)}
+                    onChange={() => toggle(product.sourceId)}
+                  />
+                  <span>
+                    <b>{product.name}</b>
+                    <small>{product.categories.join(", ") || "Uncategorized"}</small>
+                    <small>
+                      {new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: product.currency,
+                      }).format(product.price)}
+                      {product.options.length
+                        ? `, ${product.options.map((option) => `${option.name}: ${option.values.join(", ")}`).join("; ")}`
+                        : ""}
+                    </small>
+                  </span>
+                </label>
+                <a href={product.sourceUrl} target="_blank" rel="noreferrer" aria-label={`Open ${product.name} on Africstyle`}>
+                  <ArrowUpRight />
+                </a>
+              </article>
+            ))}
+          </div>
+          {visible.length > 24 && (
+            <small className="pilot-result-note">
+              Showing 24 of {visible.length}. Refine the search or select all visible results.
+            </small>
+          )}
+          <footer>
+            <button type="button" onClick={() => setSelected([])}>Clear selection</button>
+            <button className="primary" type="button" onClick={saveDraft}>
+              <Check /> Save staged selection
+            </button>
+          </footer>
+        </>
+      )}
+      {notice && <output className="policy-saved" role="status">{notice}</output>}
+    </section>
   );
 }
 

@@ -2559,7 +2559,7 @@ h3 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px;
-  background: var(--soft);
+  background: var(--blush);
   border-radius: 11px;
   padding: 4px;
   margin-bottom: 18px;
@@ -2948,4 +2948,159 @@ h3 {
   .staff-roster > article { grid-template-columns: 44px 1fr; align-items: start; }
   .staff-roster > article > span:nth-of-type(n+2) { grid-column: 1 / -1; }
   .staff-leave > article { align-items: flex-start; flex-wrap: wrap; }
+}
+.vendor-pilot-import {
+  margin-top: 24px;
+}
+
+.vendor-pilot-import .panel-head > a {
+  align-items: center;
+  color: var(--wine);
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.vendor-pilot-import .panel-head > a svg,
+.pilot-product-list article > a svg {
+  height: 18px;
+  width: 18px;
+}
+
+.pilot-facts {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 22px 0;
+}
+
+.pilot-facts span {
+  background: var(--blush);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 3px;
+  padding: 16px;
+}
+
+.pilot-facts b {
+  color: var(--ink);
+  font-size: 1.2rem;
+}
+
+.pilot-facts small,
+.pilot-contact,
+.pilot-result-note {
+  color: var(--muted);
+}
+
+.pilot-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-bottom: 20px;
+}
+
+.pilot-contact a {
+  color: var(--wine);
+  font-weight: 700;
+}
+
+.pilot-controls {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.6fr) auto;
+  margin-bottom: 18px;
+}
+
+.pilot-controls label {
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 700;
+  gap: 7px;
+}
+
+.pilot-controls input,
+.pilot-controls select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.pilot-product-list {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.pilot-product-list article {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 13px 15px;
+}
+
+.pilot-product-list article:last-child {
+  border-bottom: 0;
+}
+
+.pilot-product-list label {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+}
+
+.pilot-product-list label > span {
+  display: grid;
+  gap: 3px;
+}
+
+.pilot-product-list input {
+  height: 20px;
+  margin-top: 2px;
+  width: 20px;
+}
+
+.pilot-product-list small {
+  color: var(--muted);
+}
+
+.pilot-product-list article > a {
+  color: var(--wine);
+  padding: 10px;
+}
+
+.pilot-result-note {
+  display: block;
+  margin-top: 10px;
+}
+
+.vendor-pilot-import > footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .pilot-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pilot-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-pilot-import > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
