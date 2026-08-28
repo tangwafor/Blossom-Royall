@@ -251,6 +251,17 @@ test("guides self measurement and uses My Fit while shopping", async ({
     await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "Customer Shop" }).click();
   await expect(page.getByText("Size 8 is ready for matching")).toBeVisible();
+
+  if (testInfo.project.name === "mobile")
+    await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "My Fit", exact: true }).click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export My Fit" }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe("blossom-royall-my-fit.json");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete My Fit" }).click();
+  await expect(page.getByRole("status")).toContainText("My Fit was deleted");
+  expect(await page.evaluate(() => localStorage.getItem("br-my-fit:blossom-royall"))).toBeNull();
 });
 
 test("checks out one coordinated bag across multiple sellers", async ({

@@ -5,6 +5,8 @@ dist/
 .npm-cache/
 test-results/
 playwright-report/
+supabase/.temp/
 .env
 .env.local
 *.log
+*.tsbuildinfo

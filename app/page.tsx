@@ -13,6 +13,7 @@ import {
   CircleDollarSign,
   CircleHelp,
   Clock3,
+  Download,
   FileSignature,
   Heart,
   LayoutDashboard,
@@ -35,6 +36,7 @@ import {
   ShieldCheck,
   Sun,
   TrendingUp,
+  Trash2,
   Truck,
   Upload,
   Users,
@@ -43,11 +45,14 @@ import {
 import BrandMark from "./brand-mark";
 import Link from "next/link";
 import {
+  loadAccountFitProfile,
   loadTenantVendors,
   loadTenantOrders,
   loadTenantProducts,
   removeTenantVendor,
   resolveTenantContext,
+  removeAccountFitProfiles,
+  saveAccountFitProfile,
   saveTenantVendor,
   type TenantContext,
   type TenantProductSummary,
@@ -4314,6 +4319,16 @@ const fitCopy = {
     shop: "Shop with My Fit",
     privacy: "Your measurements stay private. Vendor sharing is off unless you choose it.",
     recommended: "Recommended starting size",
+    language: "Language",
+    accountSaved: "My Fit saved securely to your account.",
+    deviceSaved: "My Fit saved privately on this device.",
+    accountLoaded: "Your latest account profile is ready.",
+    syncFailed: "Account sync could not finish. Sign in securely before retrying.",
+    export: "Export My Fit",
+    remove: "Delete My Fit",
+    removeConfirm: "Delete My Fit from this device and your account? This cannot be undone.",
+    removed: "My Fit was deleted from this device and your account.",
+    updated: "Last measured",
     fields: {
       bust: ["Bust", "Wrap the tape around the fullest part, level across your back."],
       waist: ["Natural waist", "Measure where your body bends naturally without pulling the tape tight."],
@@ -4343,6 +4358,16 @@ const fitCopy = {
     shop: "Acheter avec Mon Ajustement",
     privacy: "Vos mesures restent privées. Le partage vendeur est désactivé sauf si vous le choisissez.",
     recommended: "Taille de départ recommandée",
+    language: "Langue",
+    accountSaved: "Votre profil a été enregistré en toute sécurité dans votre compte.",
+    deviceSaved: "Votre profil a été enregistré en privé sur cet appareil.",
+    accountLoaded: "Le dernier profil de votre compte est prêt.",
+    syncFailed: "La synchronisation du compte n’a pas abouti. Reconnectez votre session sécurisée avant de réessayer.",
+    export: "Exporter Mon Ajustement",
+    remove: "Supprimer Mon Ajustement",
+    removeConfirm: "Supprimer ce profil de cet appareil et de votre compte ? Cette action est irréversible.",
+    removed: "Le profil a été supprimé de cet appareil et de votre compte.",
+    updated: "Dernière mesure",
     fields: {
       bust: ["Poitrine", "Passez le ruban autour de la partie la plus forte, bien horizontal dans le dos."],
       waist: ["Taille naturelle", "Mesurez là où le corps se plie naturellement sans serrer le ruban."],
@@ -4372,6 +4397,16 @@ const fitCopy = {
     shop: "Comprar con Mi Talla",
     privacy: "Tus medidas son privadas. No se comparten con vendedores salvo que lo elijas.",
     recommended: "Talla inicial recomendada",
+    language: "Idioma",
+    accountSaved: "Tu perfil se guardó de forma segura en tu cuenta.",
+    deviceSaved: "Tu perfil se guardó de forma privada en este dispositivo.",
+    accountLoaded: "El perfil más reciente de tu cuenta está listo.",
+    syncFailed: "No se pudo completar la sincronización. Vuelve a iniciar tu sesión segura antes de intentarlo de nuevo.",
+    export: "Exportar Mi Talla",
+    remove: "Eliminar Mi Talla",
+    removeConfirm: "¿Eliminar Mi Talla de este dispositivo y de tu cuenta? Esta acción no se puede deshacer.",
+    removed: "Mi Talla se eliminó de este dispositivo y de tu cuenta.",
+    updated: "Última medición",
     fields: {
       bust: ["Busto", "Rodea la parte más llena con la cinta nivelada en la espalda."],
       waist: ["Cintura natural", "Mide donde el cuerpo se dobla naturalmente sin apretar la cinta."],
@@ -4413,30 +4448,59 @@ function MyFit({ go }: { go: (destination: string) => void }) {
   const [consent, setConsent] = useState(false);
   const [shareWithVendors, setShareWithVendors] = useState(false);
   const [notice, setNotice] = useState("");
+  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
+  const [savedAt, setSavedAt] = useState("");
   const copy = fitCopy[locale];
   const field = fitFields[step];
   const recommendedSize = recommendFitSize(measurements.waist, unit);
 
   useEffect(() => {
     const saved = localStorage.getItem(fitStorageKey);
-    if (!saved) return;
-    const profile = JSON.parse(saved) as FitProfile;
-    setUnit(profile.unit);
-    setMeasurements(profile.measurements);
-    setConsent(profile.consent);
-    setShareWithVendors(profile.shareWithVendors);
+    if (saved) {
+      const profile = JSON.parse(saved) as FitProfile;
+      setUnit(profile.unit);
+      setMeasurements(profile.measurements);
+      setConsent(profile.consent);
+      setShareWithVendors(profile.shareWithVendors);
+      setSavedAt(profile.updatedAt);
+    }
+    void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
+      if (context.mode !== "production") return;
+      try {
+        const profile = await loadAccountFitProfile(context);
+        if (!profile) return;
+        localStorage.setItem(fitStorageKey, JSON.stringify(profile));
+        setUnit(profile.unit);
+        setMeasurements(profile.measurements);
+        setConsent(profile.consent);
+        setShareWithVendors(profile.shareWithVendors);
+        setSavedAt(profile.updatedAt);
+        setNotice(fitCopy.en.accountLoaded);
+      } catch {
+        setNotice(fitCopy.en.syncFailed);
+      }
+    });
   }, []);
 
   useEffect(() => {
-    const sync = () => {
+    const sync = async () => {
       const queued = localStorage.getItem(fitQueueKey);
       if (!queued) return;
-      localStorage.removeItem(fitQueueKey);
-      setNotice(copy.synced);
+      try {
+        const { profile } = JSON.parse(queued) as { profile: FitProfile };
+        const context = tenantContext || await resolveTenantContext();
+        if (context.mode === "production") await saveAccountFitProfile(context, profile);
+        localStorage.removeItem(fitQueueKey);
+        setNotice(copy.synced);
+      } catch {
+        setNotice(copy.syncFailed);
+      }
     };
-    window.addEventListener("online", sync);
-    return () => window.removeEventListener("online", sync);
-  }, [copy.synced]);
+    const handleOnline = () => void sync();
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [copy.synced, copy.syncFailed, tenantContext]);
 
   const changeUnit = (next: FitUnit) => {
     setMeasurements((current) =>
@@ -4447,7 +4511,7 @@ function MyFit({ go }: { go: (destination: string) => void }) {
     setUnit(next);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!consent || fitFields.some((key) => measurements[key] <= 0)) return;
     const profile: FitProfile = {
       unit,
@@ -4458,11 +4522,45 @@ function MyFit({ go }: { go: (destination: string) => void }) {
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(fitStorageKey, JSON.stringify(profile));
+    setSavedAt(profile.updatedAt);
     if (!navigator.onLine) {
       localStorage.setItem(fitQueueKey, JSON.stringify({ type: "fit_profile", profile }));
       setNotice(copy.queued);
     } else {
-      setNotice(`${copy.saved}. ${copy.recommended}: ${recommendedSize}.`);
+      try {
+        const savedToAccount = tenantContext ? await saveAccountFitProfile(tenantContext, profile) : false;
+        setNotice(`${savedToAccount ? copy.accountSaved : copy.deviceSaved} ${copy.recommended}: ${recommendedSize}.`);
+      } catch {
+        localStorage.setItem(fitQueueKey, JSON.stringify({ type: "fit_profile", profile }));
+        setNotice(copy.syncFailed);
+      }
+    }
+  };
+
+  const exportProfile = () => {
+    const saved = localStorage.getItem(fitStorageKey);
+    if (!saved) return;
+    const url = URL.createObjectURL(new Blob([saved], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "blossom-royall-my-fit.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const deleteProfile = async () => {
+    if (!confirm(copy.removeConfirm)) return;
+    try {
+      if (tenantContext) await removeAccountFitProfiles(tenantContext);
+      localStorage.removeItem(fitStorageKey);
+      localStorage.removeItem(fitQueueKey);
+      setMeasurements({ bust: 0, waist: 0, hips: 0, inseam: 0, shoulder: 0 });
+      setConsent(false);
+      setShareWithVendors(false);
+      setSavedAt("");
+      setNotice(copy.removed);
+    } catch {
+      setNotice(copy.syncFailed);
     }
   };
 
@@ -4475,7 +4573,7 @@ function MyFit({ go }: { go: (destination: string) => void }) {
           <p>{copy.intro}</p>
         </div>
         <label>
-          Language
+          {copy.language}
           <select aria-label="My Fit language" value={locale} onChange={(event) => setLocale(event.target.value as keyof typeof fitCopy)}>
             <option value="en">English</option>
             <option value="fr">Français</option>
@@ -4532,9 +4630,12 @@ function MyFit({ go }: { go: (destination: string) => void }) {
         <label><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />{copy.consent}</label>
         <label><input type="checkbox" checked={shareWithVendors} onChange={(event) => setShareWithVendors(event.target.checked)} />{copy.vendor}</label>
         <p className="fit-privacy"><ShieldCheck />{copy.privacy}</p>
+        {savedAt && <p className="fit-updated"><Clock3 />{copy.updated}: {new Date(savedAt).toLocaleString(locale)}</p>}
         <footer>
-          <button className="primary" type="button" disabled={!consent || fitFields.some((item) => measurements[item] <= 0)} onClick={save}><Check />{copy.save}</button>
+          <button className="primary" type="button" disabled={!consent || fitFields.some((item) => measurements[item] <= 0)} onClick={() => void save()}><Check />{copy.save}</button>
           <button type="button" disabled={!notice} onClick={() => go("Customer Shop")}>{copy.shop}<ArrowUpRight /></button>
+          <button type="button" disabled={!savedAt} onClick={exportProfile}><Download />{copy.export}</button>
+          <button type="button" disabled={!savedAt} onClick={() => void deleteProfile()}><Trash2 />{copy.remove}</button>
         </footer>
         {notice && <output className="policy-saved" role="status">{notice}</output>}
       </section>

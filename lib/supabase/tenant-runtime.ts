@@ -125,3 +125,75 @@ export async function removeTenantVendor(context: TenantContext, vendorId: strin
   const { error } = await createClient().from("vendors").delete().eq("id", vendorId).eq("store_id", context.storeId);
   if (error) throw error;
 }
+
+export type AccountFitProfile = {
+  unit: "imperial" | "metric";
+  measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder", number>;
+  recommendedSize: string;
+  consent: boolean;
+  shareWithVendors: boolean;
+  updatedAt: string;
+};
+
+type MeasurementProfileRow = {
+  units: string | null;
+  measurements: AccountFitProfile["measurements"] & {
+    recommendedSize?: string;
+    consent?: boolean;
+    shareWithVendors?: boolean;
+    updatedAt?: string;
+  };
+  created_at: string;
+};
+
+export async function loadAccountFitProfile(context: TenantContext): Promise<AccountFitProfile | null> {
+  if (context.mode !== "production" || !context.userId) return null;
+  const { data, error } = await createClient()
+    .from("measurement_profiles")
+    .select("units, measurements, created_at")
+    .eq("customer_id", context.userId)
+    .eq("label", "My Fit")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as MeasurementProfileRow;
+  return {
+    unit: row.units === "cm" ? "metric" : "imperial",
+    measurements: row.measurements,
+    recommendedSize: row.measurements.recommendedSize || "Custom fit review",
+    consent: row.measurements.consent === true,
+    shareWithVendors: row.measurements.shareWithVendors === true,
+    updatedAt: row.measurements.updatedAt || row.created_at,
+  };
+}
+
+export async function saveAccountFitProfile(context: TenantContext, profile: AccountFitProfile) {
+  if (context.mode !== "production" || !context.userId) return false;
+  const { error } = await createClient().from("measurement_profiles").insert({
+    customer_id: context.userId,
+    label: "My Fit",
+    units: profile.unit === "metric" ? "cm" : "in",
+    measurements: {
+      ...profile.measurements,
+      recommendedSize: profile.recommendedSize,
+      consent: profile.consent,
+      shareWithVendors: profile.shareWithVendors,
+      updatedAt: profile.updatedAt,
+    },
+  });
+  if (error) throw error;
+  return true;
+}
+
+export async function removeAccountFitProfiles(context: TenantContext) {
+  if (context.mode !== "production" || !context.userId) return false;
+  const { error } = await createClient()
+    .from("measurement_profiles")
+    .delete()
+    .eq("customer_id", context.userId)
+    .eq("label", "My Fit");
+  if (error) throw error;
+  return true;
+}

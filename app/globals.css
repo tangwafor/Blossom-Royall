@@ -1238,6 +1238,8 @@ h3 {
 .my-fit { max-width: 1120px; margin-inline: auto; }
 .fit-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 30px; background: linear-gradient(135deg, var(--panel), var(--blush)); }
 .fit-hero h2 { margin: 6px 0 8px; font-family: var(--font-serif); font-size: clamp(30px, 4vw, 46px); }
+.fit-updated { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.fit-updated svg, .fit-summary footer svg { width: 16px; }
 .fit-hero p { max-width: 680px; margin: 0; color: var(--muted); line-height: 1.6; }
 .fit-hero label { display: grid; min-width: 170px; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 800; }
 .fit-hero select { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); color: var(--ink); }

@@ -15,7 +15,7 @@
 | In app help | Owner, manager, staff, vendor, customer | Working preview | Searchable role aware task guidance, expandable operating steps, direct workflow routing, guided tour restart, and explicit production safety boundaries |
 | Tenant assistant | Owner, manager, staff, vendor, customer | Working preview | Renameable tenant identity, contextual operating guidance, policy aware answers, protected action boundaries, zero cost deterministic core, and persisted tenant naming |
 | Customer Shop | Customer | Working preview | Mission based occasion shopping, budget and timing aware complete looks, cross vendor edits, transparent match reasons, seller verification, fulfillment confidence, African designer storytelling, textile provenance, preference controls, and familiar brand discovery |
-| My Fit | Customer | Working preview | Guided private self measurement, English, French, and Spanish guidance, metric and imperial conversion, consented local persistence, offline write queue, reconnect synchronization, vendor sharing choice, starting size recommendation, and Customer Shop matching |
+| My Fit | Customer | Development persistence ready | Guided private self measurement, English, French, and Spanish guidance, metric and imperial conversion, consented device and account persistence, offline write queue, reconnect synchronization, vendor sharing choice, dated profile snapshots, portable export, confirmed deletion, starting size recommendation, and Customer Shop matching |
 | Intelligence | Owner, manager | Working preview | Explainable demand signals, merchandising brief, reorder decision, trust controls |
 | Welcome | Visitor | Working preview | September 1 grand opening, Prince George’s Plaza location, store hours, African designers, local brands, and luxury experience narrative |
 | Brand partnerships | Prospective vendor | Working preview | Premium recruitment story, operating benefits, onboarding path, trust commitments, and persisted partnership inquiry |
@@ -58,6 +58,7 @@
 | Supabase production persistence | Readiness submissions live with hardened insert policy and audit trigger, core operating workflows remain preview adapters |
 | Full RLS role matrix | Readiness submission roles verified, full operating workflow matrix remains pending |
 | Customer recommendation signals | Working interface, pending persisted consented event model |
+| Customer measurement profiles | Fresh development schema verified August 28, 2026. Customer owned RLS, accountable write auditing, least privilege grants, account synchronization, portable export, confirmed deletion, and offline recovery are active in development. Production promotion remains blocked pending explicit approval and security verification. |
 | Owner intelligence actions | Working interface, pending role scoped database persistence |
 | Tenant AI enhancement | Zero cost deterministic guidance is active. Gemini first automation and Anthropic fallback remain optional pending credentials, role enforcement, measured usage threshold, and budget approval. |
 | Tenant retail policy persistence | Working local tenant adapter, pending production snapshot and database connection |
