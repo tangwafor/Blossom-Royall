@@ -36,7 +36,9 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 9. `20260828175500_customer_storefront_access.sql`
 
-The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T17-53-05Z.sql`. It differs from the previous baseline only by a trailing blank line, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
+10. `20260828182000_return_requests.sql`
+
+The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-14-07Z.sql`. It has no schema difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
 
 ## Proven local checks
 
@@ -60,6 +62,12 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T17-53-05Z.sql`. I
 
 10. My Orders reloads the latest production order from the customer account instead of depending only on browser storage. The interface displays the real secure receipt reference and does not fabricate a pickup credential.
 
+11. Return requests preserve customer, order item, vendor, resolution, reason, and the purchase policy snapshot. A second customer cannot read or request a return for another customer's order item.
+
+12. Duplicate open returns are blocked. Customers can cancel and remove canceled requests. Owner review requires multifactor assurance level two and enforces requested, reviewing, approved, received, and completed transitions.
+
+13. Two return creations, one cancellation, one removal, and four staff transitions produce exactly eight return audit records. An invalid transition produces no write.
+
 ## Pilot activation sequence
 
 1. Confirm Delly's production authentication identity and multifactor enrollment.
@@ -78,13 +86,15 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T17-53-05Z.sql`. I
 
 8. Execute one low value cash pilot sale and one referenced electronic payment pilot. Confirm receipt, stock, ledger, audit, payment verification, evidence privacy, customer order reload, and cross customer isolation.
 
-9. Push the verified branch and inspect the Netlify deploy preview before production promotion.
+9. Submit one controlled customer return, verify it appears in the staff queue, advance it through inspection and completion, and confirm the seller attribution and eight expected audit events for the complete test lifecycle.
 
-10. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
+10. Push the verified branch and inspect the Netlify deploy preview before production promotion.
 
-11. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+11. Verify `https://app.blossomroyall.com/workspace`, `/privacy`, `/account/delete`, `/manifest.webmanifest`, and `/sw.js` after promotion.
 
-12. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
+12. Trigger the production monitor manually and confirm it is green before inviting pilot users.
+
+13. Deploy `process-account-deletions`, configure `AUTOMATION_RUNNER_SECRET`, manually verify one controlled deletion lifecycle, then enable `ACCOUNT_DELETION_PROCESSOR_ENABLED`. Keep the scheduled workflow disabled until this review is complete.
 
 ## Stop conditions
 
@@ -104,6 +114,6 @@ Do not drop newly created tables or columns during the pilot. If a defect appear
 
 3. Complete production error capture, metrics, and alert routing beyond the zero cost synthetic monitor.
 
-4. Complete authorization backed card payments, production layaway, fulfillment notifications, customer return persistence, and refund contracts.
+4. Complete authorization backed card payments, production layaway, fulfillment notifications, refund execution, and inventory disposition contracts.
 
 5. Complete native packaging, signing, privacy manifest, store declarations, screenshots, reviewer account, and human reviewed multilingual walkthroughs.

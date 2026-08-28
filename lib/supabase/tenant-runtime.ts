@@ -94,6 +94,7 @@ export type CustomerOrderRecord = {
   policySnapshot: Record<string, unknown>;
   placedAt: string;
   items: Array<{
+    orderItemId?: string;
     variantId?: string;
     name: string;
     vendor: string;
@@ -130,7 +131,7 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
   if (context.mode !== "production" || context.role !== "customer" || !context.storeId || !context.userId) return [];
   const { data, error } = await createClient()
     .from("orders")
-    .select("id, receipt_no, status, fulfillment_method, total, payment_status, policy_snapshot, created_at, order_items(qty, unit_price, product_variants(id, products(name)), vendors(name)), payments(method, verification_status)")
+    .select("id, receipt_no, status, fulfillment_method, total, payment_status, policy_snapshot, created_at, order_items(id, qty, unit_price, product_variants(id, products(name)), vendors(name)), payments(method, verification_status)")
     .eq("store_id", context.storeId)
     .eq("customer_id", context.userId)
     .order("created_at", { ascending: false })
@@ -139,6 +140,7 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
   return (data || []).map((order) => {
     const payments = (order.payments || []) as Array<{ method?: string; verification_status?: string }>;
     const items = (order.order_items || []) as Array<{
+      id: string;
       qty: number;
       unit_price: number | string;
       product_variants?: { id?: string; products?: { name?: string } | null } | null;
@@ -156,6 +158,7 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
       policySnapshot: (order.policy_snapshot || {}) as Record<string, unknown>,
       placedAt: order.created_at,
       items: items.map((item) => ({
+        orderItemId: item.id,
         variantId: item.product_variants?.id,
         name: item.product_variants?.products?.name || "Purchased item",
         vendor: item.vendors?.name || "Blossom Royall seller",
@@ -165,6 +168,93 @@ export async function loadCustomerOrderHistory(context: TenantContext): Promise<
       })),
     };
   });
+}
+
+export type ReturnRequestRecord = {
+  id: string;
+  orderItemId: string;
+  reason: string;
+  requestedResolution: string;
+  status: string;
+  customerNote: string;
+  staffNote: string;
+  createdAt: string;
+};
+
+const mapReturnRequest = (row: {
+  id: string; order_item_id: string; reason: string; requested_resolution: string; status: string;
+  customer_note?: string | null; staff_note?: string | null; created_at: string;
+}): ReturnRequestRecord => ({
+  id: row.id,
+  orderItemId: row.order_item_id,
+  reason: row.reason,
+  requestedResolution: row.requested_resolution,
+  status: row.status,
+  customerNote: row.customer_note || "",
+  staffNote: row.staff_note || "",
+  createdAt: row.created_at,
+});
+
+export async function requestOrderItemReturn(context: TenantContext, input: {
+  orderItemId: string;
+  reason: "fit" | "color" | "damaged" | "not_as_described" | "changed_mind" | "other";
+  requestedResolution: "refund" | "exchange" | "store_credit";
+  customerNote?: string;
+}): Promise<ReturnRequestRecord> {
+  if (context.mode !== "production" || context.role !== "customer" || !context.userId) throw new Error("A signed in customer account is required.");
+  const { data, error } = await createClient().rpc("request_order_item_return", {
+    p_order_item_id: input.orderItemId,
+    p_reason: input.reason,
+    p_requested_resolution: input.requestedResolution,
+    p_customer_note: input.customerNote?.trim() || null,
+  });
+  if (error) throw error;
+  return mapReturnRequest(data as Parameters<typeof mapReturnRequest>[0]);
+}
+
+export async function loadCustomerReturnRequests(context: TenantContext): Promise<ReturnRequestRecord[]> {
+  if (context.mode !== "production" || context.role !== "customer" || !context.userId) return [];
+  const { data, error } = await createClient().from("return_requests")
+    .select("id, order_item_id, reason, requested_resolution, status, customer_note, staff_note, created_at")
+    .eq("customer_id", context.userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row) => mapReturnRequest(row));
+}
+
+export async function cancelCustomerReturnRequest(context: TenantContext, requestId: string) {
+  if (context.mode !== "production" || context.role !== "customer") throw new Error("A signed in customer account is required.");
+  const { data, error } = await createClient().rpc("cancel_return_request", { p_return_request_id: requestId });
+  if (error) throw error;
+  return mapReturnRequest(data as Parameters<typeof mapReturnRequest>[0]);
+}
+
+export async function removeCustomerReturnRequest(context: TenantContext, requestId: string) {
+  if (context.mode !== "production" || context.role !== "customer") throw new Error("A signed in customer account is required.");
+  const { error } = await createClient().rpc("remove_canceled_return_request", { p_return_request_id: requestId });
+  if (error) throw error;
+  return true;
+}
+
+export async function loadTenantReturnRequests(context: TenantContext): Promise<ReturnRequestRecord[]> {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager", "staff"].includes(context.role || "")) return [];
+  const { data, error } = await createClient().from("return_requests")
+    .select("id, order_item_id, reason, requested_resolution, status, customer_note, staff_note, created_at")
+    .eq("store_id", context.storeId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row) => mapReturnRequest(row));
+}
+
+export async function reviewTenantReturnRequest(context: TenantContext, requestId: string, status: "reviewing" | "approved" | "rejected" | "received" | "completed", staffNote?: string) {
+  if (context.mode !== "production" || !["owner", "manager", "staff"].includes(context.role || "")) throw new Error("Authorized staff access is required.");
+  const { data, error } = await createClient().rpc("review_return_request", {
+    p_return_request_id: requestId,
+    p_status: status,
+    p_staff_note: staffNote?.trim() || null,
+  });
+  if (error) throw error;
+  return mapReturnRequest(data as Parameters<typeof mapReturnRequest>[0]);
 }
 
 export type TenantProductSummary = {

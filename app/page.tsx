@@ -49,6 +49,9 @@ import {
   loadTenantVendors,
   loadTenantOrders,
   loadCustomerOrderHistory,
+  requestOrderItemReturn,
+  loadTenantReturnRequests,
+  reviewTenantReturnRequest,
   loadTenantProducts,
   loadTenantVendorStorefronts,
   removeTenantVendor,
@@ -63,6 +66,7 @@ import {
   type TenantContext,
   type TenantProductSummary,
   type TenantVendorStorefront,
+  type ReturnRequestRecord,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -3667,6 +3671,33 @@ function AftercareCenter() {
   const [returnStatus, setReturnStatus] = useState("Review requested");
   const [layawayStatus, setLayawayStatus] = useState("Payment due tomorrow");
   const [notice, setNotice] = useState("");
+  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
+  const [productionReturns, setProductionReturns] = useState<ReturnRequestRecord[]>([]);
+  const [returnLoading, setReturnLoading] = useState(true);
+  useEffect(() => {
+    void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
+      if (context.mode === "production" && ["owner", "manager", "staff"].includes(context.role || "")) {
+        try {
+          setProductionReturns(await loadTenantReturnRequests(context));
+        } catch {
+          setNotice("The production return queue could not be loaded.");
+        }
+      }
+      setReturnLoading(false);
+    });
+  }, []);
+  const productionMode = tenantContext?.mode === "production" && ["owner", "manager", "staff"].includes(tenantContext.role || "");
+  const advanceReturn = async (request: ReturnRequestRecord, status: "reviewing" | "approved" | "rejected" | "received" | "completed") => {
+    if (!tenantContext) return;
+    try {
+      const updated = await reviewTenantReturnRequest(tenantContext, request.id, status);
+      setProductionReturns((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setNotice(`Return ${request.id.slice(0, 8).toUpperCase()} is now ${status}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `The return was not updated: ${error.message}` : "The return was not updated.");
+    }
+  };
   return (
     <div className="content aftercare">
       <div className="view-head">
@@ -3699,7 +3730,34 @@ function AftercareCenter() {
           </article>
         ))}
       </section>
-      <section className="aftercare-grid">
+      {productionMode && (
+        <section className="panel care-timeline" aria-label="Production return queue">
+          <div>
+            <span className="eyebrow">PRODUCTION RETURN QUEUE</span>
+            <h3>{returnLoading ? "Loading return requests" : `${productionReturns.length} return requests`}</h3>
+          </div>
+          {!returnLoading && !productionReturns.length && <p>No customer return requests need attention.</p>}
+          <ol>
+            {productionReturns.map((request) => (
+              <li key={request.id}>
+                <i><RotateCcw /></i>
+                <span>
+                  <b>{request.reason.replaceAll("_", " ")} for {request.requestedResolution.replaceAll("_", " ")}</b>
+                  <small>{request.id.slice(0, 8).toUpperCase()} · {request.status} · {new Date(request.createdAt).toLocaleString()}</small>
+                  <span className="care-actions">
+                    {request.status === "requested" && <button onClick={() => void advanceReturn(request, "reviewing")}>Start review</button>}
+                    {["requested", "reviewing"].includes(request.status) && <button onClick={() => void advanceReturn(request, "approved")}>Approve</button>}
+                    {["requested", "reviewing"].includes(request.status) && <button onClick={() => void advanceReturn(request, "rejected")}>Reject</button>}
+                    {request.status === "approved" && <button onClick={() => void advanceReturn(request, "received")}>Mark received</button>}
+                    {request.status === "received" && <button onClick={() => void advanceReturn(request, "completed")}>Complete</button>}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      {!productionMode && <section className="aftercare-grid">
         <article className="panel care-card">
           <header>
             <div>
@@ -3808,7 +3866,7 @@ function AftercareCenter() {
             </button>
           </div>
         </article>
-      </section>
+      </section>}
       <section className="panel care-timeline">
         <div>
           <span className="eyebrow">ACCOUNTABLE HISTORY</span>
@@ -3849,6 +3907,7 @@ function AftercareCenter() {
 }
 
 type BagItem = {
+  orderItemId?: string;
   variantId?: string;
   name: string;
   vendor: string;
@@ -4312,14 +4371,19 @@ function CustomerOrders() {
     source?: "device" | "production";
   } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [returnItem, setReturnItem] = useState<string | null>(null);
+  const [returnItem, setReturnItem] = useState<BagItem | null>(null);
   const [returnReason, setReturnReason] = useState("Fit was not right");
+  const [returnResolution, setReturnResolution] = useState<"refund" | "exchange" | "store_credit">("exchange");
   const [returnStarted, setReturnStarted] = useState(false);
+  const [returnMessage, setReturnMessage] = useState("");
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [paymentMade, setPaymentMade] = useState(false);
   useEffect(() => {
     const stored = localStorage.getItem("br-latest-order:blossom-royall");
     if (stored) setOrder({ ...JSON.parse(stored), source: "device" });
     void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
       if (context.mode === "production" && context.role === "customer") {
         try {
           const [latest] = await loadCustomerOrderHistory(context);
@@ -4370,14 +4434,42 @@ function CustomerOrders() {
     order.deposit ??
     Math.round(order.total * orderPolicy.layawayDepositPercent) / 100;
   const balance = order.total - deposit;
-  const startReturn = () => {
+  const startReturn = async () => {
     if (!returnItem) return;
+    const reason = ({
+      "Fit was not right": "fit",
+      "Prefer a different color": "color",
+      "Item arrived damaged": "damaged",
+      "Item was not as described": "not_as_described",
+      "Changed my mind": "changed_mind",
+    } as const)[returnReason as "Fit was not right" | "Prefer a different color" | "Item arrived damaged" | "Item was not as described" | "Changed my mind"] || "other";
+    if (tenantContext?.mode === "production" && tenantContext.role === "customer") {
+      if (!returnItem.orderItemId) {
+        setReturnMessage("This production item does not have a secure order item reference.");
+        return;
+      }
+      setReturnSubmitting(true);
+      setReturnMessage("");
+      try {
+        await requestOrderItemReturn(tenantContext, {
+          orderItemId: returnItem.orderItemId,
+          reason,
+          requestedResolution: returnResolution,
+        });
+      } catch (error) {
+        setReturnMessage(error instanceof Error ? `The return request was not recorded: ${error.message}` : "The return request was not recorded.");
+        setReturnSubmitting(false);
+        return;
+      }
+      setReturnSubmitting(false);
+    }
     localStorage.setItem(
       "br-latest-return:blossom-royall",
       JSON.stringify({
         orderId: order.id,
-        item: returnItem,
+        item: returnItem.name,
         reason: returnReason,
+        resolution: returnResolution,
         status: "Requested",
         requestedAt: new Date().toISOString(),
       }),
@@ -4472,8 +4564,9 @@ function CustomerOrders() {
               <strong>${item.price.toFixed(2)}</strong>
               <button
                 onClick={() => {
-                  setReturnItem(item.name);
+                  setReturnItem(item);
                   setReturnStarted(false);
+                  setReturnMessage("");
                 }}
               >
                 Return or exchange
@@ -4522,7 +4615,7 @@ function CustomerOrders() {
         <section className="return-sheet panel" aria-live="polite">
           <div>
             <span className="eyebrow">RETURN OR EXCHANGE</span>
-            <h3>{returnItem}</h3>
+            <h3>{returnItem.name}</h3>
             <p>
               This item uses the {orderPolicy.returnWindowDays} day policy saved
               at purchase. The original seller remains attached automatically.
@@ -4555,8 +4648,21 @@ function CustomerOrders() {
                   <option>Changed my mind</option>
                 </select>
               </label>
-              <button className="primary" onClick={startReturn}>
-                Start request
+              <label>
+                Preferred resolution
+                <select
+                  aria-label="Preferred return resolution"
+                  value={returnResolution}
+                  onChange={(event) => setReturnResolution(event.target.value as "refund" | "exchange" | "store_credit")}
+                >
+                  <option value="exchange">Exchange</option>
+                  <option value="refund">Refund</option>
+                  <option value="store_credit">Store credit</option>
+                </select>
+              </label>
+              {returnMessage && <output className="payment-warning">{returnMessage}</output>}
+              <button className="primary" onClick={startReturn} disabled={returnSubmitting}>
+                {returnSubmitting ? "Recording request" : "Start request"}
               </button>
             </div>
           )}
