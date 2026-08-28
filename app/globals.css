@@ -3097,7 +3097,8 @@ h3 {
 @media (max-width: 680px) {
   .preview-data-banner, .production-data-banner { margin: 10px 16px 0; align-items: flex-start; flex-wrap: wrap; }
   .preview-data-banner a { width: 100%; padding-left: 30px; }
-  .assistant-launcher { right: 14px; bottom: 14px; }
+  .assistant-launcher { right: 14px; bottom: 14px; width: 52px; min-width: 52px; min-height: 52px; padding: 0; justify-content: center; }
+  .assistant-launcher span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .assistant-panel { right: 10px; bottom: 76px; width: calc(100vw - 20px); max-height: calc(100vh - 92px); }
   .help-controls, .help-grid { grid-template-columns: 1fr; }
   .help-controls fieldset { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }

@@ -22,6 +22,8 @@
     "native:sync": "npm run build:sites && node scripts/run-capacitor.cjs sync",
     "native:doctor": "node scripts/run-capacitor.cjs doctor",
     "native:verify": "node scripts/verify-native-readiness.mjs",
+    "native:capture-assets": "node scripts/capture-store-assets.mjs",
+    "native:verify-assets": "node scripts/verify-store-assets.mjs",
     "verify:public": "npm run build:sites && node scripts/verify-public-build.mjs"
   },
   "dependencies": {

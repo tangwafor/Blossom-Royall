@@ -10,3 +10,5 @@ supabase/.temp/
 .env.local
 *.log
 *.tsbuildinfo
+# Store capture candidates are generated locally and require human review.
+store/candidates/
