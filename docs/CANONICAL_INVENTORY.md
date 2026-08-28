@@ -29,6 +29,7 @@
 | Delivery | Owner, manager | Working preview | Pickup, local delivery, carrier shipping, tenant routing rules, multi vendor consolidation, custody workflow, and active fulfillment board |
 | Staff | Owner, manager, staff | Working preview | Tenant staff directory, invitation and employment lifecycle, editable schedules and breaks, clock activity, weekly pay estimates, leave requests and decisions, local persistence, and accountable change history |
 | Policy Center | Owner, manager | Working preview | Tenant keyed returns, exchanges, final sale, fees, eligibility preview, layaway terms, and local persistence |
+| Business Setup | Owner, manager | Working preview | Public and legal identity, owner display name, address, receipt contacts, currency, locale, timezone, tax treatment, tax rate, and generated order prefix |
 | Aftercare | Owner, manager, staff | Working preview | Return approval, exchange reservation, exception review, layaway reminders, grace periods, and accountable history |
 | Signed vendor research | Owner, manager | Four video confirmed labels documented with verification status, public evidence, positioning, and onboarding gaps |
 | Established mall retail research | Owner, manager | Nine neighboring retail benchmarks covering policy rules, loyalty, fulfillment, marketplace boundaries, services, and a Blossom Royall capability blueprint |
