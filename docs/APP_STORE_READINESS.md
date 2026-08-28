@@ -24,13 +24,15 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 
 8. Desktop and mobile behavior tests cover the public routes and secure identity boundary.
 
+9. A scheduled zero cost synthetic monitor checks the branded workspace, privacy and deletion routes, PWA assets, certificate path, expected content, and security headers every six hours. Failures create or update a GitHub incident.
+
 ## Required before public submission
 
 1. Activate and monitor `privacy@blossomroyall.com`.
 
 2. Implement the reviewed deletion processor that removes or anonymizes eligible personal data while preserving only legally required transaction records.
 
-3. Add an operator queue, completion evidence, alerts, and overdue request monitoring.
+3. Add an operator queue, completion evidence, and overdue deletion request monitoring. The public route synthetic alert is staged locally.
 
 4. Complete native packaging and signing for Apple and Google.
 
@@ -49,5 +51,7 @@ Blossom Royall is preparing for a controlled web pilot before native store submi
 ## Production boundary
 
 The account deletion migration is staged locally. It has not been applied to production. Production database promotion still requires explicit approval.
+
+The controlled activation sequence and approval boundary are maintained in `docs/PRODUCTION_PILOT_APPROVAL.md`.
 
 No application store submission should begin until the controlled pilot is green and the deletion processor, privacy contact, production monitoring, and native signing are complete.

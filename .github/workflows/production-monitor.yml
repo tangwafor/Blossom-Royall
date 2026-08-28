@@ -1,0 +1,50 @@
+name: Production monitor
+
+on:
+  schedule:
+    # Six hourly checks keep early pilot usage within the included GitHub Actions allowance.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: blossom-royall-production-monitor
+  cancel-in-progress: true
+
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Verify branded production routes
+        run: npm run monitor:production
+      - name: Open or update an incident
+        if: failure()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = "Production synthetic monitor failed";
+            const body = `The scheduled Blossom Royall production monitor failed.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nInvestigate the branded application domain, privacy path, account deletion path, PWA assets, TLS certificate, and security headers.`;
+            const labels = await github.paginate(github.rest.issues.listLabelsForRepo, { owner: context.repo.owner, repo: context.repo.repo });
+            if (!labels.some((label) => label.name === "production-monitor")) {
+              await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: "production-monitor", color: "B42318", description: "Automated production availability incident" });
+            }
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "production-monitor",
+            });
+            const incident = existing.find((issue) => issue.title === title);
+            if (incident) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: incident.number, body });
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body, labels: ["production-monitor"] });
+            }

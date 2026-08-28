@@ -11,7 +11,9 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "sync:africstyle": "node scripts/sync-africstyle-public-catalog.mjs",
-    "prepush": "npm run typecheck && npm run build:sites && npm test",
+    "prepush": "npm run typecheck && npm run build:sites && npm run test:monitor && npm test",
+    "monitor:production": "node scripts/synthetic-monitor.mjs",
+    "test:monitor": "node scripts/synthetic-monitor-test.mjs",
     "verify:public": "npm run build:sites && node scripts/verify-public-build.mjs"
   },
   "dependencies": {
