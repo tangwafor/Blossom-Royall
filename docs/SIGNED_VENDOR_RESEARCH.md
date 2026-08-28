@@ -8,7 +8,7 @@ The supplied grand opening video is the roster source. It names four participati
 
 Status: Confirmed by the supplied video. Public identity needs owner verification.
 
-The video presents Blossom Collections at the Blossom Royall service counter, suggesting that it may be the mall’s internal or house collection. Search results contain multiple unrelated businesses with similar names. The Singapore retailer named In Blossom Collections is not linked to this roster without additional evidence.
+Delly verbally confirmed on August 28, 2026 that Blossom Collections is her personal store operating as an independent vendor storefront inside Blossom Royall. It is not the mall tenant identity and must retain its own inventory, sales, policies, receipts, ledger, and customer presentation within the shared commerce model. The exact public spelling and social identity remain subject to confirmation against Delly’s Facebook page. Search results contain multiple unrelated businesses with similar names. The Singapore retailer named In Blossom Collections is not linked to this roster.
 
 Recommended profile: House collection, women’s fashion, gifting, exclusive Blossom Royall capsules, and coordinated looks from participating vendors.
 
@@ -58,7 +58,7 @@ Information still needed: Exact Blossom Royall assortment, furniture inclusion o
 
 1. Obtain one signed onboarding form for each vendor with legal entity, tax information, owner, contacts, approved brand name, logo rights, and payment destination.
 
-2. Confirm that Blossom Collections is the internal house label and avoid connecting it to unrelated search results.
+2. Verify the exact Blossom Collections spelling, public identity, catalog, and usage rights against Delly’s Facebook page, while avoiding unrelated search results.
 
 3. Collect official product feeds, size systems, care details, countries of production, textile provenance, image rights, and custom order rules.
 

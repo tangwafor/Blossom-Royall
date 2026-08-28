@@ -21,11 +21,12 @@
 | Brand partnerships | Prospective vendor | Working preview | Premium recruitment story, operating benefits, onboarding path, trust commitments, and persisted partnership inquiry |
 | Internal marketplace concept | Owner, product, engineering | Local only internal preview | Animated three dimensional marketplace model, stakeholder outcomes, transaction invariants, inventory movement model, fulfillment custody, vendor ledger behavior, tenant boundaries, failure recovery, and release gates. The route is removed from public static deployment artifacts. Remote access remains blocked until server side membership authorization exists. |
 | Checkout | Owner, manager, staff | Working preview | Express sale entry and checkout handoff |
-| Customer bag and checkout | Customer | Working preview | Cross vendor seller attributed bag, pickup and delivery choices, delivery fee calculation, layaway deposit, order persistence, and coordinated confirmation |
+| Customer bag and checkout | Customer | Working preview | Cross vendor seller attributed bag, pickup and delivery choices, delivery fee calculation, cash tender with change calculation, card, bank transfer, Zelle, Venmo, PayPal, Cash App, mobile money and check capture, payment references, photo or PDF proof of payment, staff verification state, layaway deposit, order persistence, and coordinated confirmation |
 | My Orders | Customer | Working preview | Coordinated order progress, pickup credential, seller attributed items, layaway balance and payment, return eligibility, and persisted return request |
 | Orders | Owner, manager, staff | Working preview | Search and fulfillment status |
 | Products | Owner, manager, vendor | Working preview | Inventory overview and stock state |
 | Vendors | Owner, manager, vendor | Working preview | Tenant vendor directory with create, view, edit, suspend, restore, confirmed removal, contact links, generated readiness invitations with prefilled vendor details, persisted browser state, accountable change history, configurable lease drafts, rent and deposit recording, branded payment receipts, payment history, sales summary, plus vendor supplied logo review without developer intervention |
+| Blossom Collections storefront | Delly, owner, manager, staff, customer | Identity confirmed | Delly confirmed Blossom Collections as her independent store inside Blossom Royall on August 28, 2026. Exact public spelling, branding, catalog, policy, and media rights await verification from the official Facebook page. |
 | Shared Commerce | Owner, manager | Working preview | Single cashier attribution, configurable payout cadence and reserves, settlement preview, scan safeguards, and inventory rebalance recommendations |
 | Delivery | Owner, manager | Working preview | Pickup, local delivery, carrier shipping, tenant routing rules, multi vendor consolidation, custody workflow, and active fulfillment board |
 | Staff | Owner, manager, staff | Working preview | Tenant staff directory, invitation and employment lifecycle, editable schedules and breaks, clock activity, weekly pay estimates, leave requests and decisions, local persistence, and accountable change history |
@@ -51,14 +52,15 @@
 | Couture BR monogram system | Active across app navigation, welcome, authentication, receipts, and PWA |
 | Branded social sharing card | Active with approved monogram and editorial campaign |
 | Printable branding contract | Tenant logo header and TaTech attribution footer active on receipt preview |
-| Authentication methods | Password, secure email link, Google OAuth, email only remembering |
+| Authentication methods | Password, secure email code, Google OAuth, email only remembering, and authentication app verification for owners |
 | Authentication callback | Static deployment compatible secure session exchange active |
-| Protected operating workspace | `/workspace` verifies Supabase identity and store membership before rendering the console. Unauthenticated visitors return to branded access, and authenticated accounts without membership receive a safe assignment boundary. |
+| Protected operating workspace | `/workspace` verifies Supabase identity and store membership before rendering the console. Owner sessions require authentication app assurance level two. Unauthenticated visitors return to branded access, and authenticated accounts without membership receive a safe assignment boundary. |
 | Protected password reset | Recovery session validation active |
 | Supabase production persistence | Readiness submissions live with hardened insert policy and audit trigger, core operating workflows remain preview adapters |
 | Full RLS role matrix | Readiness submission roles verified, full operating workflow matrix remains pending |
 | Customer recommendation signals | Working interface, pending persisted consented event model |
 | Customer measurement profiles | Fresh development schema verified August 28, 2026. Customer owned RLS, accountable write auditing, least privilege grants, account synchronization, portable export, confirmed deletion, and offline recovery are active in development. Production promotion remains blocked pending explicit approval and security verification. |
+| Payment evidence | Cash capture and change calculation are active in the checkout preview. Transfer, mobile money and check references accept private photo or PDF evidence with pending staff verification. The private storage schema, validation constraints and payment audit trigger are staged locally pending explicit production approval. |
 | Owner intelligence actions | Working interface, pending role scoped database persistence |
 | Tenant AI enhancement | Zero cost deterministic guidance is active. Gemini first automation and Anthropic fallback remain optional pending credentials, role enforcement, measured usage threshold, and budget approval. |
 | Tenant retail policy persistence | Working local tenant adapter, pending production snapshot and database connection |

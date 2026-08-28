@@ -279,6 +279,7 @@ test("checks out one coordinated bag across multiple sellers", async ({
   ).toBeVisible();
   await expect(page.getByText("Sold by Africstyle Fashion")).toBeVisible();
   await page.getByRole("button", { name: /Layaway/ }).click();
+  await page.getByLabel("Payment method").selectOption("Card");
   await page.getByRole("button", { name: "Start secure layaway" }).click();
   await expect(
     page.getByText(/Order BR-\d{6} is coordinated across every seller\./),
@@ -516,6 +517,8 @@ test("prints a complete seller attributed receipt after checkout", async ({
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "Checkout", exact: true }).click();
+  await page.getByLabel("Payment method").selectOption("Cash");
+  await page.getByLabel("Cash received").fill("300");
   await page.getByRole("button", { name: "Place order" }).click();
   const receipt = page.getByRole("article", {
     name: /Receipt for order BR-\d{6}/,
@@ -525,11 +528,51 @@ test("prints a complete seller attributed receipt after checkout", async ({
   await expect(
     receipt.getByText("Return eligible for 30 days after handoff"),
   ).toBeVisible();
+  await expect(receipt.getByText("Cash received")).toBeVisible();
+  await expect(receipt.getByText("$16.00")).toBeVisible();
   await page.getByRole("button", { name: "Print receipt" }).click();
   await expect(page.locator("body")).toHaveAttribute(
     "data-print-requested",
     "true",
   );
+});
+
+test("captures proof of payment for staff verification", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("br-tour-complete", "true");
+    localStorage.setItem("br-customer-bag:blossom-royall", JSON.stringify([{ name: "Kente Ceremony Coat", vendor: "Africstyle Fashion", price: 284, fulfillment: "Pickup today" }]));
+  });
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Checkout", exact: true }).click();
+  await page.getByLabel("Payment method").selectOption("Bank transfer");
+  await page.getByLabel("Proof of payment").setInputFiles({ name: "payment-proof.pdf", mimeType: "application/pdf", buffer: Buffer.from("proof") });
+  await page.getByRole("button", { name: "Place order" }).click();
+  const receipt = page.getByRole("article", { name: /Receipt for order BR-\d{6}/ });
+  await expect(receipt.locator(".receipt-meta").getByText("Bank transfer")).toBeVisible();
+  await expect(receipt.getByText("payment-proof.pdf")).toBeVisible();
+  await expect(receipt.getByText("Pending staff verification")).toBeVisible();
+});
+
+test("offers familiar mobile payment services", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("br-tour-complete", "true");
+    localStorage.setItem("br-customer-bag:blossom-royall", JSON.stringify([{ name: "Kente Ceremony Coat", vendor: "Africstyle Fashion", price: 284, fulfillment: "Pickup today" }]));
+  });
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Checkout", exact: true }).click();
+  const methods = page.getByLabel("Payment method");
+  await expect(methods.locator("option")).toHaveText(["Cash", "Card", "Bank transfer", "Zelle", "Venmo", "PayPal", "Cash App", "Mobile money", "Check"]);
+  await methods.selectOption("Zelle");
+  await expect(page.getByText("Provide either a transaction reference or upload proof of payment.")).toBeVisible();
+  await expect(page.getByLabel("Payment reference")).toBeVisible();
+  await expect(page.getByLabel("Proof of payment")).toBeVisible();
+  await page.getByLabel("Payment reference").fill("ZELLE 84291");
+  await page.getByRole("button", { name: "Place order" }).click();
+  const receipt = page.getByRole("article", { name: /Receipt for order BR-\d{6}/ });
+  await expect(receipt.getByText("ZELLE 84291")).toBeVisible();
+  await expect(receipt.getByText("Proof of payment")).toHaveCount(0);
 });
 
 test("shows personalized customer recommendations with explanations", async ({
@@ -1084,11 +1127,18 @@ test("renders branded authentication with safe password controls", async ({
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeVisible();
   await expect(page.getByLabel("Remember my email")).toBeVisible();
-  await page.getByRole("button", { name: "Email link" }).click();
+  await page.route("**/auth/v1/otp", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  );
+  await page.getByRole("button", { name: "Email code" }).click();
   await expect(
-    page.getByRole("button", { name: "Send secure sign in link" }),
+    page.getByRole("button", { name: "Send email code" }),
   ).toBeVisible();
   await expect(page.getByPlaceholder("Your password")).toHaveCount(0);
+  await page.getByPlaceholder("you@example.com").fill("owner@example.com");
+  await page.getByRole("button", { name: "Send email code" }).click();
+  await expect(page.getByLabel("Six digit email code")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Verify email code" })).toBeVisible();
   await page.getByRole("button", { name: "Password", exact: true }).click();
   const password = page.getByPlaceholder("Your password");
   await expect(password).toHaveAttribute("type", "password");
@@ -1123,4 +1173,13 @@ test("protects the operating workspace from unauthenticated access", async ({
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
+});
+
+test("protects owner authentication app setup from unauthenticated access", async ({ page }) => {
+  await page.route("**/auth/v1/user", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "missing session" }) }),
+  );
+  await page.goto("/auth/mfa");
+  await expect(page).toHaveURL(/\/auth\?returnTo=%2Fworkspace$/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 });

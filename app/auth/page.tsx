@@ -25,7 +25,8 @@ const authErrors: Record<string, string> = {
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [method, setMethod] = useState<"password" | "magic">("password");
+  const [method, setMethod] = useState<"password" | "email">("password");
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -71,16 +72,21 @@ export default function AuthPage() {
       return;
     }
     const supabase = createClient();
-    if (mode === "signin" && method === "magic") {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${location.origin}/auth/callback?returnTo=%2Fworkspace` },
-      });
+    if (mode === "signin" && method === "email") {
+      const code = String(form.get("emailCode") || "").trim();
+      const { error } = emailCodeSent
+        ? await supabase.auth.verifyOtp({ email, token: code, type: "email" })
+        : await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
       setLoading(false);
+      if (!error && emailCodeSent) {
+        location.assign("/workspace");
+        return;
+      }
+      if (!error) setEmailCodeSent(true);
       setMessage(
         error
-          ? authErrors[error.message] || "We could not send your secure sign in link."
-          : "Your private sign in link is on its way. Check your email.",
+          ? authErrors[error.message] || "We could not verify your email code. Please try again."
+          : "A six digit sign in code was sent to your email.",
       );
       return;
     }
@@ -164,7 +170,7 @@ export default function AuthPage() {
               <div className="auth-divider"><span>or continue with email</span></div>
               <div className="auth-methods" aria-label="Sign in method">
                 <button type="button" className={method === "password" ? "active" : ""} onClick={() => setMethod("password")}>Password</button>
-                <button type="button" className={method === "magic" ? "active" : ""} onClick={() => setMethod("magic")}>Email link</button>
+                <button type="button" className={method === "email" ? "active" : ""} onClick={() => { setMethod("email"); setEmailCodeSent(false); }}>Email code</button>
               </div>
             </>
           )}
@@ -183,6 +189,13 @@ export default function AuthPage() {
               />
             </div>
           </label>
+          {mode === "signin" && method === "email" && emailCodeSent && <label>
+            Six digit email code
+            <div>
+              <LockKeyhole />
+              <input name="emailCode" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required placeholder="123456" />
+            </div>
+          </label>}
           {(mode === "signup" || method === "password") && <label>
             Password
             <div>
@@ -233,7 +246,7 @@ export default function AuthPage() {
                 Please wait
               </>
             ) : mode === "signin" ? (
-              method === "magic" ? "Send secure sign in link" : "Sign in"
+              method === "email" ? emailCodeSent ? "Verify email code" : "Send email code" : "Sign in"
             ) : (
               "Create account"
             )}

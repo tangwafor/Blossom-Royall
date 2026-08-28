@@ -68,7 +68,7 @@ export default function ConceptPage() {
         <div className="mall-store store-one"><span className="vendor-logo"><Image src="/vendor-logos/africstyle-fashion.png" alt="Africstyle Fashion" width={70} height={70} unoptimized /></span><b>Africstyle Fashion</b><i /></div>
         <div className="mall-store store-two"><span>JK</span><b>Jose Kako</b><small>Official logo pending</small><i /></div>
         <div className="mall-store store-three"><span className="vendor-logo"><Image src="/vendor-logos/sapologie-italiano.png" alt="Sapologie Italiano Fashion Factory" width={70} height={70} unoptimized /></span><b>Sapologie Italiano</b><i /></div>
-        <div className="mall-store store-four"><span className="vendor-logo"><BrandMark /></span><b>Blossom Collections</b><small>House label status pending</small><i /></div>
+        <div className="mall-store store-four"><span className="vendor-logo"><BrandMark /></span><b>Blossom Collections</b><small>Delly’s independent store inside Blossom Royall</small><i /></div>
         <div className="shared-register"><CircleDollarSign /><b>ONE CHECKOUT</b></div>
         <div className="moving-product product-one"><ShoppingBag /></div><div className="moving-product product-two"><Package /></div><div className="moving-product product-three"><ShoppingBag /></div>
         <div className="delivery-van"><Truck /><span>ONE ORDER</span></div>

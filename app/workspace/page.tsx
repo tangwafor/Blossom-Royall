@@ -19,7 +19,14 @@ export default function WorkspacePage() {
           location.replace("/auth?returnTo=%2Fworkspace");
           return;
         }
-        const { data: membership } = await client.from("store_memberships").select("id").eq("user_id", user.id).limit(1).maybeSingle();
+        const { data: membership } = await client.from("store_memberships").select("id, role").eq("user_id", user.id).limit(1).maybeSingle();
+        if (membership?.role === "owner") {
+          const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+          if (assuranceError || assurance.currentLevel !== "aal2") {
+            location.replace("/auth/mfa?returnTo=%2Fworkspace");
+            return;
+          }
+        }
         setAccess(membership ? "authorized" : "unassigned");
       } catch {
         location.replace("/auth?returnTo=%2Fworkspace");

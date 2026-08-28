@@ -3729,6 +3729,9 @@ type BagItem = {
   fulfillment: string;
 };
 
+type CheckoutTender = "Cash" | "Card" | "Bank transfer" | "Zelle" | "Venmo" | "PayPal" | "Cash App" | "Mobile money" | "Check";
+type PaymentProof = { name: string; type: string; size: number };
+
 function CheckoutCenter({ openSale }: { openSale: () => void }) {
   const { value: policy } = useRetailPolicy();
   const { value: delivery } = useDeliverySettings();
@@ -3738,6 +3741,11 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
     "pickup",
   );
   const [payment, setPayment] = useState<"pay_now" | "layaway">("pay_now");
+  const [tender, setTender] = useState<CheckoutTender>("Card");
+  const [cashReceived, setCashReceived] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentProof, setPaymentProof] = useState<PaymentProof | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState("");
   const [placed, setPlaced] = useState(false);
   const [orderId] = useState(
     () => `${store.orderPrefix || "ORDER"}-${Date.now().toString().slice(-6)}`,
@@ -3758,12 +3766,25 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
     : Math.round(subtotal * store.taxRatePercent) / 100;
   const total = subtotal + deliveryFee + tax;
   const deposit = Math.round(total * policy.layawayDepositPercent) / 100;
+  const amountDue = payment === "layaway" ? deposit : total;
+  const received = Number(cashReceived || 0);
+  const changeDue = tender === "Cash" ? Math.max(0, received - amountDue) : 0;
+  const requiresEvidence = tender !== "Cash" && tender !== "Card";
   const money = (amount: number) =>
     new Intl.NumberFormat(store.locale, {
       style: "currency",
       currency: store.currency,
     }).format(amount);
   const placeOrder = () => {
+    if (tender === "Cash" && received < amountDue) {
+      setPaymentMessage(`Enter at least ${money(amountDue)} received in cash.`);
+      return;
+    }
+    if (requiresEvidence && !paymentReference && !paymentProof) {
+      setPaymentMessage("Add a payment reference or proof of payment before placing the order.");
+      return;
+    }
+    const verificationStatus = requiresEvidence ? "Pending staff verification" : "Recorded at checkout";
     const order = {
       id: `#${orderId}`,
       items: bag,
@@ -3771,6 +3792,12 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
       payment,
       total,
       deposit,
+      tender,
+      cashReceived: tender === "Cash" ? received : undefined,
+      changeDue: tender === "Cash" ? changeDue : undefined,
+      paymentReference: paymentReference || undefined,
+      paymentProof,
+      verificationStatus,
       policySnapshot: policy,
       placedAt: new Date().toISOString(),
     };
@@ -3779,6 +3806,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
       JSON.stringify(order),
     );
     localStorage.removeItem("br-customer-bag:blossom-royall");
+    localStorage.setItem("br-payment-audit:blossom-royall", JSON.stringify({ orderId, tender, amount: amountDue, verificationStatus, recordedAt: new Date().toISOString() }));
     setPlaced(true);
   };
   if (!bag.length && !placed)
@@ -3828,7 +3856,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
             <small>
               {payment === "layaway"
                 ? `${money(deposit)} deposit collected, balance scheduled`
-                : "Paid in full"}
+                : `Paid in full by ${tender}`}
             </small>
           </div>
           <div className="receipt-actions">
@@ -3869,6 +3897,10 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
             <span>
               <b>Fulfillment</b>
               {method}
+            </span>
+            <span>
+              <b>Payment</b>
+              {tender}
             </span>
           </div>
           <section>
@@ -3913,6 +3945,15 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
                 <dd>{money(total - deposit)}</dd>
               </div>
             )}
+            {tender === "Cash" && (
+              <>
+                <div><dt>Cash received</dt><dd>{money(received)}</dd></div>
+                <div><dt>Change given</dt><dd>{money(changeDue)}</dd></div>
+              </>
+            )}
+            {paymentReference && <div><dt>Payment reference</dt><dd>{paymentReference}</dd></div>}
+            {paymentProof && <div><dt>Proof of payment</dt><dd>{paymentProof.name}</dd></div>}
+            <div><dt>Verification</dt><dd>{requiresEvidence ? "Pending staff verification" : "Recorded at checkout"}</dd></div>
           </dl>
           <footer>
             <strong>Powered by TA Tech</strong>
@@ -4024,6 +4065,37 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
               </button>
             )}
           </div>
+          <label className="tender-field">
+            Payment method
+            <select aria-label="Payment method" value={tender} onChange={(event) => { setTender(event.target.value as CheckoutTender); setPaymentMessage(""); }}>
+              <option>Cash</option>
+              <option>Card</option>
+              <option>Bank transfer</option>
+              <option>Zelle</option>
+              <option>Venmo</option>
+              <option>PayPal</option>
+              <option>Cash App</option>
+              <option>Mobile money</option>
+              <option>Check</option>
+            </select>
+          </label>
+          {tender === "Cash" && <label className="tender-field">
+            Cash received
+            <input aria-label="Cash received" type="number" min={amountDue} step="0.01" value={cashReceived} onChange={(event) => { setCashReceived(event.target.value); setPaymentMessage(""); }} placeholder={money(amountDue)} />
+            {received >= amountDue && <small className="change-due">Change due: {money(changeDue)}</small>}
+          </label>}
+          {requiresEvidence && <div className="payment-evidence">
+            <p className="evidence-choice">Provide either a transaction reference or upload proof of payment.</p>
+            <label className="tender-field">Payment reference<input aria-label="Payment reference" value={paymentReference} onChange={(event) => { setPaymentReference(event.target.value); setPaymentMessage(""); }} placeholder="Bank, check, or transaction reference" /></label>
+            <label className="proof-upload"><Upload /><span><b>{paymentProof ? paymentProof.name : "Add proof of payment"}</b><small>Photo or PDF, up to 5 MB</small></span><input aria-label="Proof of payment" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              if (file.size > 5 * 1024 * 1024) { setPaymentMessage("Proof of payment must be 5 MB or smaller."); event.target.value = ""; return; }
+              setPaymentProof({ name: file.name, type: file.type, size: file.size });
+              setPaymentMessage("");
+            }} /></label>
+            <small className="verification-note"><ShieldCheck />Evidence remains pending until an authorized staff member verifies it.</small>
+          </div>}
           <dl>
             <div>
               <dt>Merchandise</dt>
@@ -4044,6 +4116,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
               <dd>{money(payment === "layaway" ? deposit : total)}</dd>
             </div>
           </dl>
+          {paymentMessage && <output className="payment-warning">{paymentMessage}</output>}
           <button className="primary place-order" onClick={placeOrder}>
             {payment === "layaway" ? "Start secure layaway" : "Place order"}
             <ArrowUpRight />
