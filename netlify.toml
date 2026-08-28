@@ -4,7 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_PUBLIC_APP_URL = "https://join.blossomroyall.com"
+  NEXT_PUBLIC_APP_URL = "https://app.blossomroyall.com"
 
 [[headers]]
   for = "/*"
@@ -18,6 +18,12 @@
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[redirects]]
+  from = "https://app.blossomroyall.com/"
+  to = "/workspace"
+  status = 302
+  force = true
 
 [[redirects]]
   from = "/"

@@ -27,4 +27,12 @@ if (!netlify.includes('from = "/"') || !netlify.includes('to = "/readiness"')) {
   throw new Error("Public root is not routed away from the internal command center.");
 }
 
-console.log("Public build verified: readiness present, confidential concept absent, internal root redirected.");
+if (
+  !netlify.includes('from = "https://app.blossomroyall.com/"') ||
+  !netlify.includes('to = "/workspace"') ||
+  !netlify.includes('NEXT_PUBLIC_APP_URL = "https://app.blossomroyall.com"')
+) {
+  throw new Error("The branded application domain is not routed to the protected workspace.");
+}
+
+console.log("Public build verified: readiness present, application domain protected, confidential concept absent.");
