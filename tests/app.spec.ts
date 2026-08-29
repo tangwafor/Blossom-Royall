@@ -86,9 +86,16 @@ test("navigates between core operating views", async ({ page }, testInfo) => {
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "Vendors" }).click();
-  await expect(page.getByText("Africstyle Fashion")).toBeVisible();
-  await expect(page.getByText("Jose Kako")).toBeVisible();
-  await expect(page.getByText("Sapologie Italiano")).toBeVisible();
+  const vendorDirectory = page.locator(".vendor-directory");
+  await expect(
+    vendorDirectory.getByRole("heading", { name: "Africstyle Fashion" }),
+  ).toBeVisible();
+  await expect(
+    vendorDirectory.getByRole("heading", { name: "Jose Kako" }),
+  ).toBeVisible();
+  await expect(
+    vendorDirectory.getByRole("heading", { name: "Sapologie Italiano" }),
+  ).toBeVisible();
 });
 
 test("opens Delly and Duplex storefronts from the vendor studio", async ({
