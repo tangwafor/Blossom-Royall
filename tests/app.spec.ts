@@ -1234,6 +1234,8 @@ test("publishes privacy choices and an external account deletion path", async ({
   await expect(page.getByRole("link", { name: "Manage or delete my account" })).toHaveAttribute("href", "/account/delete");
   await page.getByLabel("Language").selectOption("fr");
   await expect(page.getByRole("heading", { name: "Vos informations vous appartiennent." })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Vos informations vous appartiennent." })).toBeVisible();
 });
 
 test("publishes localized public support without requiring an account", async ({ page }) => {

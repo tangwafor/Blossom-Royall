@@ -4,9 +4,9 @@ Prepared August 29, 2026.
 
 ## Current boundary
 
-The last recorded production boundary is commit `980ecf5`. The committed local base before the current cash pilot packet is `f19399e`. Production must be rechecked immediately before execution. No migration in this packet has been approved for production and no newer commit has been intentionally pushed through this packet.
+The production application remains at commit `980ecf5`. The approved production database migrations were applied on August 29, 2026 through `20260829095500`. The current local application candidate is based on `7374fd0` plus the fulfillment lint fix and refreshed evidence. No newer application commit has been pushed yet.
 
-Two explicit approvals are required:
+The user approved both production actions on August 29, 2026:
 
 1. Approval to apply the listed production database migrations.
 
@@ -44,7 +44,9 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 13. `20260829062000_accountable_cash_checkout.sql`
 
-The latest captured schema baseline is `SCHEMA_DUMP_2026-08-29T06-11-37Z.sql`. It has no table difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
+14. `20260829095500_fix_fulfillment_random_bytes.sql`
+
+The final pre migration baseline is `SCHEMA_DUMP_2026-08-29T09-30-21Z.sql`. It had no table difference from the prior baseline. The verified post migration schema is `SCHEMA_DUMP_2026-08-29T09-38-47Z.sql` with 2,305 lines.
 
 ## Proven local checks
 
@@ -103,6 +105,12 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-29T06-11-37Z.sql`. I
 27. Historical cash records without receiver evidence remain visibly marked as legacy unverified. Cashier account deletion anonymizes the receiver while preserving the server timestamp and required receipt history.
 
 28. The complete migration chain, cash smoke test, cash role isolation, direct write denial, and cashier privacy deletion test pass against a fresh isolated PostgreSQL 17 database.
+
+29. Supabase database lint initially found the pickup credential entropy function outside the extension search path. Migration `20260829095500` qualifies `extensions.gen_random_bytes`, the actual ready for pickup transition generates a valid six character credential in a fresh PostgreSQL database, and the repeated production lint reports no schema errors.
+
+30. Production is migrated through `20260829095500`. Every public table has row level security, no public security definer function has a mutable search path, anonymous checkout execution is denied, direct authenticated payment inserts are denied, and payment evidence storage is private.
+
+31. Production currently has zero stores, profiles, memberships, vendors, and products. The application may be deployed, but cash acceptance remains inactive until the approved owner account, canonical store, and onsite catalog are created and verified.
 
 ## Pilot activation sequence
 

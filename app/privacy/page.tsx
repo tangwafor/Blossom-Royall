@@ -2,7 +2,7 @@
 
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import BrandMark from "../brand-mark";
 
 type Locale = "en" | "fr" | "es";
@@ -14,10 +14,15 @@ const policy = {
 
 export default function PrivacyPage() {
   const [locale, setLocale] = useState<Locale>("en");
-  useEffect(() => { const candidate = navigator.language.slice(0, 2) as Locale; if (candidate in policy) setLocale(candidate); }, []);
+  const languageSelected = useRef(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("br-public-language") as Locale | null;
+    const candidate = stored && stored in policy ? stored : navigator.language.slice(0, 2) as Locale;
+    if (!languageSelected.current && candidate in policy) setLocale(candidate);
+  }, []);
   const t = policy[locale];
   return <main className="privacy-page"><article>
-    <header><Link href="/welcome"><ArrowLeft />{t.back}</Link><label>{t.language}<select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label></header>
+    <header><Link href="/welcome"><ArrowLeft />{t.back}</Link><label>{t.language}<select value={locale} onChange={(event) => { const next = event.target.value as Locale; languageSelected.current = true; localStorage.setItem("br-public-language", next); setLocale(next); }}><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option></select></label></header>
     <BrandMark /><span className="eyebrow">{t.eyebrow}</span><h1>{t.title}</h1><time>{t.updated}</time><p className="privacy-intro">{t.intro}</p>
     <section><h2>{t.collect}</h2><ul>{t.collectItems.map((item) => <li key={item}>{item}</li>)}</ul></section>
     <section><h2>{t.use}</h2><ul>{t.useItems.map((item) => <li key={item}>{item}</li>)}</ul></section>
