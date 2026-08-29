@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import BrandMark from "./brand-mark";
 import Link from "next/link";
+import MallLanding from "./mall-landing";
 import {
   loadAccountFitProfile,
   loadTenantVendors,
@@ -369,6 +370,16 @@ const tourSteps = [
 ] as const;
 
 export default function Home() {
+  const [showOperatingSystem, setShowOperatingSystem] = useState(false);
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const publicPreview = new URLSearchParams(window.location.search).get("public") === "1";
+    setShowOperatingSystem(!publicPreview && (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "app.blossomroyall.com"));
+  }, []);
+  return showOperatingSystem ? <OperatingSystem /> : <MallLanding />;
+}
+
+export function OperatingSystem() {
   const [active, setActive] = useState("Command Center"),
     [menu, setMenu] = useState(false),
     [sale, setSale] = useState(false),

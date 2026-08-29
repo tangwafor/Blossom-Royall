@@ -1347,6 +1347,47 @@ h3 {
 @media (max-width: 720px) { .storefront-topbar { grid-template-columns: auto 1fr; min-height: 64px; padding: 9px 12px; } .storefront-topbar > a { font-size: 0; } .storefront-topbar > a svg { height: 22px; width: 22px; } .storefront-topbar nav { display: flex; gap: 18px; grid-column: 1 / -1; overflow-x: auto; } .storefront-topbar nav a { flex: 0 0 auto; } .storefront-topbar select { width: 54px; } .storefront-hero { min-height: 390px; padding-top: 54px; } .storefront-identity { align-items: flex-start; flex-direction: column; } .storefront-identity img { height: 70px; width: 70px; } .storefront-story { grid-template-columns: 1fr; } .storefront-story p { grid-column: 1; } .storefront-controls { grid-template-columns: 1fr; } .storefront-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .storefront-product-grid article > div { padding: 13px; } .storefront-product-grid article h3 { font-size: .91rem; } .storefront-product-dialog { display: block; } .storefront-product-dialog > img { max-height: 42vh; } }
 @media (max-width: 420px) { .storefront-product-grid { grid-template-columns: 1fr; } }
 
+.mall-landing { background: var(--bg); color: var(--ink); min-height: 100vh; }
+.mall-landing > header { align-items: center; background: color-mix(in srgb, var(--card) 95%, transparent); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; min-height: 78px; padding: 12px clamp(18px, 5vw, 76px); position: sticky; top: 0; z-index: 20; }
+.mall-brand { align-items: center; color: var(--ink); display: flex; gap: 11px; text-decoration: none; }
+.mall-brand img { border-radius: 12px; height: 46px; object-fit: cover; width: 46px; }
+.mall-brand span { display: grid; }
+.mall-brand b { font-family: "Playfair Display", serif; }
+.mall-brand small { color: var(--muted); font-size: .67rem; letter-spacing: .12em; text-transform: uppercase; }
+.mall-landing > header > div { align-items: center; display: flex; gap: 8px; }
+.mall-landing > header select, .mall-landing > header button { background: var(--card); border: 1px solid var(--line); border-radius: 999px; color: var(--ink); height: 42px; padding: 0 12px; }
+.mall-landing > header button svg { height: 18px; width: 18px; }
+.mall-landing > header > div > a { align-items: center; background: #21181d; border-radius: 999px; color: white; display: flex; font-size: .78rem; font-weight: 800; gap: 8px; min-height: 42px; padding: 0 17px; text-decoration: none; }
+.mall-landing > header > div > a svg { height: 16px; width: 16px; }
+.mall-landing-hero { align-items: center; background: linear-gradient(rgba(26, 13, 20, .58), rgba(26, 13, 20, .76)), url('/editorial/blossom-after-dark.png') center 32% / cover; color: white; display: flex; flex-direction: column; justify-content: center; min-height: min(720px, 77vh); padding: 80px 22px; text-align: center; }
+.mall-landing-hero > span, .mall-store-directory header small { color: var(--gold); font-size: .72rem; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+.mall-landing-hero h1 { font-size: clamp(3rem, 8vw, 7.2rem); line-height: .96; margin: 18px auto; max-width: 1100px; text-wrap: balance; }
+.mall-landing-hero p { font-size: clamp(1rem, 2vw, 1.3rem); line-height: 1.7; max-width: 680px; }
+.mall-landing-hero a { align-items: center; background: var(--gold); border-radius: 999px; color: #21181d; display: flex; font-weight: 800; gap: 9px; margin-top: 20px; min-height: 50px; padding: 0 24px; text-decoration: none; }
+.mall-landing-hero a svg { height: 18px; width: 18px; }
+.mall-store-directory { margin: 0 auto; max-width: 1500px; padding: 80px clamp(18px, 5vw, 76px) 100px; }
+.mall-store-directory > header { align-items: end; display: flex; gap: 30px; justify-content: space-between; margin-bottom: 30px; }
+.mall-store-directory h2 { font-size: clamp(2.3rem, 5vw, 4.4rem); margin: 7px 0 0; }
+.mall-store-directory > header p { align-items: center; color: var(--muted); display: flex; gap: 10px; line-height: 1.6; max-width: 480px; }
+.mall-store-directory > header p svg { color: var(--wine); flex: 0 0 auto; }
+.mall-store-directory > div { display: grid; gap: 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mall-store-card { align-items: center; border-radius: 26px; color: white; display: grid; gap: clamp(22px, 4vw, 50px); grid-template-columns: minmax(130px, .65fr) 1fr; min-height: 370px; overflow: hidden; padding: clamp(26px, 4vw, 54px); }
+.mall-store-card.blossom { background: linear-gradient(135deg, #5a1830, #8b4560); }
+.mall-store-card.africstyle { background: linear-gradient(135deg, #0d302a, #285e52); }
+.mall-store-card > img { background: white; border-radius: 25px; max-height: 230px; object-fit: contain; padding: 14px; width: 100%; }
+.mall-store-card > span { display: grid; gap: 13px; }
+.mall-store-card small { color: #f2d99f; font-size: .72rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.mall-store-card h3 { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1; margin: 0; }
+.mall-store-card p { color: rgba(255,255,255,.78); line-height: 1.6; margin: 0; }
+.mall-store-card a { align-items: center; color: white; display: flex; font-weight: 800; gap: 8px; margin-top: 8px; text-decoration: none; }
+.mall-store-card a svg { height: 18px; width: 18px; }
+.mall-landing > footer { align-items: center; background: #21181d; color: white; display: flex; gap: 12px; justify-content: center; min-height: 130px; }
+.mall-landing > footer img { border-radius: 10px; height: 42px; object-fit: cover; width: 42px; }
+.mall-landing > footer span { display: grid; }
+.mall-landing > footer small { color: #bbaeb3; }
+@media (max-width: 900px) { .mall-store-directory > div { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .mall-landing > header { padding: 9px 12px; } .mall-brand span { display: none; } .mall-landing > header > div > a { font-size: 0; padding: 0 13px; } .mall-landing > header > div > a svg { height: 19px; width: 19px; } .mall-store-directory > header { align-items: start; flex-direction: column; } .mall-store-card { grid-template-columns: 1fr; } .mall-store-card > img { height: 170px; width: 170px; } }
+
 .my-fit { max-width: 1120px; margin-inline: auto; }
 .fit-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 30px; background: linear-gradient(135deg, var(--panel), var(--blush)); }
 .fit-hero h2 { margin: 6px 0 8px; font-family: var(--font-serif); font-size: clamp(30px, 4vw, 46px); }

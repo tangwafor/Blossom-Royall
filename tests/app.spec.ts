@@ -42,6 +42,15 @@ test("renders the command center and live operating data", async ({ page }) => {
   await expect(page.getByText("Avery Royall")).toHaveCount(0);
 });
 
+test("keeps the public mall separate from the protected operating system", async ({ page }) => {
+  await page.goto("/?public=1");
+  await expect(page.getByRole("heading", { name: "Every store has a story. Find yours." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Blossom Collections" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Africstyle Fashion" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Command Center" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /Owner and staff access/ })).toHaveAttribute("href", "/auth");
+});
+
 test("turns owner notifications into direct operating actions", async ({
   page,
 }) => {
