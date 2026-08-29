@@ -82,6 +82,48 @@ test("navigates between core operating views", async ({ page }, testInfo) => {
   await expect(page.getByText("Sapologie Italiano")).toBeVisible();
 });
 
+test("opens Delly and Duplex storefronts from the vendor studio", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/?view=Vendors");
+  if (testInfo.project.name === "mobile")
+    await page.getByRole("button", { name: "Open menu" }).click();
+  if (testInfo.project.name === "mobile")
+    await page.getByRole("button", { name: "Vendors", exact: true }).click();
+  const blossomStore = page
+    .locator(".storefront-cards article")
+    .filter({ hasText: "Blossom Collections" });
+  const africstyleStore = page
+    .locator(".storefront-cards article")
+    .filter({ hasText: "Africstyle Fashion" });
+  await expect(blossomStore).toContainText("Delly");
+  await expect(africstyleStore).toContainText("Duplex");
+  await blossomStore.getByRole("link", { name: "View storefront" }).click();
+  await expect(page).toHaveURL(/\/stores\/blossom-collections/);
+  await expect(page.getByRole("heading", { name: "Blossom Collections", exact: true })).toBeVisible();
+  await expect(page.getByText("Delly’s house collection", { exact: true }).first()).toBeVisible();
+  await page.getByRole("link", { name: "Africstyle Fashion" }).click();
+  await expect(page).toHaveURL(/\/stores\/africstyle-fashion/);
+  await expect(page.getByRole("heading", { name: "Africstyle Fashion", exact: true })).toBeVisible();
+  await expect(page.getByText("A Duplex brand", { exact: true }).first()).toBeVisible();
+});
+
+test("shops the Duplex catalog and carries the bag into checkout", async ({ page }) => {
+  await page.goto("/stores/africstyle-fashion");
+  await page.getByPlaceholder("Search this store").fill("Ndopking Supreme");
+  const product = page.locator(".storefront-product-grid article").filter({ hasText: "Ndopking Supreme" });
+  await expect(product).toBeVisible();
+  await product.getByRole("button", { name: "Add to bag" }).click();
+  await expect(page.getByRole("status")).toContainText("Added");
+  await page.getByRole("button", { name: /Shopping bag, 1/ }).click();
+  await expect(page.locator(".storefront-bag")).toContainText("Ndopking Supreme");
+  await page.getByRole("link", { name: "Continue to checkout" }).click();
+  await expect(page).toHaveURL(/\?view=Checkout/);
+  await expect(page.getByText("Ndopking Supreme", { exact: true })).toBeVisible();
+  const bag = await page.evaluate(() => localStorage.getItem("br-customer-bag:blossom-royall"));
+  expect(bag).toContain("Africstyle Fashion");
+});
+
 test("lets the owner configure tenant identity without code changes", async ({
   page,
 }, testInfo) => {

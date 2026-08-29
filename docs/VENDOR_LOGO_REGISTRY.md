@@ -10,6 +10,8 @@ Vendor marks remain the property of their respective owners. Their presence in t
 
 Status: Official domain asset, visually verified, owner approval still required for public use.
 
+Ownership: Duplex owns the Africstyle brand already represented in Blossom Royall.
+
 Local asset: `/public/vendor-logos/africstyle-fashion.png`
 
 Official source: `https://africstylefashion.com/wp-content/uploads/2024/06/cropped-received_10153792315822546-510x512-removebg-preview.png`

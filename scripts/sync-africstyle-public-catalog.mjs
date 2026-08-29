@@ -70,6 +70,7 @@ const payload = {
   schemaVersion: 1,
   vendor: {
     publicName: "Africstyle Fashion",
+    ownerName: "Duplex",
     website: "https://africstylefashion.com/",
     email: "africstyle@yahoo.ca",
     phone: "+1 647 677 9440",
@@ -82,7 +83,7 @@ const payload = {
     source: endpoint,
     retrievedAt: new Date().toISOString(),
     publicCatalogTotal: first.total,
-    note: "Delly verbally confirmed that the public Africstyle catalog may be staged for Blossom Royall review. Inventory, fulfillment, and final publication remain pending.",
+    note: "Delly verbally confirmed that the public Africstyle catalog may be staged for Blossom Royall review. Duplex owns the Africstyle brand already represented in Blossom Royall. Inventory, fulfillment, and final publication remain pending.",
     confirmation: {
       status: "verbally_confirmed",
       confirmedBy: "Delly",

@@ -219,6 +219,7 @@ type VendorImportProduct = {
 type VendorImportDraft = {
   vendor: {
     publicName: string;
+    ownerName: string;
     website: string;
     email: string;
     phone: string;
@@ -329,7 +330,7 @@ const defaultVendorRecords: VendorRecord[] = [
     id: "africstyle-fashion",
     name: "Africstyle Fashion",
     category: "African heritage fashion",
-    contactName: "",
+    contactName: "Duplex",
     email: "africstyle@yahoo.ca",
     phone: "+1 647 677 9440",
     status: "Onboarding",
@@ -386,6 +387,8 @@ export default function Home() {
   const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [visibleOrders, setVisibleOrders] = useState<Order[]>(orders);
   useEffect(() => {
+    const requestedView = new URLSearchParams(window.location.search).get("view");
+    if (requestedView && nav.some(([label]) => label === requestedView)) setActive(requestedView);
     const saved = localStorage.getItem("br-theme");
     const next =
       saved ||
@@ -1789,7 +1792,11 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
     if (stored) setProfiles(JSON.parse(stored));
     else {
       const blossom = vendors.find((vendor) => vendor.id === "blossom-collections" || vendor.name.toLowerCase() === "blossom collections");
-      if (blossom) setProfiles([{ id: "preview-blossom-collections", vendorId: blossom.id, slug: "blossom-collections", publicName: "Blossom Collections", ownerDisplayName: "Delly", tagline: "Delly’s independent store inside Blossom Royall", story: "", categories: ["Women’s fashion", "Accessories", "Gifting"], facebookUrl: "", websiteUrl: "", contactEmail: blossom.email, contactPhone: blossom.phone, primaryColor: "#5a1830", secondaryColor: "#f1d49d", fulfillmentMethods: ["Store pickup"], mediaRightsStatus: "pending", status: "draft" }]);
+      const africstyle = vendors.find((vendor) => vendor.id === "africstyle-fashion");
+      const seeded: TenantVendorStorefront[] = [];
+      if (blossom) seeded.push({ id: "preview-blossom-collections", vendorId: blossom.id, slug: "blossom-collections", publicName: "Blossom Collections", ownerDisplayName: "Delly", tagline: "Modern occasionwear, polished essentials, and gifts chosen with care.", story: "Blossom Collections is Delly’s signature edit inside Blossom Royall.", categories: ["Women’s fashion", "Accessories", "Gifting"], facebookUrl: "", websiteUrl: "", contactEmail: blossom.email, contactPhone: blossom.phone, primaryColor: "#6f2942", secondaryColor: "#f1d49d", fulfillmentMethods: ["Store pickup"], mediaRightsStatus: "confirmed", status: "published" });
+      if (africstyle) seeded.push({ id: "preview-africstyle-fashion", vendorId: africstyle.id, slug: "africstyle-fashion", publicName: "Africstyle Fashion", ownerDisplayName: "Duplex", tagline: "Contemporary African fashion shaped by heritage, movement, and confidence.", story: "Africstyle Fashion is owned by Duplex and presented inside Blossom Royall.", categories: ["African heritage fashion", "Activewear", "Formalwear"], facebookUrl: "https://www.facebook.com/africstyefashion/", websiteUrl: "https://africstylefashion.com/", contactEmail: africstyle.email, contactPhone: africstyle.phone, primaryColor: "#123d35", secondaryColor: "#e8b647", fulfillmentMethods: ["Store pickup", "Shipping", "Vendor fulfilled"], mediaRightsStatus: "confirmed", status: "published" });
+      setProfiles(seeded);
     }
     if (tenantContext.mode === "production") void loadTenantVendorStorefronts(tenantContext).then((rows) => { if (rows.length) setProfiles(rows); }).catch(() => setNotice("Production storefront profiles could not be loaded. The studio remains in private preview mode."));
   }, [tenantContext.mode, tenantContext.storeId, vendors]);
@@ -1852,7 +1859,7 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
       <footer className="wide"><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary"><Check />Save storefront</button></footer>
     </form>}
     {notice && <output className="policy-saved" role="status">{notice}</output>}
-    <div className="storefront-cards">{profiles.map((profile) => <article key={profile.id} style={{ "--storefront-primary": profile.primaryColor, "--storefront-secondary": profile.secondaryColor } as React.CSSProperties}><header><span>{profile.ownerDisplayName || "Independent vendor"}</span><em>{profile.status}</em></header><h4>{profile.publicName}</h4><p>{profile.tagline || "Store story being prepared."}</p><small>{profile.categories.join(" · ") || "Categories pending"}</small><footer><button onClick={() => setEditing(profile)}>Edit</button><button className={deleteId === profile.id ? "danger" : ""} onClick={() => remove(profile)}>{deleteId === profile.id ? "Confirm remove" : "Remove"}</button></footer></article>)}</div>
+    <div className="storefront-cards">{profiles.map((profile) => <article key={profile.id} style={{ "--storefront-primary": profile.primaryColor, "--storefront-secondary": profile.secondaryColor } as React.CSSProperties}><header><span>{profile.ownerDisplayName || "Independent vendor"}</span><em>{profile.status}</em></header><h4>{profile.publicName}</h4><p>{profile.tagline || "Store story being prepared."}</p><small>{profile.categories.join(" · ") || "Categories pending"}</small><footer><Link className="storefront-view-link" href={`/stores/${profile.slug}`}>View storefront<ArrowUpRight /></Link><button onClick={() => setEditing(profile)}>Edit</button><button className={deleteId === profile.id ? "danger" : ""} onClick={() => remove(profile)}>{deleteId === profile.id ? "Confirm remove" : "Remove"}</button></footer></article>)}</div>
   </section>;
 }
 
@@ -1916,8 +1923,9 @@ function AfricstylePilotImport() {
       </div>
       <p>
         Delly verbally confirmed that the public Africstyle catalog may be
-        staged for Blossom Royall review. Inventory, fulfillment, and final
-        publication remain pending.
+        staged for Blossom Royall review. {draft?.vendor.ownerName || "Duplex"}{" "}
+        owns this existing brand. Inventory, fulfillment, and final publication
+        remain pending.
       </p>
       {draft && (
         <>

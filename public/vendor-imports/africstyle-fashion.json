@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "vendor": {
     "publicName": "Africstyle Fashion",
+    "ownerName": "Duplex",
     "website": "https://africstylefashion.com/",
     "email": "africstyle@yahoo.ca",
     "phone": "+1 647 677 9440",
@@ -14,7 +15,7 @@
     "source": "https://africstylefashion.com/wp-json/wc/store/v1/products",
     "retrievedAt": "2026-08-28T10:48:58.517Z",
     "publicCatalogTotal": 173,
-    "note": "Delly verbally confirmed that the public Africstyle catalog may be staged for Blossom Royall review. Inventory, fulfillment, and final publication remain pending.",
+    "note": "Delly verbally confirmed that the public Africstyle catalog may be staged for Blossom Royall review. Duplex owns the Africstyle brand already represented in Blossom Royall. Inventory, fulfillment, and final publication remain pending.",
     "confirmation": {
       "status": "verbally_confirmed",
       "confirmedBy": "Delly",

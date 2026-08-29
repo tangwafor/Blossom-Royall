@@ -8,6 +8,8 @@
 4. Owners can configure monthly rent, security deposit, commission, due day, agreement dates, and review status.
 5. Staff can record rent, deposit, and adjustment payments with sequential branded receipts.
 6. Vendor records, agreements, payments, and audit history persist in the browser for realistic workflow testing.
+7. The storefront studio includes published preview profiles for Delly's Blossom Collections and Duplex's Africstyle Fashion, with direct customer storefront links.
+8. Both storefronts support search, collection filtering, product details, multilingual presentation, theme persistence, a shared seller attributed bag, and checkout handoff.
 
 ## Verified production foundation
 
