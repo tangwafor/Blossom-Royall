@@ -47,6 +47,9 @@ test("keeps the public mall separate from the protected operating system", async
   await expect(page.getByRole("heading", { name: "Every store has a story. Find yours." })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Blossom Collections" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Africstyle Fashion" })).toBeVisible();
+  await expect(page.getByLabel("Preview storefront")).toContainText(
+    "Live ordering and owner accounts are still being activated.",
+  );
   await expect(page.getByRole("heading", { name: "Command Center" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Owner and staff access/ })).toHaveAttribute("href", "/auth");
 });

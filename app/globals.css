@@ -1359,6 +1359,10 @@ h3 {
 .mall-landing > header button svg { height: 18px; width: 18px; }
 .mall-landing > header > div > a { align-items: center; background: #21181d; border-radius: 999px; color: white; display: flex; font-size: .78rem; font-weight: 800; gap: 8px; min-height: 42px; padding: 0 17px; text-decoration: none; }
 .mall-landing > header > div > a svg { height: 16px; width: 16px; }
+.public-preview-notice { align-items: center; background: #fff4d8; border-bottom: 1px solid #e2c47c; color: #38250a; display: flex; gap: 12px; justify-content: center; padding: 10px clamp(18px, 5vw, 76px); text-align: center; }
+.public-preview-notice b { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+.public-preview-notice span { font-size: .82rem; }
+[data-theme="dark"] .public-preview-notice { background: #382b16; border-color: #6b5427; color: #fff0c9; }
 .mall-landing-hero { align-items: center; background: linear-gradient(rgba(26, 13, 20, .58), rgba(26, 13, 20, .76)), url('/editorial/blossom-after-dark.png') center 32% / cover; color: white; display: flex; flex-direction: column; justify-content: center; min-height: min(720px, 77vh); padding: 80px 22px; text-align: center; }
 .mall-landing-hero > span, .mall-store-directory header small { color: var(--gold); font-size: .72rem; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
 .mall-landing-hero h1 { font-size: clamp(3rem, 8vw, 7.2rem); line-height: .96; margin: 18px auto; max-width: 1100px; text-wrap: balance; }
@@ -1386,7 +1390,7 @@ h3 {
 .mall-landing > footer span { display: grid; }
 .mall-landing > footer small { color: #bbaeb3; }
 @media (max-width: 900px) { .mall-store-directory > div { grid-template-columns: 1fr; } }
-@media (max-width: 620px) { .mall-landing > header { padding: 9px 12px; } .mall-brand span { display: none; } .mall-landing > header > div > a { font-size: 0; padding: 0 13px; } .mall-landing > header > div > a svg { height: 19px; width: 19px; } .mall-store-directory > header { align-items: start; flex-direction: column; } .mall-store-card { grid-template-columns: 1fr; } .mall-store-card > img { height: 170px; width: 170px; } }
+@media (max-width: 620px) { .mall-landing > header { padding: 9px 12px; } .mall-brand span { display: none; } .mall-landing > header > div > a { font-size: 0; padding: 0 13px; } .mall-landing > header > div > a svg { height: 19px; width: 19px; } .public-preview-notice { align-items: start; flex-direction: column; gap: 3px; text-align: left; } .mall-store-directory > header { align-items: start; flex-direction: column; } .mall-store-card { grid-template-columns: 1fr; } .mall-store-card > img { height: 170px; width: 170px; } }
 
 .my-fit { max-width: 1120px; margin-inline: auto; }
 .fit-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 30px; background: linear-gradient(135deg, var(--panel), var(--blush)); }
