@@ -18,6 +18,7 @@ const requiredFiles = [
   "store/apple-app-privacy.json",
   "store/google-data-safety.json",
   "store/google-policy-declarations.json",
+  "store/native-build-evidence.json",
   "docs/NATIVE_SUBMISSION_RUNBOOK.md",
 ];
 
@@ -43,6 +44,7 @@ const assetManifest = JSON.parse(await read("store/asset-manifest.json"));
 const applePrivacy = JSON.parse(await read("store/apple-app-privacy.json"));
 const googleSafety = JSON.parse(await read("store/google-data-safety.json"));
 const googlePolicy = JSON.parse(await read("store/google-policy-declarations.json"));
+const buildEvidence = JSON.parse(await read("store/native-build-evidence.json"));
 
 const requireText = (source, value, label) => { if (!source.includes(value)) failures.push(`${label} is missing ${value}`); };
 requireText(config, 'appId: "com.blossomroyall.app"', "Capacitor configuration");
@@ -98,6 +100,10 @@ if (!googleSafety.dataEncryptedInTransit || !googleSafety.accountDeletionAvailab
 if (!googleSafety.reviewRequiredBeforeSubmission || !googleSafety.dataTypes.length) failures.push("Google Data safety answers need review evidence");
 if (googlePolicy.applicationId !== listings.appId || googlePolicy.ads !== false) failures.push("Google policy declarations have an unsafe identity or ads declaration");
 if (googlePolicy.contentRating.questionnaireComplete !== false || googlePolicy.contentRating.humanReviewRequired !== true) failures.push("Google content rating must remain blocked for human review");
+if (buildEvidence.applicationId !== listings.appId || buildEvidence.containsSecrets !== false) failures.push("Native build evidence has an unsafe identity or secret declaration");
+if (!buildEvidence.android.debug.buildVerified || !buildEvidence.android.debug.signatureSchemeV2Verified) failures.push("Android debug build evidence is incomplete");
+if (buildEvidence.android.debug.targetApi !== 36 || buildEvidence.android.debug.javaVersion !== 21) failures.push("Android debug build evidence has the wrong toolchain");
+if (buildEvidence.android.release.signedBundleVerified !== false || buildEvidence.apple.signedArchiveVerified !== false) failures.push("Native release evidence must remain false until signed release artifacts are verified");
 
 async function pngSize(file) {
   const data = await readFile(join(root, file));

@@ -1,0 +1,32 @@
+{
+  "lastUpdated": "2026-08-29",
+  "applicationId": "com.blossomroyall.app",
+  "version": "0.1.0",
+  "sourceCommit": "a2116bcb34822a7366ab8ed760cabecb99e2790e",
+  "android": {
+    "debug": {
+      "buildVerified": true,
+      "artifact": "android/app/build/outputs/apk/debug/app-debug.apk",
+      "artifactBytes": 26874551,
+      "sha256": "F2AC1EA70CD4339177623BD8AD2A8BEEC5FC388302F518B57C7E55F17729AC6F",
+      "targetApi": 36,
+      "javaVersion": 21,
+      "gradleVersion": "8.14.3",
+      "signatureSchemeV2Verified": true,
+      "signingCertificate": "Android Debug",
+      "deviceTestVerified": false
+    },
+    "release": {
+      "signedBundleVerified": false,
+      "physicalDeviceTestVerified": false,
+      "playInternalTestingVerified": false
+    }
+  },
+  "apple": {
+    "signedArchiveVerified": false,
+    "testFlightVerified": false,
+    "deviceTestVerified": false
+  },
+  "containsSecrets": false,
+  "note": "Debug build evidence proves local Android compilation only. It is not an uploadable production release artifact."
+}

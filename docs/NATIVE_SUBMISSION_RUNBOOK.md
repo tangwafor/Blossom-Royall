@@ -6,6 +6,8 @@ Updated August 28, 2026.
 
 The native source package is structurally ready, but neither store submission is ready. The authoritative machine readable status is in `store/submission-readiness.json`. A false value is a release blocker and must be supported by evidence before it changes to true.
 
+The latest local native build result is recorded separately in `store/native-build-evidence.json`. A successful debug build proves compilation only. It does not satisfy production signing, physical device testing, closed testing, TestFlight, or store submission requirements.
+
 ## Local completion sequence
 
 1. Promote and verify the controlled production pilot using the separately approved production process.
