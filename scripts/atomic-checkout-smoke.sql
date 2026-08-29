@@ -13,6 +13,9 @@ insert into public.store_memberships (store_id, user_id, role) values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'owner');
 insert into public.store_commerce_settings (store_id, currency, tax_rate_percent, pickup_enabled, local_delivery_enabled, local_delivery_fee, free_local_minimum, shipping_enabled, shipping_fee, created_by, updated_by) values
   ('20000000-0000-0000-0000-000000000001', 'USD', 6, true, true, 10.00, 200.00, true, 15.00, '10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001');
+insert into public.cash_registers (id, store_id, name, location, created_by, updated_by) values
+  ('21000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Front counter', 'Main floor', '10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001');
+select public.open_cash_drawer('20000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000001', 100.00, 'Opening count verified');
 insert into public.vendors (id, store_id, owner_user_id, name, status) values
   ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Blossom Collections', 'active');
 insert into public.products (id, store_id, vendor_id, name, category, status) values

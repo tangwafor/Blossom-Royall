@@ -6,6 +6,9 @@ on conflict (id) do nothing;
 insert into public.profiles (id, full_name, role) values
   ('10000000-0000-0000-0000-000000000002', 'Pilot Customer', 'customer')
 on conflict (id) do nothing;
+insert into public.cash_registers (id, store_id, name, location, created_by, updated_by) values
+  ('21000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 'Mobile counter', 'Main floor', '10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
+on conflict (id) do nothing;
 
 set role authenticated;
 set request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
@@ -73,6 +76,8 @@ on conflict (store_id, user_id) do update set role = excluded.role;
 set role authenticated;
 set request.jwt.claim.sub = '10000000-0000-0000-0000-000000000003';
 set request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000003","aal":"aal1"}';
+
+select public.open_cash_drawer('20000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-000000000002', 50.00, 'Cashier opening count');
 
 select * from public.place_tenant_order(
   '20000000-0000-0000-0000-000000000001', 'onsite', 'pickup', 'cash',

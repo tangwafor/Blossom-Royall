@@ -559,6 +559,16 @@ test("records an exact cash tender with cashier accountability", async ({ page }
   await expect(receipt.getByText("Recorded by signed in cashier")).toBeVisible();
 });
 
+test("shows the protected cash drawer workspace", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("br-tour-complete", "true"));
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Cash Drawer", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Cash drawer", exact: true })).toBeVisible();
+  await expect(page.getByText("Sign in as an owner, manager, or staff member to use production drawers.")).toBeVisible();
+  await expect(page.locator(".drawer-empty").getByRole("link", { name: "Open secure workspace" })).toHaveAttribute("href", "/auth");
+});
+
 test("captures proof of payment for staff verification", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem("br-tour-complete", "true");

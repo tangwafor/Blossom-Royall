@@ -1517,6 +1517,35 @@ h3 {
 .tender-field select, .tender-field input { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
 .change-due { color: var(--success); font-weight: 800; }
 .cash-collection { margin-bottom: 12px; display: grid; gap: 9px; }
+.cash-drawer-center { display: grid; gap: 16px; }
+.cash-drawer-center form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+.cash-drawer-center label { display: grid; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 800; }
+.cash-drawer-center input, .cash-drawer-center select { min-height: 44px; width: 100%; padding: 0 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); }
+.cash-drawer-center form button { min-height: 44px; }
+.drawer-empty { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 15px; text-align: center; }
+.drawer-empty svg { width: 40px; height: 40px; color: var(--wine); }
+.drawer-register-list { margin-top: 16px; display: grid; gap: 8px; }
+.drawer-register-list article { min-height: 56px; padding: 10px 13px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 11px; }
+.drawer-register-list span { display: grid; gap: 3px; }
+.drawer-register-list small { color: var(--muted); }
+.drawer-register-list button { width: 40px; height: 40px; display: grid; place-items: center; }
+.drawer-register-list svg { width: 16px; }
+.drawer-active > .panel-head > b { font-size: 22px; color: var(--wine); }
+.drawer-actions { display: grid; gap: 14px; }
+.drawer-history { display: grid; gap: 10px; }
+.drawer-history > article { padding: 14px; display: grid; grid-template-columns: 1fr 2fr; gap: 15px; align-items: center; border: 1px solid var(--line); border-radius: 12px; }
+.drawer-history > article > span { display: grid; gap: 4px; }
+.drawer-history small, .drawer-history dt { color: var(--muted); }
+.drawer-history dl { margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.drawer-history dl div { display: grid; gap: 3px; }
+.drawer-history dt { font-size: 9px; }
+.drawer-history dd { margin: 0; font-weight: 800; }
+@media (max-width: 760px) {
+  .cash-drawer-center form { grid-template-columns: 1fr; }
+  .cash-drawer-center form button { width: 100%; }
+  .drawer-history > article { grid-template-columns: 1fr; }
+  .drawer-history dl { grid-template-columns: repeat(3, 1fr); }
+}
 .cash-exact { min-height: 42px; border: 1px solid var(--wine); border-radius: 8px; background: var(--surface); color: var(--wine); font-size: 9px; font-weight: 800; }
 .cash-exact:hover, .cash-exact:focus-visible { background: var(--blush); }
 .payment-evidence { display: grid; gap: 10px; margin: 4px 0 12px; }

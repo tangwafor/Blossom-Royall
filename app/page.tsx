@@ -59,6 +59,12 @@ import {
   reviewTenantPendingPayment,
   loadTenantProducts,
   loadTenantVendorStorefronts,
+  loadCashDrawerWorkspace,
+  saveCashRegister,
+  removeCashRegister,
+  openCashDrawer,
+  recordCashDrawerAdjustment,
+  closeCashDrawer,
   removeTenantVendor,
   removeTenantVendorStorefront,
   resolveTenantContext,
@@ -73,6 +79,8 @@ import {
   type TenantVendorStorefront,
   type ReturnRequestRecord,
   type PendingPaymentReview,
+  type CashRegisterRecord,
+  type CashDrawerSessionRecord,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -89,6 +97,7 @@ const nav = [
   ["Customer Shop", Sparkles],
   ["My Fit", Ruler],
   ["Checkout", CircleDollarSign],
+  ["Cash Drawer", Banknote],
   ["Orders", ShoppingBag],
   ["My Orders", ClipboardList],
   ["Aftercare", RotateCcw],
@@ -753,6 +762,7 @@ export default function Home() {
         {active === "Checkout" && (
           <CheckoutCenter openSale={() => setSale(true)} />
         )}
+        {active === "Cash Drawer" && <CashDrawerCenter go={go} />}
         {active === "Staff" && (
           <ListView
             eyebrow="TODAY'S TEAM"
@@ -3937,6 +3947,57 @@ type BagItem = {
 
 type CheckoutTender = "Cash" | "Card" | "Bank transfer" | "Zelle" | "Venmo" | "PayPal" | "Cash App" | "Mobile money" | "Check";
 type PaymentProof = { name: string; type: string; size: number };
+
+const drawerCopy = {
+  en: { title: "Cash drawer", subtitle: "Open with a counted float, record every cash movement, then close against the system total.", register: "Register", location: "Location", create: "Add register", opening: "Opening float", open: "Open drawer", paidIn: "Paid in", paidOut: "Paid out", reason: "Reason", record: "Record movement", counted: "Counted cash", close: "Close and reconcile", expected: "Expected", variance: "Variance", noDrawer: "No open drawer", checkout: "Go to checkout", history: "Recent drawer history", note: "Note", production: "Sign in as an owner, manager, or staff member to use production drawers." },
+  fr: { title: "Caisse", subtitle: "Ouvrez avec un fonds compté, enregistrez chaque mouvement, puis clôturez selon le total du système.", register: "Caisse", location: "Emplacement", create: "Ajouter une caisse", opening: "Fonds initial", open: "Ouvrir la caisse", paidIn: "Entrée", paidOut: "Sortie", reason: "Motif", record: "Enregistrer le mouvement", counted: "Espèces comptées", close: "Clôturer et rapprocher", expected: "Attendu", variance: "Écart", noDrawer: "Aucune caisse ouverte", checkout: "Aller au paiement", history: "Historique récent", note: "Note", production: "Connectez vous comme propriétaire, responsable ou membre du personnel pour utiliser les caisses de production." },
+  es: { title: "Caja de efectivo", subtitle: "Abra con un fondo contado, registre cada movimiento y cierre contra el total del sistema.", register: "Caja", location: "Ubicación", create: "Agregar caja", opening: "Fondo inicial", open: "Abrir caja", paidIn: "Entrada", paidOut: "Salida", reason: "Motivo", record: "Registrar movimiento", counted: "Efectivo contado", close: "Cerrar y conciliar", expected: "Esperado", variance: "Diferencia", noDrawer: "No hay caja abierta", checkout: "Ir al cobro", history: "Historial reciente", note: "Nota", production: "Inicie sesión como propietario, gerente o empleado para usar las cajas de producción." },
+} as const;
+
+function CashDrawerCenter({ go }: { go: (destination: string) => void }) {
+  const { value: store } = useStoreSettings();
+  const locale = (store.locale || "en").slice(0, 2) as keyof typeof drawerCopy;
+  const copy = drawerCopy[locale] || drawerCopy.en;
+  const [context, setContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: copy.production });
+  const [registers, setRegisters] = useState<CashRegisterRecord[]>([]);
+  const [sessions, setSessions] = useState<CashDrawerSessionRecord[]>([]);
+  const [registerName, setRegisterName] = useState("");
+  const [registerLocation, setRegisterLocation] = useState("");
+  const [registerId, setRegisterId] = useState("");
+  const [openingFloat, setOpeningFloat] = useState("");
+  const [note, setNote] = useState("");
+  const [adjustmentType, setAdjustmentType] = useState<"paid_in" | "paid_out">("paid_in");
+  const [adjustmentAmount, setAdjustmentAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [countedCash, setCountedCash] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const money = (amount: number) => new Intl.NumberFormat(store.locale, { style: "currency", currency: store.currency }).format(amount);
+  const activeSession = sessions.find((session) => session.status === "open") || null;
+  const refresh = async (nextContext: TenantContext) => {
+    if (nextContext.mode !== "production" || !["owner", "manager", "staff"].includes(nextContext.role || "")) return;
+    const workspace = await loadCashDrawerWorkspace(nextContext);
+    setRegisters(workspace.registers);
+    setSessions(workspace.sessions);
+    if (!registerId && workspace.registers[0]) setRegisterId(workspace.registers[0].id);
+  };
+  useEffect(() => { void resolveTenantContext().then(async (next) => { setContext(next); try { await refresh(next); } catch (error) { setMessage(error instanceof Error ? error.message : copy.production); } }); }, []);
+  const perform = async (work: () => Promise<void>, success: string) => {
+    setBusy(true); setMessage("");
+    try { await work(); await refresh(context); setMessage(success); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "The cash drawer action was not completed."); }
+    finally { setBusy(false); }
+  };
+  if (context.mode !== "production" || !["owner", "manager", "staff"].includes(context.role || "")) return <div className="content inner"><div className="view-head"><div><span className="eyebrow">CASH CONTROL</span><h2>{copy.title}</h2><p>{copy.production}</p></div></div><section className="panel drawer-empty"><ShieldCheck /><p>{context.reason}</p><Link className="primary" href="/auth">Open secure workspace</Link></section></div>;
+  return <div className="content inner cash-drawer-center">
+    <div className="view-head"><div><span className="eyebrow">CASH CONTROL</span><h2>{copy.title}</h2><p>{copy.subtitle}</p></div><button onClick={() => go("Checkout")}>{copy.checkout}<ArrowUpRight /></button></div>
+    {message && <output className="production-notice">{message}</output>}
+    {(context.role === "owner" || context.role === "manager") && <section className="panel drawer-registers"><div className="panel-head"><span><small className="eyebrow">SETUP</small><h3>{copy.register}</h3></span></div><form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await saveCashRegister(context, { name: registerName, location: registerLocation }); setRegisterName(""); setRegisterLocation(""); }, "Register saved."); }}><label>{copy.register}<input required value={registerName} onChange={(event) => setRegisterName(event.target.value)} /></label><label>{copy.location}<input value={registerLocation} onChange={(event) => setRegisterLocation(event.target.value)} /></label><button className="primary" disabled={busy}>{copy.create}</button></form><div className="drawer-register-list">{registers.map((register) => <article key={register.id}><span><b>{register.name}</b><small>{register.location || copy.location}</small></span>{context.role === "owner" && <button aria-label={`Remove ${register.name}`} onClick={() => void perform(() => removeCashRegister(context, register.id), "Register removed.")}><Trash2 /></button>}</article>)}</div></section>}
+    {!activeSession ? <section className="panel drawer-open"><div className="panel-head"><span><small className="eyebrow">START SHIFT</small><h3>{copy.noDrawer}</h3></span><Banknote /></div><form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await openCashDrawer(context, registerId, Number(openingFloat), note); setOpeningFloat(""); setNote(""); }, "Cash drawer opened."); }}><label>{copy.register}<select required value={registerId} onChange={(event) => setRegisterId(event.target.value)}><option value="" disabled>{copy.register}</option>{registers.filter((register) => register.active).map((register) => <option key={register.id} value={register.id}>{register.name}</option>)}</select></label><label>{copy.opening}<input required min="0" step="0.01" inputMode="decimal" type="number" value={openingFloat} onChange={(event) => setOpeningFloat(event.target.value)} /></label><label>{copy.note}<input value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} /></label><button className="primary" disabled={busy || !registers.length}>{copy.open}</button></form></section>
+    : <section className="panel drawer-active"><div className="panel-head"><span><small className="eyebrow">OPEN DRAWER</small><h3>{activeSession.registerName}</h3></span><b>{money(activeSession.openingFloat)}</b></div><div className="drawer-actions"><form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await recordCashDrawerAdjustment(context, activeSession.id, adjustmentType, Number(adjustmentAmount), reason); setAdjustmentAmount(""); setReason(""); }, "Cash movement recorded."); }}><select aria-label="Cash movement" value={adjustmentType} onChange={(event) => setAdjustmentType(event.target.value as "paid_in" | "paid_out")}><option value="paid_in">{copy.paidIn}</option><option value="paid_out">{copy.paidOut}</option></select><input aria-label="Movement amount" required min="0.01" step="0.01" type="number" inputMode="decimal" value={adjustmentAmount} onChange={(event) => setAdjustmentAmount(event.target.value)} /><input aria-label={copy.reason} required minLength={3} maxLength={240} placeholder={copy.reason} value={reason} onChange={(event) => setReason(event.target.value)} /><button disabled={busy}>{copy.record}</button></form><form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await closeCashDrawer(context, activeSession.id, Number(countedCash), note); setCountedCash(""); setNote(""); }, "Cash drawer closed and reconciled."); }}><input aria-label={copy.counted} required min="0" step="0.01" type="number" inputMode="decimal" placeholder={copy.counted} value={countedCash} onChange={(event) => setCountedCash(event.target.value)} /><input aria-label={copy.note} maxLength={500} placeholder={copy.note} value={note} onChange={(event) => setNote(event.target.value)} /><button className="primary" disabled={busy}>{copy.close}</button></form></div></section>}
+    <section className="panel drawer-history"><div className="panel-head"><span><small className="eyebrow">ACCOUNTABLE HISTORY</small><h3>{copy.history}</h3></span></div>{sessions.filter((session) => session.status === "closed").map((session) => <article key={session.id}><span><b>{session.registerName}</b><small>{new Date(session.openedAt).toLocaleString(store.locale)}</small></span><dl><div><dt>{copy.expected}</dt><dd>{money(session.expectedCash || 0)}</dd></div><div><dt>{copy.counted}</dt><dd>{money(session.countedCash || 0)}</dd></div><div><dt>{copy.variance}</dt><dd>{money(session.variance || 0)}</dd></div></dl></article>)}</section>
+  </div>;
+}
 
 const checkoutCashCopy = {
   en: {

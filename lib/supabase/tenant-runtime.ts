@@ -511,6 +511,84 @@ export type TenantCheckoutRequest = {
 
 export type TenantCheckoutResult = { orderId: string; receiptNo: string; subtotal: number; deliveryFee: number; tax: number; total: number; paymentStatus: string };
 
+export type CashRegisterRecord = { id: string; name: string; location: string; active: boolean };
+export type CashDrawerSessionRecord = {
+  id: string;
+  registerId: string;
+  registerName: string;
+  status: "open" | "closed";
+  openingFloat: number;
+  expectedCash: number | null;
+  countedCash: number | null;
+  variance: number | null;
+  openedAt: string;
+  closedAt: string | null;
+};
+
+function requireCashTeamContext(context: TenantContext) {
+  if (context.mode !== "production" || !context.storeId || !context.userId || !["owner", "manager", "staff"].includes(context.role || "")) {
+    throw new Error("Signed in cash team access is required.");
+  }
+}
+
+export async function loadCashDrawerWorkspace(context: TenantContext): Promise<{ registers: CashRegisterRecord[]; sessions: CashDrawerSessionRecord[] }> {
+  requireCashTeamContext(context);
+  const client = createClient();
+  const [registerResult, sessionResult] = await Promise.all([
+    client.from("cash_registers").select("id, name, location, active").eq("store_id", context.storeId!).order("name"),
+    client.from("cash_drawer_sessions").select("id, register_id, status, opening_float, expected_cash, counted_cash, variance, opened_at, closed_at, cash_registers(name)").eq("store_id", context.storeId!).order("opened_at", { ascending: false }).limit(30),
+  ]);
+  if (registerResult.error) throw registerResult.error;
+  if (sessionResult.error) throw sessionResult.error;
+  return {
+    registers: (registerResult.data || []).map((row) => ({ id: row.id, name: row.name, location: row.location, active: row.active })),
+    sessions: (sessionResult.data || []).map((row) => ({
+      id: row.id, registerId: row.register_id,
+      registerName: (row.cash_registers as unknown as { name?: string } | null)?.name || "Register",
+      status: row.status as "open" | "closed", openingFloat: Number(row.opening_float),
+      expectedCash: row.expected_cash == null ? null : Number(row.expected_cash),
+      countedCash: row.counted_cash == null ? null : Number(row.counted_cash),
+      variance: row.variance == null ? null : Number(row.variance), openedAt: row.opened_at, closedAt: row.closed_at,
+    })),
+  };
+}
+
+export async function saveCashRegister(context: TenantContext, input: { id?: string; name: string; location: string; active?: boolean }) {
+  requireCashTeamContext(context);
+  if (!["owner", "manager"].includes(context.role || "")) throw new Error("Owner or manager access is required to manage registers.");
+  const row = { store_id: context.storeId, name: input.name.trim(), location: input.location.trim(), active: input.active ?? true, updated_by: context.userId };
+  const query = input.id
+    ? createClient().from("cash_registers").update(row).eq("id", input.id).eq("store_id", context.storeId!)
+    : createClient().from("cash_registers").insert({ ...row, created_by: context.userId });
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function removeCashRegister(context: TenantContext, registerId: string) {
+  requireCashTeamContext(context);
+  if (context.role !== "owner") throw new Error("Owner access is required to remove a register.");
+  const { error } = await createClient().from("cash_registers").delete().eq("id", registerId).eq("store_id", context.storeId!);
+  if (error) throw error;
+}
+
+export async function openCashDrawer(context: TenantContext, registerId: string, openingFloat: number, note: string) {
+  requireCashTeamContext(context);
+  const { error } = await createClient().rpc("open_cash_drawer", { p_store_id: context.storeId, p_register_id: registerId, p_opening_float: openingFloat, p_note: note });
+  if (error) throw error;
+}
+
+export async function recordCashDrawerAdjustment(context: TenantContext, sessionId: string, adjustmentType: "paid_in" | "paid_out", amount: number, reason: string) {
+  requireCashTeamContext(context);
+  const { error } = await createClient().rpc("record_cash_drawer_adjustment", { p_session_id: sessionId, p_adjustment_type: adjustmentType, p_amount: amount, p_reason: reason });
+  if (error) throw error;
+}
+
+export async function closeCashDrawer(context: TenantContext, sessionId: string, countedCash: number, note: string) {
+  requireCashTeamContext(context);
+  const { error } = await createClient().rpc("close_cash_drawer", { p_session_id: sessionId, p_counted_cash: countedCash, p_note: note });
+  if (error) throw error;
+}
+
 export async function placeTenantOrder(context: TenantContext, request: TenantCheckoutRequest): Promise<TenantCheckoutResult> {
   if (context.mode !== "production" || !context.storeId || !context.userId) throw new Error("Authenticated tenant access is required.");
   const client = createClient();
