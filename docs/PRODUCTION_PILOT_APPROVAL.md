@@ -1,10 +1,10 @@
 # Blossom Royall Controlled Production Pilot Approval
 
-Prepared August 28, 2026.
+Prepared August 29, 2026.
 
 ## Current boundary
 
-The last recorded production boundary is commit `980ecf5`. The verified local branch now ends at commit `881cced` and contains the controlled pilot work. Production must be rechecked immediately before execution. No migration in this packet has been approved for production and no newer commit has been intentionally pushed through this packet.
+The last recorded production boundary is commit `980ecf5`. The committed local base before the current cash pilot packet is `f19399e`. Production must be rechecked immediately before execution. No migration in this packet has been approved for production and no newer commit has been intentionally pushed through this packet.
 
 Two explicit approvals are required:
 
@@ -42,7 +42,9 @@ Apply these migrations in filename order after capturing and reviewing a new pro
 
 12. `20260828185000_payment_verification.sql`
 
-The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. It has no schema difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
+13. `20260829062000_accountable_cash_checkout.sql`
+
+The latest captured schema baseline is `SCHEMA_DUMP_2026-08-29T06-11-37Z.sql`. It has no table difference from the previous baseline, so no production schema drift was found. A second fresh snapshot must be captured immediately before production execution if the production schema changes after that file was created.
 
 ## Proven local checks
 
@@ -56,7 +58,7 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 5. Account deletion request, cancellation, audit evidence, sole owner protection, row level security, and four policy presence checks pass.
 
-6. The complete prepush gate passed on August 28, 2026 at local commit `881cced`: type checks, production build, static site build, synthetic monitor fixture, account deletion processor verifier, customer commerce verifier, return verifier, fulfillment verifier, payment verifier, native structure verifier, and Playwright behavior tests. The Playwright result is 98 passed and 2 intentionally skipped across desktop and mobile projects.
+6. The complete prepush gate passed on August 29, 2026 for the current cash pilot candidate: type checks, production build, static site build, synthetic monitor fixture, account deletion processor verifier, customer commerce verifier, return verifier, fulfillment verifier, payment verifier, cash checkout verifier, native structure verifier, and Playwright behavior tests. The Playwright result is 100 passed and 2 intentionally skipped across desktop and mobile projects.
 
 7. Customer storefront discovery requires a customer profile and a published Blossom Royall store. Internal roles do not resolve through the public customer function.
 
@@ -92,6 +94,16 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 23. Apple and Google listing metadata, privacy declaration maps, policy declaration maps, reviewer access requirements, and screenshot dimensions are staged and structurally verified. Final screenshots refuse preview data and remain blocked on authenticated production capture plus human review.
 
+24. Cash checkout is restricted to onsite owner, manager, or staff sessions. Customer accounts cannot self confirm online cash as received.
+
+25. Every new cash payment records the authenticated cashier, server receipt time, amount accepted, exact change, confirmed order state, inventory movement, seller ledger credit, payment audit, and branded receipt in one transaction.
+
+26. Direct authenticated writes to the payment table are revoked. Cash must pass through the protected checkout function.
+
+27. Historical cash records without receiver evidence remain visibly marked as legacy unverified. Cashier account deletion anonymizes the receiver while preserving the server timestamp and required receipt history.
+
+28. The complete migration chain, cash smoke test, cash role isolation, direct write denial, and cashier privacy deletion test pass against a fresh isolated PostgreSQL 17 database.
+
 ## Pilot activation sequence
 
 1. Confirm Delly's production authentication identity and multifactor enrollment.
@@ -108,7 +120,7 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 7. Create only the approved Blossom Collections vendor and storefront records. Keep publication status in review until Delly confirms spelling, content, media rights, and catalog.
 
-8. Execute one low value cash pilot sale and one referenced electronic payment pilot. Confirm receipt, stock, ledger, audit, payment verification, evidence privacy, customer order reload, and cross customer isolation.
+8. Execute one low value onsite cash pilot sale while signed in as the approved cashier. Count the tender, use the exact amount control or enter the received amount, confirm change, print the receipt, and verify cashier identity, server time, stock, seller ledger, audit history, and confirmed paid status. Separately confirm that a customer account cannot self confirm cash online.
 
 9. Submit one controlled customer return, verify it appears in the staff queue, advance it through inspection and completion, and confirm the seller attribution and eight expected audit events for the complete test lifecycle.
 
@@ -128,7 +140,7 @@ The latest captured schema baseline is `SCHEMA_DUMP_2026-08-28T18-43-04Z.sql`. I
 
 Stop promotion if any row level security, tenant isolation, endpoint authorization, bundle secret, Supabase advisor, migration, storage privacy, MFA, checkout concurrency, or branded domain check fails.
 
-Card acceptance and production layaway remain unavailable until their separate authorization and balance contracts are complete. Electronic methods currently record a reference or private proof for staff verification. They do not claim provider authorization.
+Cash acceptance is ready for a controlled onsite pilot after the database migration and deployment receive explicit approval. Card acceptance and production layaway remain unavailable until their separate authorization and balance contracts are complete. Electronic methods currently record a reference or private proof for staff verification. They do not claim provider authorization.
 
 ## Recovery posture
 

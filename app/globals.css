@@ -1516,6 +1516,9 @@ h3 {
 .tender-field { display: grid; gap: 7px; margin-top: 12px; color: var(--ink); font-size: 9px; font-weight: 800; }
 .tender-field select, .tender-field input { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
 .change-due { color: var(--success); font-weight: 800; }
+.cash-collection { margin-bottom: 12px; display: grid; gap: 9px; }
+.cash-exact { min-height: 42px; border: 1px solid var(--wine); border-radius: 8px; background: var(--surface); color: var(--wine); font-size: 9px; font-weight: 800; }
+.cash-exact:hover, .cash-exact:focus-visible { background: var(--blush); }
 .payment-evidence { display: grid; gap: 10px; margin: 4px 0 12px; }
 .evidence-choice { margin: 8px 0 0; color: var(--ink); font-size: 9px; font-weight: 800; line-height: 1.4; }
 .proof-upload { min-height: 58px; padding: 10px; display: flex; align-items: center; gap: 10px; border: 1px dashed var(--wine); border-radius: 10px; background: var(--blush); color: var(--wine); cursor: pointer; }

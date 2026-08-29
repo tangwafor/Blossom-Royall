@@ -3938,6 +3938,30 @@ type BagItem = {
 type CheckoutTender = "Cash" | "Card" | "Bank transfer" | "Zelle" | "Venmo" | "PayPal" | "Cash App" | "Mobile money" | "Check";
 type PaymentProof = { name: string; type: string; size: number };
 
+const checkoutCashCopy = {
+  en: {
+    unavailable: "Cash can only be collected by a signed in owner, manager, or staff member at onsite checkout.",
+    counted: "Count the cash before recording it. The signed in cashier and server time are saved with the payment.",
+    exact: "Use exact amount",
+    recorded: "Recorded by signed in cashier",
+    confirmed: "Cash payment recorded",
+  },
+  fr: {
+    unavailable: "Les espèces peuvent uniquement être encaissées sur place par un propriétaire, responsable ou membre du personnel connecté.",
+    counted: "Comptez les espèces avant de les enregistrer. Le caissier connecté et l’heure du serveur sont conservés avec le paiement.",
+    exact: "Utiliser le montant exact",
+    recorded: "Enregistré par le caissier connecté",
+    confirmed: "Paiement en espèces enregistré",
+  },
+  es: {
+    unavailable: "El efectivo solo puede cobrarlo en la caja física un propietario, gerente o empleado que haya iniciado sesión.",
+    counted: "Cuente el efectivo antes de registrarlo. El cajero y la hora del servidor quedan guardados con el pago.",
+    exact: "Usar importe exacto",
+    recorded: "Registrado por el cajero conectado",
+    confirmed: "Pago en efectivo registrado",
+  },
+} as const;
+
 function CheckoutCenter({ openSale }: { openSale: () => void }) {
   const { value: policy } = useRetailPolicy();
   const { value: delivery } = useDeliverySettings();
@@ -3963,7 +3987,11 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
   useEffect(() => {
     const stored = localStorage.getItem("br-customer-bag:blossom-royall");
     if (stored) setBag(JSON.parse(stored));
-    void resolveTenantContext().then(setTenantContext);
+    void resolveTenantContext().then((context) => {
+      setTenantContext(context);
+      if (context.mode === "production" && ["owner", "manager", "staff"].includes(context.role || "")) setTender("Cash");
+      if (context.mode === "production" && context.role === "customer") setTender("Bank transfer");
+    });
   }, []);
   const subtotal = bag.reduce((sum, item) => sum + item.price, 0);
   const deliveryFee =
@@ -3979,6 +4007,9 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
   const deposit = Math.round(total * policy.layawayDepositPercent) / 100;
   const amountDue = payment === "layaway" ? deposit : total;
   const received = Number(cashReceived || 0);
+  const canCollectCash = tenantContext.mode === "preview" || ["owner", "manager", "staff"].includes(tenantContext.role || "");
+  const cashLocale = (store.locale || "en").slice(0, 2) as keyof typeof checkoutCashCopy;
+  const cashText = checkoutCashCopy[cashLocale] || checkoutCashCopy.en;
   const changeDue = tender === "Cash" ? Math.max(0, received - amountDue) : 0;
   const requiresEvidence = tender !== "Cash" && tender !== "Card";
   const money = (amount: number) =>
@@ -3992,6 +4023,10 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
   const receiptTotal = authoritativeAmounts?.total ?? total;
   const receiptChange = tender === "Cash" ? Math.max(0, received - receiptTotal) : 0;
   const placeOrder = async () => {
+    if (tender === "Cash" && !canCollectCash) {
+      setPaymentMessage(cashText.unavailable);
+      return;
+    }
     if (tender === "Cash" && received < amountDue) {
       setPaymentMessage(`Enter at least ${money(amountDue)} received in cash.`);
       return;
@@ -4088,7 +4123,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
             <Check />
           </i>
           <span className="eyebrow">ORDER CONFIRMED</span>
-          <h2>Your complete look is reserved.</h2>
+          <h2>{tender === "Cash" ? cashText.confirmed : "Your complete look is reserved."}</h2>
           <p>
             Order {orderId} is coordinated across every seller. You will receive
             one update when it is ready for {method}.
@@ -4191,6 +4226,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
               <>
                 <div><dt>Cash received</dt><dd>{money(received)}</dd></div>
                 <div><dt>Change given</dt><dd>{money(receiptChange)}</dd></div>
+                <div><dt>Cashier record</dt><dd>{cashText.recorded}</dd></div>
               </>
             )}
             {paymentReference && <div><dt>Payment reference</dt><dd>{paymentReference}</dd></div>}
@@ -4310,7 +4346,7 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
           <label className="tender-field">
             Payment method
             <select aria-label="Payment method" value={tender} onChange={(event) => { setTender(event.target.value as CheckoutTender); setPaymentMessage(""); }}>
-              <option>Cash</option>
+              {canCollectCash && <option>Cash</option>}
               <option>Card</option>
               <option>Bank transfer</option>
               <option>Zelle</option>
@@ -4321,11 +4357,15 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
               <option>Check</option>
             </select>
           </label>
-          {tender === "Cash" && <label className="tender-field">
-            Cash received
-            <input aria-label="Cash received" type="number" min={amountDue} step="0.01" value={cashReceived} onChange={(event) => { setCashReceived(event.target.value); setPaymentMessage(""); }} placeholder={money(amountDue)} />
-            {received >= amountDue && <small className="change-due">Change due: {money(changeDue)}</small>}
-          </label>}
+          {tender === "Cash" && <div className="cash-collection">
+            <label className="tender-field">
+              Cash received
+              <input aria-label="Cash received" inputMode="decimal" type="number" min={amountDue} step="0.01" value={cashReceived} onChange={(event) => { setCashReceived(event.target.value); setPaymentMessage(""); }} placeholder={money(amountDue)} />
+              {received >= amountDue && <small className="change-due">Change due: {money(changeDue)}</small>}
+            </label>
+            <button type="button" className="cash-exact" onClick={() => { setCashReceived(amountDue.toFixed(2)); setPaymentMessage(""); }}>{cashText.exact}</button>
+            <small className="verification-note"><ShieldCheck />{cashText.counted}</small>
+          </div>}
           {requiresEvidence && <div className="payment-evidence">
             <p className="evidence-choice">Provide either a transaction reference or upload proof of payment.</p>
             <label className="tender-field">Payment reference<input aria-label="Payment reference" value={paymentReference} onChange={(event) => { setPaymentReference(event.target.value); setPaymentMessage(""); }} placeholder="Bank, check, or transaction reference" /></label>

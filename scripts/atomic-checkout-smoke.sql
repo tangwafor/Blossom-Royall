@@ -7,8 +7,8 @@ insert into auth.users (id, email) values
   ('10000000-0000-0000-0000-000000000001', 'owner@example.test');
 insert into public.profiles (id, full_name, role) values
   ('10000000-0000-0000-0000-000000000001', 'Pilot Owner', 'owner');
-insert into public.stores (id, name) values
-  ('20000000-0000-0000-0000-000000000001', 'Blossom Royall');
+insert into public.stores (id, name, slug, commerce_status) values
+  ('20000000-0000-0000-0000-000000000001', 'Blossom Royall', 'blossom-royall-test', 'published');
 insert into public.store_memberships (store_id, user_id, role) values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'owner');
 insert into public.store_commerce_settings (store_id, currency, tax_rate_percent, pickup_enabled, local_delivery_enabled, local_delivery_fee, free_local_minimum, shipping_enabled, shipping_fee, created_by, updated_by) values
@@ -35,18 +35,30 @@ declare
   audit_count integer;
   payment_amount numeric(12, 2);
   cash_change numeric(12, 2);
+  cash_receiver uuid;
+  cash_received_at timestamptz;
+  cash_accountability text;
+  recorded_order_status text;
+  recorded_payment_status text;
 begin
   select qty_on_hand into remaining from public.product_variants where id = '50000000-0000-0000-0000-000000000001';
   select count(*) into movement_count from public.inventory_movements;
   select count(*) into ledger_count from public.vendor_ledger_entries;
   select count(*) into audit_count from public.audit_log where entity_type = 'order';
-  select amount, change_given into payment_amount, cash_change from public.payments limit 1;
+  select amount, change_given, received_by, received_at, payments.cash_accountability
+    into payment_amount, cash_change, cash_receiver, cash_received_at, cash_accountability
+    from public.payments limit 1;
+  select status, payment_status into recorded_order_status, recorded_payment_status from public.orders limit 1;
   if remaining <> 1 then raise exception 'Expected one item remaining, found %', remaining; end if;
   if movement_count <> 1 then raise exception 'Expected one inventory movement'; end if;
   if ledger_count <> 1 then raise exception 'Expected one vendor ledger entry'; end if;
   if audit_count <> 1 then raise exception 'Expected one order audit event'; end if;
   if payment_amount <> 132.50 then raise exception 'Expected tax inclusive payment total 132.50, found %', payment_amount; end if;
   if cash_change <> 7.50 then raise exception 'Expected cash change 7.50, found %', cash_change; end if;
+  if cash_receiver <> '10000000-0000-0000-0000-000000000001' then raise exception 'Cash receiver was not the authenticated cashier'; end if;
+  if cash_received_at is null then raise exception 'Cash receipt timestamp was not recorded'; end if;
+  if cash_accountability <> 'received' then raise exception 'Cash accountability was not recorded'; end if;
+  if recorded_order_status <> 'confirmed' or recorded_payment_status <> 'succeeded' then raise exception 'Cash order was not confirmed as paid'; end if;
 end;
 $$;
 

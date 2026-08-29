@@ -538,6 +538,27 @@ test("prints a complete seller attributed receipt after checkout", async ({
   );
 });
 
+test("records an exact cash tender with cashier accountability", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("br-tour-complete", "true");
+    localStorage.setItem("br-customer-bag:blossom-royall", JSON.stringify([
+      { name: "Blossom Evening Dress", vendor: "Blossom Collections", price: 125, fulfillment: "Pickup today" },
+    ]));
+  });
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Checkout", exact: true }).click();
+  await page.getByLabel("Payment method").selectOption("Cash");
+  await page.getByRole("button", { name: "Use exact amount" }).click();
+  await expect(page.getByLabel("Cash received")).toHaveValue("125.00");
+  await expect(page.getByText("Change due: $0.00")).toBeVisible();
+  await page.getByRole("button", { name: "Place order" }).click();
+  await expect(page.getByRole("heading", { name: "Cash payment recorded" })).toBeVisible();
+  const receipt = page.getByRole("article", { name: /Receipt for order BR-\d{6}/ });
+  await expect(receipt.getByText("Blossom Collections")).toBeVisible();
+  await expect(receipt.getByText("Recorded by signed in cashier")).toBeVisible();
+});
+
 test("captures proof of payment for staff verification", async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     localStorage.setItem("br-tour-complete", "true");
