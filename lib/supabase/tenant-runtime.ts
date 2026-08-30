@@ -7,6 +7,7 @@ export type TenantContext = {
   storeId: string | null;
   userId: string | null;
   role: TenantRole | null;
+  displayName?: string;
   reason: string;
 };
 
@@ -15,6 +16,7 @@ const previewContext = (reason: string): TenantContext => ({
   storeId: null,
   userId: null,
   role: null,
+  displayName: "Guest",
   reason,
 });
 
@@ -39,19 +41,23 @@ export async function resolveTenantContext(): Promise<TenantContext> {
       if (storefrontError || !publicStore?.store_id) {
         return previewContext("This customer account cannot access the published Blossom Royall storefront yet.");
       }
+      const customerName = String(user.user_metadata?.full_name || user.email?.split("@")[0] || "Customer");
       return {
         mode: "production",
         storeId: publicStore.store_id,
         userId: user.id,
         role: "customer",
+        displayName: customerName,
         reason: "Published customer storefront records are active.",
       };
     }
+    const { data: profile } = await client.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
     return {
       mode: "production",
       storeId: membership.store_id,
       userId: user.id,
       role: membership.role as TenantRole,
+      displayName: String(profile?.full_name || user.user_metadata?.full_name || user.email?.split("@")[0] || "Store member"),
       reason: "Authenticated tenant records are active.",
     };
   } catch {
@@ -61,6 +67,75 @@ export async function resolveTenantContext(): Promise<TenantContext> {
 
 export function canManageTenant(role: TenantRole | null) {
   return role === "owner" || role === "manager";
+}
+
+export async function signOutTenant() {
+  const { error } = await createClient().auth.signOut();
+  if (error) throw error;
+}
+
+export type VendorRentRecord = {
+  paymentId: string | null;
+  leaseId: string;
+  vendorName: string;
+  monthlyRent: number;
+  dueDay: number;
+  dueOn: string;
+  status: "due" | "late" | "pending" | "paid" | "rejected" | "failed";
+  amount: number;
+  method: string;
+  providerReference: string;
+  receiptNumber: string;
+  submittedAt: string | null;
+  paidAt: string | null;
+};
+
+export async function loadVendorRentWorkspace(context: TenantContext): Promise<VendorRentRecord[]> {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager", "vendor"].includes(context.role || "")) return [];
+  const { data, error } = await createClient().from("leases")
+    .select("id, monthly_rent, rent_due_day, start_date, end_date, status, vendors!inner(name, store_id), rent_payments(id, amount, method, paid_at, due_on, status, provider_reference, receipt_no, submitted_at)")
+    .eq("vendors.store_id", context.storeId)
+    .eq("status", "signed");
+  if (error) throw error;
+  const today = new Date();
+  return (data || []).map((lease) => {
+    const dueDay = Number(lease.rent_due_day || 1);
+    const due = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    const dueOn = due.toISOString().slice(0, 10);
+    const payments = (lease.rent_payments || []) as Array<Record<string, string | number | null>>;
+    const payment = payments.filter((item) => item.due_on === dueOn).sort((a, b) => String(b.submitted_at || "").localeCompare(String(a.submitted_at || "")))[0];
+    const baseStatus = today.getTime() > due.getTime() ? "late" : "due";
+    return {
+      paymentId: payment?.id ? String(payment.id) : null,
+      leaseId: lease.id,
+      vendorName: (lease.vendors as unknown as { name?: string })?.name || "Vendor",
+      monthlyRent: Number(lease.monthly_rent),
+      dueDay,
+      dueOn,
+      status: (payment?.status || baseStatus) as VendorRentRecord["status"],
+      amount: Number(payment?.amount || lease.monthly_rent),
+      method: String(payment?.method || ""),
+      providerReference: String(payment?.provider_reference || ""),
+      receiptNumber: String(payment?.receipt_no || ""),
+      submittedAt: payment?.submitted_at ? String(payment.submitted_at) : null,
+      paidAt: payment?.paid_at ? String(payment.paid_at) : null,
+    };
+  });
+}
+
+export async function submitVendorRentPayment(context: TenantContext, input: { leaseId: string; dueOn: string; amount: number; method: string; providerReference: string }) {
+  if (context.mode !== "production" || context.role !== "vendor") throw new Error("Signed in vendor access is required.");
+  const { error } = await createClient().rpc("submit_vendor_rent_payment", {
+    p_lease_id: input.leaseId, p_due_on: input.dueOn, p_amount: input.amount,
+    p_method: input.method, p_provider_reference: input.providerReference,
+  });
+  if (error) throw error;
+}
+
+export async function reviewVendorRentPayment(context: TenantContext, paymentId: string, decision: "paid" | "rejected", note: string) {
+  if (context.mode !== "production" || !["owner", "manager"].includes(context.role || "")) throw new Error("Owner or manager access is required.");
+  const { error } = await createClient().rpc("review_vendor_rent_payment", { p_payment_id: paymentId, p_decision: decision, p_review_note: note.trim() || null });
+  if (error) throw error;
 }
 
 export async function loadTenantVendors(context: TenantContext) {
@@ -111,6 +186,20 @@ export type CustomerOrderRecord = {
 
 export async function loadTenantOrders(context: TenantContext): Promise<TenantOrderSummary[]> {
   if (context.mode !== "production" || !context.storeId) return [];
+  if (context.role === "vendor") {
+    const { data, error } = await createClient().rpc("get_vendor_order_summaries", { p_store_id: context.storeId });
+    if (!error) return (data || []).map((order: { id: string; attributed_total: number | string; status: string; fulfillment_method: string; fulfillment_status: string; payment_status: string; created_at: string }) => ({
+      rawId: order.id,
+      id: `#${String(order.id).slice(0, 8).toUpperCase()}`,
+      customer: "Private customer",
+      total: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(order.attributed_total || 0)),
+      status: String(order.status || "Open"),
+      time: new Date(order.created_at).toLocaleString(),
+      fulfillmentMethod: order.fulfillment_method || "pickup",
+      fulfillmentStatus: order.fulfillment_status || "pending",
+      paymentStatus: order.payment_status || "pending",
+    }));
+  }
   let query = createClient()
     .from("orders")
     .select("id, total, status, fulfillment_method, fulfillment_status, payment_status, created_at")
@@ -134,6 +223,81 @@ export async function loadTenantOrders(context: TenantContext): Promise<TenantOr
     fulfillmentStatus: order.fulfillment_status || "pending",
     paymentStatus: order.payment_status || "pending",
   }));
+}
+
+export type VendorLedgerEntry = {
+  id: string;
+  orderId: string | null;
+  type: "sale_credit" | "refund_debit" | "fee_debit" | "adjustment_credit" | "adjustment_debit" | "payout_debit";
+  amount: number;
+  currency: string;
+  memo: string;
+  createdAt: string;
+};
+
+export async function loadVendorLedger(context: TenantContext): Promise<VendorLedgerEntry[]> {
+  if (context.mode !== "production" || context.role !== "vendor" || !context.storeId) return [];
+  const { data, error } = await createClient()
+    .from("vendor_ledger_entries")
+    .select("id, order_id, entry_type, amount, currency, memo, created_at")
+    .eq("store_id", context.storeId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return (data || []).map((entry) => ({ id: entry.id, orderId: entry.order_id, type: entry.entry_type, amount: Number(entry.amount), currency: entry.currency, memo: entry.memo || "", createdAt: entry.created_at }));
+}
+
+export type VendorOperatingSnapshot = {
+  vendorId: string;
+  vendorName: string;
+  productCount: number;
+  stockUnits: number;
+  lowStockVariants: number;
+  credits: number;
+  deductions: number;
+  paid: number;
+  recordedBalance: number;
+  rentStatus: string;
+  rentDueOn: string | null;
+  refreshedAt: string;
+};
+
+export async function loadVendorOperatingSnapshots(context: TenantContext): Promise<VendorOperatingSnapshot[]> {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager", "vendor"].includes(context.role || "")) return [];
+  const client = createClient();
+  const [vendorResult, productResult, ledgerResult, leaseResult] = await Promise.all([
+    client.from("vendors").select("id, name").eq("store_id", context.storeId),
+    client.from("products").select("id, vendor_id, product_variants(id, qty_on_hand)").eq("store_id", context.storeId),
+    client.from("vendor_ledger_entries").select("vendor_id, entry_type, amount").eq("store_id", context.storeId),
+    client.from("leases").select("vendor_id, rent_due_day, rent_payments(due_on, status, submitted_at)").order("start_date", { ascending: false }),
+  ]);
+  const firstError = [vendorResult.error, productResult.error, ledgerResult.error, leaseResult.error].find(Boolean);
+  if (firstError) throw firstError;
+  const refreshedAt = new Date().toISOString();
+  return (vendorResult.data || []).map((vendor) => {
+    const vendorProducts = (productResult.data || []).filter((product) => product.vendor_id === vendor.id);
+    const variants = vendorProducts.flatMap((product) => product.product_variants || []);
+    const entries = (ledgerResult.data || []).filter((entry) => entry.vendor_id === vendor.id);
+    const credits = entries.filter((entry) => ["sale_credit", "adjustment_credit"].includes(entry.entry_type)).reduce((sum, entry) => sum + Number(entry.amount), 0);
+    const deductions = entries.filter((entry) => ["refund_debit", "fee_debit", "adjustment_debit"].includes(entry.entry_type)).reduce((sum, entry) => sum + Number(entry.amount), 0);
+    const paid = entries.filter((entry) => entry.entry_type === "payout_debit").reduce((sum, entry) => sum + Number(entry.amount), 0);
+    const lease = (leaseResult.data || []).find((item) => item.vendor_id === vendor.id);
+    const latestRent = [...(lease?.rent_payments || [])].sort((a, b) => String(b.submitted_at || b.due_on || "").localeCompare(String(a.submitted_at || a.due_on || "")))[0];
+    return {
+      vendorId: vendor.id,
+      vendorName: vendor.name,
+      productCount: vendorProducts.length,
+      stockUnits: variants.reduce((sum, variant) => sum + Number(variant.qty_on_hand || 0), 0),
+      lowStockVariants: variants.filter((variant) => Number(variant.qty_on_hand || 0) <= 3).length,
+      credits,
+      deductions,
+      paid,
+      recordedBalance: credits - deductions - paid,
+      rentStatus: latestRent?.status || "due",
+      rentDueOn: latestRent?.due_on || null,
+      refreshedAt,
+    };
+  });
 }
 
 export async function loadCustomerOrderHistory(context: TenantContext): Promise<CustomerOrderRecord[]> {
@@ -624,7 +788,7 @@ export async function placeTenantOrder(context: TenantContext, request: TenantCh
 
 export type AccountFitProfile = {
   unit: "imperial" | "metric";
-  measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder", number>;
+  measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder" | "finger" | "wrist" | "neck", number>;
   recommendedSize: string;
   consent: boolean;
   shareWithVendors: boolean;

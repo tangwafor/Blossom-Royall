@@ -2,6 +2,7 @@ import {defineConfig,devices} from '@playwright/test';
 
 export default defineConfig({
   testDir:'./tests',
+  testIgnore:process.env.CREDENTIAL_RELEASE_RUN==='true'?[]:['**/credential-release.spec.ts'],
   fullyParallel:true,
   retries:1,
   reporter:'list',

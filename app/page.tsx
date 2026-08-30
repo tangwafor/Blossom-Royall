@@ -48,6 +48,11 @@ import MallLanding from "./mall-landing";
 import {
   loadAccountFitProfile,
   loadTenantVendors,
+  loadVendorRentWorkspace,
+  loadVendorLedger,
+  loadVendorOperatingSnapshots,
+  submitVendorRentPayment,
+  reviewVendorRentPayment,
   loadTenantOrders,
   loadCustomerOrderHistory,
   requestOrderItemReturn,
@@ -74,6 +79,7 @@ import {
   saveTenantVendor,
   saveTenantVendorStorefront,
   saveTenantCommerceSettings,
+  signOutTenant,
   placeTenantOrder,
   type TenantContext,
   type TenantProductSummary,
@@ -82,6 +88,9 @@ import {
   type PendingPaymentReview,
   type CashRegisterRecord,
   type CashDrawerSessionRecord,
+  type VendorRentRecord,
+  type VendorLedgerEntry,
+  type VendorOperatingSnapshot,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -93,25 +102,34 @@ import {
   type RetailPolicy,
 } from "../lib/tenant-config";
 
-const nav = [
-  ["Command Center", LayoutDashboard],
-  ["Customer Shop", Sparkles],
-  ["My Fit", Ruler],
-  ["Checkout", CircleDollarSign],
-  ["Cash Drawer", Banknote],
-  ["Orders", ShoppingBag],
-  ["My Orders", ClipboardList],
-  ["Aftercare", RotateCcw],
-  ["Products", Package],
-  ["Vendors", Store],
-  ["Shared Commerce", RefreshCw],
-  ["Delivery", Truck],
-  ["Staff", Users],
-  ["Intelligence", BrainCircuit],
-  ["Policies", Settings],
-  ["Business Setup", Store],
-  ["Help", BookOpen],
-] as const;
+type WorkspaceRole = TenantContext["role"];
+type NavItem = { label: string; destination: string; icon: typeof LayoutDashboard; roles: WorkspaceRole[] };
+const operatorRoles: WorkspaceRole[] = ["owner", "manager", "staff"];
+const nav: NavItem[] = [
+  { label: "Command Center", destination: "Command Center", icon: LayoutDashboard, roles: ["owner", "manager", "staff"] },
+  { label: "Vendor Board", destination: "Vendor Board", icon: LayoutDashboard, roles: ["vendor"] },
+  { label: "Customer Shop", destination: "Customer Shop", icon: Sparkles, roles: ["customer", "owner", "manager", "staff"] },
+  { label: "My Fit", destination: "My Fit", icon: Ruler, roles: ["customer"] },
+  { label: "Checkout", destination: "Checkout", icon: CircleDollarSign, roles: [...operatorRoles, "customer"] },
+  { label: "Cash Drawer", destination: "Cash Drawer", icon: Banknote, roles: operatorRoles },
+  { label: "Orders", destination: "Orders", icon: ShoppingBag, roles: [...operatorRoles, "vendor"] },
+  { label: "My Orders", destination: "My Orders", icon: ClipboardList, roles: ["customer"] },
+  { label: "Aftercare", destination: "Aftercare", icon: RotateCcw, roles: ["customer", "owner", "manager", "staff"] },
+  { label: "My Products", destination: "Products", icon: Package, roles: ["vendor"] },
+  { label: "Rent", destination: "Rent", icon: Banknote, roles: ["owner", "manager", "vendor"] },
+  { label: "Products", destination: "Products", icon: Package, roles: operatorRoles },
+  { label: "Vendors", destination: "Vendors", icon: Store, roles: ["owner", "manager"] },
+  { label: "Shared Commerce", destination: "Shared Commerce", icon: RefreshCw, roles: ["owner", "manager"] },
+  { label: "Delivery", destination: "Delivery", icon: Truck, roles: operatorRoles },
+  { label: "Staff", destination: "Staff", icon: Users, roles: ["owner", "manager"] },
+  { label: "Intelligence", destination: "Intelligence", icon: BrainCircuit, roles: ["owner", "manager"] },
+  { label: "Policies", destination: "Policies", icon: Settings, roles: ["owner", "manager"] },
+  { label: "Business Setup", destination: "Business Setup", icon: Store, roles: ["owner"] },
+  { label: "Help", destination: "Help", icon: BookOpen, roles: ["owner", "manager", "staff", "vendor", "customer"] },
+];
+
+const defaultDestination = (role: WorkspaceRole) => role === "vendor" ? "Vendor Board" : role === "customer" ? "Customer Shop" : "Command Center";
+const allowedNavigation = (role: WorkspaceRole) => role ? nav.filter((item) => item.roles.includes(role)) : nav.filter((item) => !["Vendor Board", "My Products"].includes(item.label));
 
 const orders = [
   {
@@ -399,7 +417,6 @@ export function OperatingSystem() {
   const [visibleOrders, setVisibleOrders] = useState<Order[]>(orders);
   useEffect(() => {
     const requestedView = new URLSearchParams(window.location.search).get("view");
-    if (requestedView && nav.some(([label]) => label === requestedView)) setActive(requestedView);
     const saved = localStorage.getItem("br-theme");
     const next =
       saved ||
@@ -422,6 +439,9 @@ export function OperatingSystem() {
     if (!localStorage.getItem("br-tour-complete")) setTourStep(0);
     void resolveTenantContext().then(async (context) => {
       setTenantContext(context);
+      const available = allowedNavigation(context.role);
+      const requested = requestedView ? available.find((item) => item.destination === requestedView || item.label === requestedView) : undefined;
+      setActive(requested?.destination || defaultDestination(context.role));
       if (context.mode === "production") {
         try {
           setVisibleOrders((await loadTenantOrders(context)) as Order[]);
@@ -444,7 +464,14 @@ export function OperatingSystem() {
       ),
     [query, visibleOrders],
   );
+  const notificationItems = tenantContext?.mode === "production" ? [] : [
+    { id: "stock", title: "12 low stock variants", detail: "Reorder before the weekend", destination: "Products" },
+    { id: "rent", title: "Vendor rent due today", detail: "Nia Collective · $800", destination: "Vendors" },
+    { id: "leave", title: "Leave request awaiting review", detail: "Open the staff decision queue", destination: "Staff" },
+  ];
+  const unreadNotificationCount = notificationItems.filter((item) => !readNotifications.includes(item.id)).length;
   const go = (v: string) => {
+    if (tenantContext?.role && !allowedNavigation(tenantContext.role).some((item) => item.destination === v)) return;
     setActive(v);
     setMenu(false);
   };
@@ -509,25 +536,26 @@ export function OperatingSystem() {
           </button>
         </div>
         <nav>
-          {nav.map(([label, Icon]) => (
+          {allowedNavigation(tenantContext?.role || null).map(({ label, destination, icon: Icon }) => (
             <button
               key={label}
-              className={active === label ? "active" : ""}
-              onClick={() => go(label)}
+              className={active === destination ? "active" : ""}
+              onClick={() => go(destination)}
             >
               <Icon />
               {label}
-              {label === "Orders" && visibleOrders.length > 0 && <em>{visibleOrders.length}</em>}
+              {destination === "Orders" && visibleOrders.length > 0 && <em>{visibleOrders.length}</em>}
             </button>
           ))}
         </nav>
-        <a className="profile" href="/auth">
-          <i>D</i>
+        <div className="profile">
+          <i>{(tenantContext?.mode === "production" ? tenantContext.displayName || "Store member" : storeSettings.ownerDisplayName).slice(0, 1).toUpperCase()}</i>
           <span>
-            <b>{storeSettings.ownerDisplayName}</b>
-            <small>Owner</small>
+            <b>{tenantContext?.mode === "production" ? tenantContext.displayName || "Store member" : storeSettings.ownerDisplayName}</b>
+            <small>{tenantContext?.role ? tenantContext.role[0].toUpperCase() + tenantContext.role.slice(1) : "Preview owner"}</small>
           </span>
-        </a>
+          {tenantContext?.mode === "production" ? <button onClick={() => void signOutTenant().then(() => { window.location.href = "/auth"; })}>Sign out</button> : <Link href="/auth">Sign in</Link>}
+        </div>
       </aside>
       {menu && (
         <button
@@ -561,26 +589,26 @@ export function OperatingSystem() {
                 placeholder="Search orders, products…"
               />
             </label>
-            <button
+            {(!tenantContext?.role || ["owner", "manager"].includes(tenantContext.role)) && <button
               className="bell notification-toggle"
               aria-label="Notifications"
               aria-expanded={notificationsOpen}
               onClick={() => setNotificationsOpen((value) => !value)}
             >
               <Bell />
-              {readNotifications.length < 3 && (
+              {unreadNotificationCount > 0 && (
                 <i className="notification-count">
-                  {3 - readNotifications.length}
+                  {unreadNotificationCount}
                 </i>
               )}
-            </button>
-            <button
+            </button>}
+            {(!tenantContext?.role || ["owner", "manager"].includes(tenantContext.role)) && <button
               className="bell tour-toggle"
               aria-label="Open guided tour"
               onClick={() => showTourStep(0)}
             >
               <CircleHelp />
-            </button>
+            </button>}
             <button
               className="bell theme-toggle"
               aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`}
@@ -588,7 +616,7 @@ export function OperatingSystem() {
             >
               {theme === "light" ? <Moon /> : <Sun />}
             </button>
-            <button
+            {(!tenantContext?.role || operatorRoles.includes(tenantContext.role)) && <button
               className="primary"
               onClick={() => {
                 setDone(false);
@@ -597,7 +625,7 @@ export function OperatingSystem() {
             >
               <Plus />
               New sale
-            </button>
+            </button>}
           </section>
         </header>
         {tenantContext?.mode === "preview" && (
@@ -613,7 +641,7 @@ export function OperatingSystem() {
             <span><b>Live tenant records</b><small>Only records authorized for this store membership appear here.</small></span>
           </aside>
         )}
-        {notificationsOpen && (
+        {notificationsOpen && (!tenantContext?.role || ["owner", "manager"].includes(tenantContext.role)) && (
           <section
             className="notification-center"
             role="dialog"
@@ -631,26 +659,8 @@ export function OperatingSystem() {
                 <X />
               </button>
             </header>
-            {[
-              {
-                id: "stock",
-                title: "12 low stock variants",
-                detail: "Reorder before the weekend",
-                destination: "Products",
-              },
-              {
-                id: "rent",
-                title: "Vendor rent due today",
-                detail: "Nia Collective · $800",
-                destination: "Vendors",
-              },
-              {
-                id: "leave",
-                title: "Leave request awaiting review",
-                detail: "Open the staff decision queue",
-                destination: "Staff",
-              },
-            ].map((item) => (
+            {!notificationItems.length && <p className="notification-empty">No live alerts are connected yet. Production alert automation is still in development.</p>}
+            {notificationItems.map((item) => (
               <article
                 className={readNotifications.includes(item.id) ? "read" : ""}
                 key={item.id}
@@ -670,19 +680,20 @@ export function OperatingSystem() {
                 </button>
               </article>
             ))}
-            <footer>
+            {!!notificationItems.length && <footer>
               <button
                 onClick={() => reviewNotifications(["stock", "rent", "leave"])}
               >
                 <Check />
                 Mark all reviewed
               </button>
-            </footer>
+            </footer>}
           </section>
         )}
         {active === "Command Center" && (
-          <Dashboard go={go} orders={filtered} openSale={() => setSale(true)} preview={tenantContext?.mode !== "production"} />
+          <><Dashboard go={go} orders={filtered} openSale={() => setSale(true)} preview={tenantContext?.mode !== "production"} displayName={tenantContext?.displayName || storeSettings.ownerDisplayName} role={tenantContext?.role || "owner"} />{tenantContext?.mode === "production" && ["owner", "manager"].includes(tenantContext.role || "") && <OwnerVendorReconciliation context={tenantContext} go={go} />}</>
         )}
+        {active === "Vendor Board" && tenantContext && <VendorBoard context={tenantContext} go={go} />}
         {tourStep !== null && (
           <div className="tour-wrap" role="presentation">
             <button
@@ -771,6 +782,7 @@ export function OperatingSystem() {
             <VendorOperations />
           </ListView>
         )}
+        {active === "Rent" && tenantContext && <VendorRentWorkspace context={tenantContext} />}
         {active === "Shared Commerce" && <SharedCommerceCenter />}
         {active === "Delivery" && <DeliveryCenter />}
         {active === "Checkout" && (
@@ -1354,7 +1366,7 @@ function ProductCatalogManager() {
         {tenantProducts.map((product) => {
           const quantity = product.variants.reduce((sum, variant) => sum + variant.quantity, 0);
           const price = product.variants[0]?.price || 0;
-          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer><button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button></article>;
+          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer>{operatorRoles.includes(tenantContext.role) ? <button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button> : <small className="channel-source">Vendor catalog editing is still in development. Only your authorized products appear here.</small>}</article>;
         })}
         {!tenantProducts.length && <section className="panel help-empty"><Package /><h3>No production products yet</h3><p>Vendor and product records will appear here after approved catalog data is added.</p></section>}
       </div> : <div className="product-grid">
@@ -2025,6 +2037,58 @@ function AfricstylePilotImport() {
       {notice && <output className="policy-saved" role="status">{notice}</output>}
     </section>
   );
+}
+
+function VendorRentWorkspace({ context }: { context: TenantContext }) {
+  const [rows, setRows] = useState<VendorRentRecord[]>([]);
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+  const refresh = async () => {
+    setLoading(true);
+    try { setRows(await loadVendorRentWorkspace(context)); setNotice(""); }
+    catch { setNotice("Rent records could not be loaded. No payment was changed."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void refresh(); }, [context.mode, context.role, context.storeId]);
+  const submitPayment = async (event: React.FormEvent<HTMLFormElement>, row: VendorRentRecord) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await submitVendorRentPayment(context, { leaseId: row.leaseId, dueOn: row.dueOn, amount: row.monthlyRent, method: String(data.get("method")), providerReference: String(data.get("reference")) });
+      setNotice("Payment submitted for owner verification. It is not marked paid until the owner approves it.");
+      await refresh();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Payment submission failed."); }
+  };
+  const review = async (row: VendorRentRecord, decision: "paid" | "rejected") => {
+    if (!row.paymentId) return;
+    try { await reviewVendorRentPayment(context, row.paymentId, decision, "Reviewed in the rent workspace"); await refresh(); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "Payment review failed."); }
+  };
+  return <ListView eyebrow="VENDOR FINANCE" title="Rent" subtitle="Due dates, payment verification, and receipts in one accountable record.">
+    <section className="panel vendor-finance">
+      {context.mode !== "production" && <div className="policy-saved" role="status">Production rent records require an authorized account. Online card and bank processing are still in development.</div>}
+      {notice && <output className="policy-saved" role="status">{notice}</output>}
+      {loading ? <p>Loading authorized rent records…</p> : rows.length === 0 ? <p>No signed lease with a current rent obligation was found for this account.</p> : <div className="agreement-ledger">
+        {rows.map((row) => <article key={row.leaseId}>
+          <span><b>{row.vendorName}</b><small>Due {new Date(`${row.dueOn}T00:00:00`).toLocaleDateString()}</small></span>
+          <span><small>Monthly rent</small><b>${row.monthlyRent.toFixed(2)}</b></span>
+          <span><small>Status</small><b>{row.status.toUpperCase()}</b></span>
+          {row.receiptNumber && <span><small>Receipt</small><b>{row.receiptNumber}</b></span>}
+          {context.role === "vendor" && ["due", "late", "rejected", "failed"].includes(row.status) && <form onSubmit={(event) => void submitPayment(event, row)}>
+            <label>Payment method<input name="method" required minLength={2} placeholder="Bank transfer, Zelle, check" /></label>
+            <label>Confirmation reference<input name="reference" required minLength={3} placeholder="Confirmation or check number" /></label>
+            <button className="primary" type="submit"><Banknote /> Submit payment</button>
+            <small>Submission requires owner verification. Direct online processing is still in development.</small>
+          </form>}
+          {context.role === "vendor" && row.status === "pending" && <p>Submitted and waiting for owner verification.</p>}
+          {["owner", "manager"].includes(context.role || "") && row.status === "pending" && <span>
+            <button className="primary" onClick={() => void review(row, "paid")}><Check /> Confirm paid</button>
+            <button onClick={() => void review(row, "rejected")}><X /> Reject</button>
+          </span>}
+        </article>)}
+      </div>}
+    </section>
+  </ListView>;
 }
 
 function VendorLeaseRentCenter({ vendors }: { vendors: VendorRecord[] }) {
@@ -4849,7 +4913,7 @@ type FitUnit = "imperial" | "metric";
 
 type FitProfile = {
   unit: FitUnit;
-  measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder", number>;
+  measurements: Record<"bust" | "waist" | "hips" | "inseam" | "shoulder" | "finger" | "wrist" | "neck", number>;
   recommendedSize: string;
   consent: boolean;
   shareWithVendors: boolean;
@@ -4891,12 +4955,22 @@ const fitCopy = {
     removeConfirm: "Delete My Fit from this device and your account? This cannot be undone.",
     removed: "My Fit was deleted from this device and your account.",
     updated: "Last measured",
+    photoTitle: "AI photo fitting, guided preview",
+    photoEyebrow: "PRIVATE PHOTO GUIDE",
+    development: "IN DEVELOPMENT",
+    photoIntro: "Use a plain background, fitted clothing, natural light, and keep your full body inside the frame. Photos stay on this device during this preview.",
+    photoViews: ["Front view", "Side view", "Back view"],
+    photoReady: "Photo set ready. Automatic AI sizing is still in development, so continue with the verified tape measurements below.",
+    photoWaiting: "Add all three guided views to prepare a future AI assisted fit check.",
     fields: {
       bust: ["Bust", "Wrap the tape around the fullest part, level across your back."],
       waist: ["Natural waist", "Measure where your body bends naturally without pulling the tape tight."],
       hips: ["Hips", "Stand with feet together and measure the fullest part of your hips."],
       inseam: ["Inseam", "Measure from the top of the inner leg to the desired trouser hem."],
       shoulder: ["Shoulder width", "Measure straight across your back from shoulder point to shoulder point."],
+      finger: ["Ring size in millimeters", "Use a calibrated ring gauge, or measure a well fitting ring with the verified printable guide. Check that it passes the knuckle without forcing. Paper, string, and body photos are not reliable enough for a final ring size."],
+      wrist: ["Wrist circumference", "Wrap the tape just below the wrist bone. Add comfort allowance only when the bracelet style requires it."],
+      neck: ["Neck circumference", "Measure comfortably around the base of the neck. Necklace length preference is separate from body circumference."],
     },
   },
   fr: {
@@ -4930,12 +5004,22 @@ const fitCopy = {
     removeConfirm: "Supprimer ce profil de cet appareil et de votre compte ? Cette action est irréversible.",
     removed: "Le profil a été supprimé de cet appareil et de votre compte.",
     updated: "Dernière mesure",
+    photoTitle: "Essayage photo IA, aperçu guidé",
+    photoEyebrow: "GUIDE PHOTO PRIVÉ",
+    development: "EN DÉVELOPPEMENT",
+    photoIntro: "Utilisez un fond uni, des vêtements ajustés et une lumière naturelle. Gardez tout le corps dans le cadre. Les photos restent sur cet appareil pendant cet aperçu.",
+    photoViews: ["Vue de face", "Vue de côté", "Vue de dos"],
+    photoReady: "Les trois photos sont prêtes. L’estimation automatique par IA est encore en développement. Continuez avec les mesures au ruban vérifiées ci dessous.",
+    photoWaiting: "Ajoutez les trois vues guidées pour préparer une future vérification de taille assistée par IA.",
     fields: {
       bust: ["Poitrine", "Passez le ruban autour de la partie la plus forte, bien horizontal dans le dos."],
       waist: ["Taille naturelle", "Mesurez là où le corps se plie naturellement sans serrer le ruban."],
       hips: ["Hanches", "Pieds joints, mesurez la partie la plus forte des hanches."],
       inseam: ["Entrejambe", "Mesurez du haut de la jambe intérieure jusqu’à l’ourlet souhaité."],
       shoulder: ["Largeur des épaules", "Mesurez droit dans le dos d’une pointe d’épaule à l’autre."],
+      finger: ["Taille de bague en millimètres", "Utilisez un baguier calibré ou une bague adaptée avec le guide imprimable vérifié. Vérifiez le passage de l’articulation sans forcer. Le papier, la ficelle et les photos du corps ne suffisent pas pour une taille finale."],
+      wrist: ["Tour de poignet", "Mesurez juste sous l’os du poignet. Ajoutez une aisance seulement si le style du bracelet l’exige."],
+      neck: ["Tour de cou", "Mesurez confortablement à la base du cou. La longueur souhaitée du collier est distincte du tour de cou."],
     },
   },
   es: {
@@ -4969,17 +5053,28 @@ const fitCopy = {
     removeConfirm: "¿Eliminar Mi Talla de este dispositivo y de tu cuenta? Esta acción no se puede deshacer.",
     removed: "Mi Talla se eliminó de este dispositivo y de tu cuenta.",
     updated: "Última medición",
+    photoTitle: "Ajuste fotográfico con IA, vista guiada",
+    photoEyebrow: "GUÍA FOTOGRÁFICA PRIVADA",
+    development: "EN DESARROLLO",
+    photoIntro: "Usa un fondo liso, ropa ajustada y luz natural. Mantén todo el cuerpo dentro del encuadre. Las fotos permanecen en este dispositivo durante esta vista previa.",
+    photoViews: ["Vista frontal", "Vista lateral", "Vista posterior"],
+    photoReady: "Las tres fotos están listas. El cálculo automático con IA sigue en desarrollo. Continúa con las medidas verificadas con cinta.",
+    photoWaiting: "Añade las tres vistas guiadas para preparar una futura verificación de talla asistida por IA.",
     fields: {
       bust: ["Busto", "Rodea la parte más llena con la cinta nivelada en la espalda."],
       waist: ["Cintura natural", "Mide donde el cuerpo se dobla naturalmente sin apretar la cinta."],
       hips: ["Caderas", "Con los pies juntos, mide la parte más llena de las caderas."],
       inseam: ["Entrepierna", "Mide desde la parte superior de la pierna interior hasta el bajo deseado."],
       shoulder: ["Ancho de hombros", "Mide recto por la espalda de un hombro al otro."],
+      finger: ["Talla de anillo en milímetros", "Usa un medidor calibrado o un anillo que ajuste bien con la guía imprimible verificada. Comprueba que pase el nudillo sin forzarlo. El papel, el hilo y las fotos corporales no bastan para una talla final."],
+      wrist: ["Circunferencia de la muñeca", "Mide justo debajo del hueso de la muñeca. Añade holgura solo cuando el estilo de pulsera lo requiera."],
+      neck: ["Circunferencia del cuello", "Mide cómodamente la base del cuello. La longitud preferida del collar se calcula por separado."],
     },
   },
 } as const;
 
-const fitFields = ["bust", "waist", "hips", "inseam", "shoulder"] as const;
+const fitFields = ["bust", "waist", "hips", "inseam", "shoulder", "finger", "wrist", "neck"] as const;
+const requiredFitFields = ["bust", "waist", "hips", "inseam", "shoulder"] as const;
 
 const convertFitValue = (value: number, from: FitUnit, to: FitUnit) => {
   if (!value || from === to) return value;
@@ -4996,6 +5091,13 @@ const recommendFitSize = (waist: number, unit: FitUnit) => {
   return "Custom fit review";
 };
 
+const recommendRingSize = (millimeters: number, wideBand: boolean) => {
+  if (!millimeters) return "Ring size not measured";
+  const sizes = [[44.2, 3], [46.8, 4], [49.3, 5], [51.9, 6], [54.4, 7], [57, 8], [59.5, 9], [62.1, 10], [64.6, 11], [67.2, 12], [69.7, 13]] as const;
+  const closest = sizes.reduce((best, item) => Math.abs(item[0] - millimeters) < Math.abs(best[0] - millimeters) ? item : best);
+  return millimeters < 43 || millimeters > 71 ? "Jeweler fitting recommended" : `Approximate US ring size ${closest[1] + (wideBand ? 0.5 : 0)} · ISO ${Math.round(millimeters)}`;
+};
+
 function MyFit({ go }: { go: (destination: string) => void }) {
   const [locale, setLocale] = useState<keyof typeof fitCopy>("en");
   const [unit, setUnit] = useState<FitUnit>("imperial");
@@ -5005,6 +5107,9 @@ function MyFit({ go }: { go: (destination: string) => void }) {
     hips: 0,
     inseam: 0,
     shoulder: 0,
+    finger: 0,
+    wrist: 0,
+    neck: 0,
   });
   const [step, setStep] = useState(0);
   const [consent, setConsent] = useState(false);
@@ -5012,9 +5117,16 @@ function MyFit({ go }: { go: (destination: string) => void }) {
   const [notice, setNotice] = useState("");
   const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [savedAt, setSavedAt] = useState("");
+  const [fitPhotos, setFitPhotos] = useState<Record<string, string>>({});
+  const [ringMethod, setRingMethod] = useState<"gauge" | "existing_ring" | "estimate">("gauge");
+  const [ringCheck, setRingCheck] = useState(0);
+  const [wideBand, setWideBand] = useState(false);
   const copy = fitCopy[locale];
   const field = fitFields[step];
   const recommendedSize = recommendFitSize(measurements.waist, unit);
+  const recommendedRingSize = recommendRingSize(measurements.finger, wideBand);
+  const ringDifference = Math.abs(measurements.finger - ringCheck);
+  const ringConfidence = !measurements.finger || !ringCheck ? "Incomplete" : ringDifference > 1.5 ? "Measure again" : ringMethod === "estimate" ? "Estimated" : "Verified at home";
 
   useEffect(() => {
     const saved = localStorage.getItem(fitStorageKey);
@@ -5067,14 +5179,14 @@ function MyFit({ go }: { go: (destination: string) => void }) {
   const changeUnit = (next: FitUnit) => {
     setMeasurements((current) =>
       Object.fromEntries(
-        fitFields.map((key) => [key, convertFitValue(current[key], unit, next)]),
+        fitFields.map((key) => [key, key === "finger" ? current[key] : convertFitValue(current[key], unit, next)]),
       ) as FitProfile["measurements"],
     );
     setUnit(next);
   };
 
   const save = async () => {
-    if (!consent || fitFields.some((key) => measurements[key] <= 0)) return;
+    if (!consent || requiredFitFields.some((key) => measurements[key] <= 0)) return;
     const profile: FitProfile = {
       unit,
       measurements,
@@ -5116,7 +5228,7 @@ function MyFit({ go }: { go: (destination: string) => void }) {
       if (tenantContext) await removeAccountFitProfiles(tenantContext);
       localStorage.removeItem(fitStorageKey);
       localStorage.removeItem(fitQueueKey);
-      setMeasurements({ bust: 0, waist: 0, hips: 0, inseam: 0, shoulder: 0 });
+      setMeasurements({ bust: 0, waist: 0, hips: 0, inseam: 0, shoulder: 0, finger: 0, wrist: 0, neck: 0 });
       setConsent(false);
       setShareWithVendors(false);
       setSavedAt("");
@@ -5155,7 +5267,13 @@ function MyFit({ go }: { go: (destination: string) => void }) {
           {fitFields.map((item, index) => <i key={item} className={index <= step ? "active" : ""} />)}
         </div>
         <div className="fit-measure-card">
-          <div className={`fit-figure fit-${field}`} aria-hidden="true"><Ruler /></div>
+          <div className={`fit-figure fit-${field}`} aria-label={`${copy.fields[field][0]} mannequin demonstration`}>
+            <div className="fit-mannequin" aria-hidden="true">
+              <i className="fit-head" /><i className="fit-torso" /><i className="fit-arm left" /><i className="fit-arm right" /><i className="fit-leg left" /><i className="fit-leg right" />
+              <span className={`fit-guide-line ${field}`} />
+            </div>
+            <small>{copy.fields[field][0]}</small>
+          </div>
           <div>
             <p>{copy.fields[field][1]}</p>
             <label>
@@ -5169,7 +5287,7 @@ function MyFit({ go }: { go: (destination: string) => void }) {
                   value={measurements[field] || ""}
                   onChange={(event) => setMeasurements((current) => ({ ...current, [field]: Number(event.target.value) }))}
                 />
-                <b>{unit === "metric" ? "cm" : "in"}</b>
+                <b>{field === "finger" ? "mm" : unit === "metric" ? "cm" : "in"}</b>
               </span>
             </label>
             <fieldset>
@@ -5181,8 +5299,39 @@ function MyFit({ go }: { go: (destination: string) => void }) {
         </div>
         <footer>
           <button type="button" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>{copy.previous}</button>
-          <button type="button" disabled={!measurements[field] || step === fitFields.length - 1} onClick={() => setStep((current) => Math.min(fitFields.length - 1, current + 1))}>{copy.next}</button>
+          <button type="button" disabled={(step < requiredFitFields.length && !measurements[field]) || step === fitFields.length - 1} onClick={() => setStep((current) => Math.min(fitFields.length - 1, current + 1))}>{copy.next}</button>
         </footer>
+      </section>
+      <section className="fit-photo-assistant panel" aria-labelledby="fit-photo-title">
+        <header>
+          <span><small className="eyebrow">{copy.photoEyebrow}</small><h3 id="fit-photo-title">{copy.photoTitle}</h3></span>
+          <em>{copy.development}</em>
+        </header>
+        <p>{copy.photoIntro}</p>
+        <div>
+          {copy.photoViews.map((view, index) => {
+            const key = ["front", "side", "back"][index];
+            return <label key={key} className={fitPhotos[key] ? "ready" : ""}>
+              <span><ScanLine /><b>{view}</b><small>{fitPhotos[key] || `${index + 1} of 3`}</small></span>
+              <input type="file" accept="image/*" capture="environment" aria-label={view} onChange={(event) => setFitPhotos((current) => ({ ...current, [key]: event.target.files?.[0]?.name || "" }))} />
+            </label>;
+          })}
+        </div>
+        <output role="status">{Object.keys(fitPhotos).filter((key) => fitPhotos[key]).length === 3 ? copy.photoReady : copy.photoWaiting}</output>
+      </section>
+      <section className="fit-jewelry-lab panel" aria-labelledby="jewelry-fit-title">
+        <header><span><small className="eyebrow">JEWELRY FIT LAB</small><h3 id="jewelry-fit-title">A ring recommendation that explains its confidence</h3></span><em>{ringConfidence}</em></header>
+        <p>Ring size is stored in millimeters so each seller can translate it to the sizing system used by that exact item. For the best result, measure twice at different times and confirm wide or valuable rings in store.</p>
+        <div className="jewelry-methods">
+          <label><input type="radio" name="ringMethod" checked={ringMethod === "gauge"} onChange={() => setRingMethod("gauge")} /><span><b>Calibrated ring gauge</b><small>Preferred home method</small></span></label>
+          <label><input type="radio" name="ringMethod" checked={ringMethod === "existing_ring"} onChange={() => setRingMethod("existing_ring")} /><span><b>Well fitting ring</b><small>Use a scale checked printable guide</small></span></label>
+          <label><input type="radio" name="ringMethod" checked={ringMethod === "estimate"} onChange={() => setRingMethod("estimate")} /><span><b>Estimate only</b><small>Requires seller confirmation</small></span></label>
+        </div>
+        <div className="jewelry-checks">
+          <label>Second measurement<input aria-label="Second ring measurement" type="number" min="40" max="75" step="0.1" value={ringCheck || ""} onChange={(event) => setRingCheck(Number(event.target.value))} /><small>millimeters</small></label>
+          <label className="wide-band"><input type="checkbox" checked={wideBand} onChange={(event) => setWideBand(event.target.checked)} /><span><b>Band is wider than 4 mm</b><small>Wider bands often need extra room.</small></span></label>
+        </div>
+        <output className={`ring-confidence ${ringConfidence.toLowerCase().replaceAll(" ", "-")}`}><b>{recommendedRingSize}</b><span>{ringDifference > 1.5 ? `Measurements differ by ${ringDifference.toFixed(1)} mm. Repeat before shopping.` : ringCheck ? `Two measurements are within ${ringDifference.toFixed(1)} mm.` : "Add a second measurement to calculate confidence."}</span></output>
       </section>
       <section className="fit-summary panel">
         <div className="fit-values">
@@ -5194,7 +5343,8 @@ function MyFit({ go }: { go: (destination: string) => void }) {
         <p className="fit-privacy"><ShieldCheck />{copy.privacy}</p>
         {savedAt && <p className="fit-updated"><Clock3 />{copy.updated}: {new Date(savedAt).toLocaleString(locale)}</p>}
         <footer>
-          <button className="primary" type="button" disabled={!consent || fitFields.some((item) => measurements[item] <= 0)} onClick={() => void save()}><Check />{copy.save}</button>
+          <p className="fit-jewelry-result"><b>{recommendedRingSize}</b><small>Ring fit varies by band width, knuckle shape, temperature, and regional sizing. Confirm valuable or custom rings with the seller or a jeweler.</small></p>
+          <button className="primary" type="button" disabled={!consent || requiredFitFields.some((item) => measurements[item] <= 0)} onClick={() => void save()}><Check />{copy.save}</button>
           <button type="button" disabled={!notice} onClick={() => go("Customer Shop")}>{copy.shop}<ArrowUpRight /></button>
           <button type="button" disabled={!savedAt} onClick={exportProfile}><Download />{copy.export}</button>
           <button type="button" disabled={!savedAt} onClick={() => void deleteProfile()}><Trash2 />{copy.remove}</button>
@@ -5211,7 +5361,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
       "Aurelia Satin Midi",
       "Because you love emerald occasionwear",
       "$168",
-      "96% match",
+      "Fit check ready",
     ],
     [
       "Mila Gold Clutch",
@@ -5223,7 +5373,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
       "Noelle Silk Trousers",
       "Inspired by your recent fitting",
       "$142",
-      "Your size is in stock",
+      "Seller chart required",
     ],
   ];
   const [hidden, setHidden] = useState<string[]>([]);
@@ -5237,12 +5387,14 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
   const [needBy, setNeedBy] = useState("Saturday");
   const [missionReady, setMissionReady] = useState(false);
   const [completeLookAdded, setCompleteLookAdded] = useState(false);
+  const [activeCollection, setActiveCollection] = useState("New arrivals");
   const [fitProfile, setFitProfile] = useState<FitProfile | null>(null);
   useEffect(() => {
     const savedFit = localStorage.getItem(fitStorageKey);
     if (savedFit) setFitProfile(JSON.parse(savedFit) as FitProfile);
   }, []);
   const visiblePicks = picks.filter((pick) => !hidden.includes(pick[0]));
+  const jewelrySize = fitProfile?.measurements.finger ? recommendRingSize(fitProfile.measurements.finger, false) : "Jewelry sizing not added";
   const missionSavings = budget - 312;
   const hidePick = (name: string) => setHidden((current) => [...current, name]);
   const openBag = () => {
@@ -5283,6 +5435,20 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
   };
   return (
     <div className="content shop">
+      <section className="customer-glance" aria-label="Customer dashboard">
+        <div className="customer-glance-hero">
+          <span className="eyebrow">YOUR BLOSSOM WORLD</span>
+          <h2>Everything beautiful, one glance away.</h2>
+          <p>Your fit, private edit, bag, orders, pickup, and aftercare stay together.</p>
+          <button onClick={() => go("My Fit")}><Ruler />{fitProfile ? "Review My Fit" : "Create My Fit"}</button>
+        </div>
+        <div className="customer-glance-grid">
+          <button onClick={() => go("My Fit")}><Ruler /><span><small>MY FIT</small><b>{fitProfile ? `Starting size ${fitProfile.recommendedSize}` : "Not created"}</b><em>{fitProfile ? "Private passport ready" : "Guided setup"}</em></span></button>
+          <button onClick={() => go("Checkout")}><ShoppingBag /><span><small>MY BAG</small><b>{saved.length + (completeLookAdded ? 3 : 0)} pieces</b><em>Review checkout</em></span></button>
+          <button onClick={() => go("My Orders")}><ClipboardList /><span><small>MY ORDERS</small><b>Track every purchase</b><em>Pickup and delivery</em></span></button>
+          <button onClick={() => go("Aftercare")}><RotateCcw /><span><small>AFTERCARE</small><b>Returns and exchanges</b><em>Policy aware help</em></span></button>
+        </div>
+      </section>
       <nav className="collection-nav" aria-label="Shop collections">
         {[
           "New arrivals",
@@ -5291,16 +5457,17 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
           "Accessories",
           "Occasion",
         ].map((collection) => (
-          <button key={collection}>{collection}</button>
+          <button key={collection} className={activeCollection === collection ? "active" : ""} aria-pressed={activeCollection === collection} onClick={() => setActiveCollection(collection)}>{collection}</button>
         ))}
       </nav>
+      <output className="collection-focus" aria-live="polite"><Sparkles /><span><small>NOW EXPLORING</small><b>{activeCollection}</b></span></output>
       <section className="shop-fit-bridge panel" aria-label="My Fit shopping status">
         <span>
           <Ruler />
           <span>
             <small className="eyebrow">MY FIT</small>
-            <b>{fitProfile ? `Size ${fitProfile.recommendedSize} is ready for matching` : "Add your private fit profile"}</b>
-            <small>{fitProfile ? "Recommendations now use your saved measurements without exposing them to vendors." : "Follow a calm self measurement guide before choosing a size."}</small>
+            <b>{fitProfile ? `Your fit passport is ready` : "Add your private fit profile"}</b>
+            <small>{fitProfile ? `Private apparel passport ready · ${jewelrySize}. Exact matches appear only after each seller chart is connected.` : "Follow a calm self measurement guide before choosing a size."}</small>
           </span>
         </span>
         <button onClick={() => go("My Fit")}>{fitProfile ? "Review My Fit" : "Start My Fit"}<ArrowUpRight /></button>
@@ -5381,14 +5548,14 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
                 {occasion}, ready by {needBy.toLowerCase()}
               </h3>
               <p>
-                Three pieces from three independent brands. All available in
-                your fit. One checkout and one pickup.
+                Three pieces from three independent brands. Exact apparel fit and
+                jewelry availability remain pending until each seller chart and live variant are connected.
               </p>
             </div>
             <div className="mission-items">
               <span>
                 <b>Aurelia Satin Midi</b>
-                <small>Africstyle Fashion · Size {fitProfile?.recommendedSize || "8"}{fitProfile ? " from My Fit" : ""}</small>
+                <small>Africstyle Fashion · My Fit starting size {fitProfile?.recommendedSize || "8"} · Seller chart confirmation required</small>
                 <em>$168</em>
               </span>
               <span>
@@ -5425,7 +5592,8 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
           <h2>An entrance worth remembering.</h2>
           <p>
             A private edit of sculptural silhouettes, luminous satin, and
-            finishing pieces selected in your size.
+            finishing pieces selected for your style. Exact sizing is confirmed
+            against each seller chart before purchase.
           </p>
           <div className="hero-actions">
             <button
@@ -5529,7 +5697,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
             </div>
             <small>{p[1]}</small>
             <h3>{p[0]}</h3>
-            {fitProfile && index !== 1 && <span className="fit-match"><Ruler />My Fit recommends size {fitProfile.recommendedSize}</span>}
+            {fitProfile && index !== 1 && <span className="fit-match"><Ruler />Starting size {fitProfile.recommendedSize} · Seller chart pending</span>}
             <div className="pick-confidence">
               <span>
                 <ShieldCheck />
@@ -6548,17 +6716,24 @@ function Dashboard({
   orders,
   openSale,
   preview,
+  displayName,
+  role,
 }: {
   go: (x: string) => void;
   orders: Order[];
   openSale: () => void;
   preview: boolean;
+  displayName: string;
+  role: WorkspaceRole;
 }) {
   if (!preview) {
     const netSales = orders.reduce((sum, order) => sum + Number(order.total.replace(/[^0-9.-]/g, "")), 0);
     const averageOrder = orders.length ? netSales / orders.length : 0;
+    const roleTitle = role === "owner" ? "Your entire mall is in view." : role === "manager" ? "Today’s operation is under control." : "Your shift command board is ready.";
     return <div className="content">
-      <section className="welcome"><div><span className="eyebrow">WELCOME, DELLY</span><h2>Your live command center is ready.</h2><p>{orders.length ? "Current tenant orders are shown below." : "No production orders have been recorded yet. Preview sales never appear in this workspace."}</p></div><button onClick={openSale}>Open checkout <ArrowUpRight /></button></section>
+      <section className={`welcome role-welcome role-${role}`}><div><span className="eyebrow">{role?.toUpperCase()} BOARD · LIVE</span><h2>{roleTitle}</h2><p>{orders.length ? `${orders.length} current tenant orders are ready for attention.` : "No production orders have been recorded yet. Preview sales never appear in this workspace."}</p></div><button onClick={openSale}>Open checkout <ArrowUpRight /></button></section>
+      <RoleOperationsMap go={go} role={role} />
+      <RolePulse role={role} orders={orders} go={go} />
       <section className="metrics">
         {[['Net sales', `$${netSales.toFixed(2)}`, 'Recorded'], ['Orders', String(orders.length), 'Recorded'], ['Avg. order', `$${averageOrder.toFixed(2)}`, 'Calculated'], ['Mall traffic', 'Not connected', 'Awaiting source']].map((metric, index) => <article key={metric[0]}><i className={`m${index}`}>{index === 0 ? '$' : index === 1 ? '↗' : index === 2 ? '◌' : '◇'}</i><span><small>{metric[0]}</small><b>{metric[1]}</b><em>{metric[2]}</em></span></article>)}
       </section>
@@ -6580,6 +6755,8 @@ function Dashboard({
           Open checkout <ArrowUpRight />
         </button>
       </section>
+      <RoleOperationsMap go={go} role="owner" />
+      <RolePulse role="owner" orders={orders} go={go} preview />
       <section className="metrics">
         {[
           ["Net sales", "$4,820", "+18%"],
@@ -6736,6 +6913,163 @@ function Dashboard({
       </section>
     </div>
   );
+}
+
+const operatingAreas = [
+  ["Checkout", "Sales and payment capture", CircleDollarSign],
+  ["Cash Drawer", "Registers and reconciliation", Banknote],
+  ["Orders", "Payment, fulfillment, and returns", ShoppingBag],
+  ["Products", "Catalog and channel inventory", Package],
+  ["Vendors", "Onboarding, leases, brands, and access", Store],
+  ["Rent", "Due dates, submissions, and approval", Banknote],
+  ["Shared Commerce", "Seller attribution and settlement", RefreshCw],
+  ["Delivery", "Pickup, local delivery, and shipping", Truck],
+  ["Staff", "People, schedules, leave, and payroll", Users],
+  ["Policies", "Editable operating rules", Settings],
+  ["Business Setup", "Tenant identity and configuration", Store],
+  ["Intelligence", "Explainable operating signals", BrainCircuit],
+] as const;
+
+function RoleOperationsMap({ go, role }: { go: (destination: string) => void; role: WorkspaceRole }) {
+  const availableDestinations = new Set(allowedNavigation(role).map((item) => item.destination));
+  const title = role === "owner" ? "Owner operating board" : role === "manager" ? "Manager operating board" : "Staff shift board";
+  const eyebrow = role === "owner" ? "RUN THE ENTIRE MALL" : role === "manager" ? "RUN TODAY’S OPERATION" : "RUN YOUR SHIFT";
+  return <section className={`panel operating-map role-map role-${role}`} aria-label={`${role?.[0].toUpperCase()}${role?.slice(1)} operating controls`}>
+    <div className="panel-head"><span><small className="eyebrow">{eyebrow}</small><h3>{title}</h3></span><ShieldCheck /></div>
+    <p>Every control shown here is available to this role. Protected decisions remain tenant isolated and auditable.</p>
+    <div className="operating-map-grid">
+      {operatingAreas.filter(([destination]) => availableDestinations.has(destination)).map(([destination, description, Icon]) => <button key={destination} onClick={() => go(destination)}>
+        <i><Icon /></i><span><b>{destination}</b><small>{description}</small></span><ChevronRight />
+      </button>)}
+    </div>
+  </section>;
+}
+
+function RolePulse({ role, orders, go, preview = false }: { role: WorkspaceRole; orders: Order[]; go: (destination: string) => void; preview?: boolean }) {
+  const [period, setPeriod] = useState<"Today" | "Week" | "Month">("Today");
+  const scale = period === "Today" ? 1 : period === "Week" ? 4.8 : 18.5;
+  const sales = orders.reduce((sum, order) => sum + Number(order.total.replace(/[^0-9.-]/g, "")), 0) * scale;
+  const lanes = role === "staff"
+    ? [["Checkout", "Serve the next customer", "Checkout", 82], ["Fulfillment", "Prepare open orders", "Orders", 61], ["Stock", "Resolve shelf exceptions", "Products", 38]]
+    : [["Revenue", `$${sales.toFixed(0)} recorded`, "Orders", 86], ["Fulfillment", `${orders.length} orders in view`, "Delivery", 64], ["Operations", "Review today’s exceptions", role === "owner" ? "Vendors" : "Staff", 43]];
+  const bars = [35, 52, 44, 68, 58, 84, 72, 96, 79, 88, 67, 92].map((value) => Math.min(100, Math.round(value * (period === "Today" ? .86 : period === "Week" ? .94 : 1))));
+  return <section className={`command-pulse role-${role}`} aria-label={`${role} live pulse`}>
+    <div className="pulse-main">
+      <header><span><small className="eyebrow">{preview ? "INTERACTIVE PREVIEW" : "LIVE OPERATING PULSE"}</small><h3>See the rhythm of the business.</h3></span><div className="pulse-period" aria-label="Dashboard period">{(["Today", "Week", "Month"] as const).map((value) => <button key={value} className={period === value ? "active" : ""} aria-pressed={period === value} onClick={() => setPeriod(value)}>{value}</button>)}</div></header>
+      <div className="pulse-total"><span><small>{period} sales</small><b>${sales.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b></span><em><TrendingUp />Current view</em></div>
+      <div className="pulse-chart" aria-label={`${period} activity chart`}>{bars.map((height, index) => <button key={index} style={{ height: `${height}%` }} aria-label={`Activity point ${index + 1}, ${height} percent`} title={`${height}% activity`} />)}</div>
+    </div>
+    <div className="pulse-lanes">{lanes.map(([title, detail, destination, strength]) => <button key={title} onClick={() => go(String(destination))}><span><small>{title}</small><b>{detail}</b></span><i><span style={{ width: `${strength}%` }} /></i><ChevronRight /></button>)}</div>
+  </section>;
+}
+
+function VendorBoard({ context, go }: { context: TenantContext; go: (destination: string) => void }) {
+  const [products, setProducts] = useState<TenantProductSummary[]>([]);
+  const [vendorOrders, setVendorOrders] = useState<Order[]>([]);
+  const [rent, setRent] = useState<VendorRentRecord[]>([]);
+  const [ledger, setLedger] = useState<VendorLedgerEntry[]>([]);
+  const [snapshot, setSnapshot] = useState<VendorOperatingSnapshot | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  const refresh = async () => {
+    if (context.mode !== "production" || context.role !== "vendor") return;
+    setLoading(true);
+    try {
+      const [nextProducts, nextOrders, nextRent, nextLedger, nextSnapshots] = await Promise.all([
+        loadTenantProducts(context),
+        loadTenantOrders(context),
+        loadVendorRentWorkspace(context),
+        loadVendorLedger(context),
+        loadVendorOperatingSnapshots(context),
+      ]);
+      setProducts(nextProducts);
+      setVendorOrders(nextOrders as Order[]);
+      setRent(nextRent);
+      setLedger(nextLedger);
+      setSnapshot(nextSnapshots[0] || null);
+      setLastUpdated(new Date());
+      setNotice("");
+    } catch {
+      setNotice("Live vendor records could not be refreshed. No preview records were substituted.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    if (context.mode !== "production" || context.role !== "vendor") return;
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [context.mode, context.role, context.storeId, context.userId]);
+
+  const stock = products.reduce((sum, product) => sum + product.variants.reduce((variantSum, variant) => variantSum + variant.quantity, 0), 0);
+  const revenue = vendorOrders.reduce((sum, order) => sum + Number(order.total.replace(/[^0-9.-]/g, "")), 0);
+  const rentAttention = rent.filter((item) => ["due", "late", "pending", "rejected", "failed"].includes(item.status)).length;
+  const credits = ledger.filter((entry) => ["sale_credit", "adjustment_credit"].includes(entry.type)).reduce((sum, entry) => sum + entry.amount, 0);
+  const deductions = ledger.filter((entry) => ["refund_debit", "fee_debit", "adjustment_debit"].includes(entry.type)).reduce((sum, entry) => sum + entry.amount, 0);
+  const paid = ledger.filter((entry) => entry.type === "payout_debit").reduce((sum, entry) => sum + entry.amount, 0);
+  const recordedBalance = snapshot?.recordedBalance ?? credits - deductions - paid;
+  const lowStock = products.flatMap((product) => product.variants.map((variant) => ({ ...variant, productName: product.name }))).filter((variant) => variant.quantity <= 3);
+  const vendorName = snapshot?.vendorName || rent[0]?.vendorName || products[0]?.vendorName || "Your store";
+
+  return <div className="content vendor-board">
+    <section className="welcome vendor-board-welcome"><div><span className="eyebrow">YOUR STORE OPERATIONS</span><h2>Run your store from one board.</h2><p>Only orders, products, inventory, rent, and approvals authorized for your vendor membership are loaded.</p></div><button onClick={() => void refresh()} disabled={loading}><RefreshCw />{loading ? "Refreshing" : "Refresh live data"}</button></section>
+    <section className={`tenant-runtime ${context.mode}`}><ShieldCheck /><span><b>{context.mode === "production" ? "Vendor isolation active" : "Vendor preview"}</b><small>{context.mode === "production" ? `Automatic refresh every 15 seconds${lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString()}` : ""}` : context.reason}</small></span></section>
+    {notice && <output className="policy-saved" role="status">{notice}</output>}
+    <section className="metrics">
+      {[["Attributed sales", `$${revenue.toFixed(2)}`, `${vendorOrders.length} authorized orders`], ["Recorded balance", `$${recordedBalance.toFixed(2)}`, "Shared owner and vendor ledger"], ["Stock", String(snapshot?.stockUnits ?? stock), `${snapshot?.lowStockVariants ?? lowStock.length} low stock variants`], ["Rent status", snapshot?.rentStatus || (rentAttention ? "Attention" : "Current"), snapshot?.rentDueOn ? `Due ${new Date(`${snapshot.rentDueOn}T00:00:00`).toLocaleDateString()}` : "Shared rent record"]].map((metric, index) => <article key={metric[0]}><i className={`m${index}`}>{index === 0 ? "$" : index === 1 ? "↗" : index === 2 ? "#" : "R"}</i><span><small>{metric[0]}</small><b>{metric[1]}</b><em>{metric[2]}</em></span></article>)}
+    </section>
+    <section className="vendor-insight-grid">
+      <article className="panel vendor-stock-glance"><div className="panel-head"><span><small className="eyebrow">STOCK RIGHT NOW</small><h3>What {vendorName} can sell</h3></span><button onClick={() => go("Products")}>Manage <ChevronRight /></button></div><div>{products.slice(0, 5).map((product) => { const quantity = product.variants.reduce((sum, variant) => sum + variant.quantity, 0); return <button key={product.id} onClick={() => go("Products")}><span><b>{product.name}</b><small>{product.variants.length} variants</small></span><em className={quantity <= 3 ? "danger" : ""}>{quantity} in stock</em></button>; })}{!products.length && <p>No authorized production products yet.</p>}</div></article>
+      <article className="panel vendor-sales-glance"><div className="panel-head"><span><small className="eyebrow">WHAT SOLD, WHEN</small><h3>Recent attributed sales</h3></span><button onClick={() => go("Orders")}>All orders <ChevronRight /></button></div><div>{vendorOrders.slice(0, 5).map((order) => <button key={order.id} onClick={() => go("Orders")}><span><b>{order.id}</b><small>{order.time}</small></span><span><b>{order.total}</b><small>{order.fulfillmentStatus}</small></span></button>)}{!vendorOrders.length && <p>No attributed production sales yet.</p>}</div></article>
+    </section>
+    <section className="panel vendor-money-center"><div className="panel-head"><span><small className="eyebrow">MONEY EXPECTED</small><h3>From sale to payout</h3></span><ShieldCheck /></div><div className="money-waterfall"><span><small>Credits</small><b>${credits.toFixed(2)}</b></span><i>−</i><span><small>Refunds and fees</small><b>${deductions.toFixed(2)}</b></span><i>−</i><span><small>Paid already</small><b>${paid.toFixed(2)}</b></span><i>=</i><span className="money-due"><small>Recorded balance</small><b>${recordedBalance.toFixed(2)}</b></span></div><p>This is the seller ledger balance, not a promised bank date. Available, reserved, scheduled, and paid payout states activate only after the approved payment provider and settlement workflow are connected.</p><div className="ledger-mini">{ledger.slice(0, 4).map((entry) => <span key={entry.id}><small>{new Date(entry.createdAt).toLocaleDateString()} · {entry.type.replaceAll("_", " ")}</small><b>{entry.type.endsWith("credit") ? "+" : "−"}${entry.amount.toFixed(2)}</b></span>)}</div></section>
+    <section className="panel vendor-control-center" aria-label="Vendor store controls">
+      <div className="panel-head"><span><small className="eyebrow">STORE BACKEND</small><h3>What you can manage</h3></span></div>
+      <div className="vendor-control-grid">
+        <button onClick={() => go("Products")}><Package /><span><b>Catalog and inventory</b><small>See isolated products and stock. Production editing remains in development.</small></span><ChevronRight /></button>
+        <button onClick={() => go("Orders")}><ShoppingBag /><span><b>Store orders</b><small>See orders containing your items. Mall controlled payment actions remain protected.</small></span><ChevronRight /></button>
+        <button onClick={() => go("Rent")}><Banknote /><span><b>Lease and rent</b><small>See due dates, submit payment evidence, and follow owner review.</small></span><ChevronRight /></button>
+      </div>
+    </section>
+    <section className="panel approval-boundary">
+      <div><ShieldCheck /><span><small className="eyebrow">OWNER CONSENT</small><h3>Clear approval boundaries</h3></span></div>
+      <p>Vendors control their product information, stock proposals, fulfillment updates, and store profile drafts. The owner controls activation, mall policies, lease terms, rent confirmation, public brand approval, refunds, payouts, suspensions, and permission changes.</p>
+    </section>
+  </div>;
+}
+
+function OwnerVendorReconciliation({ context, go }: { context: TenantContext; go: (destination: string) => void }) {
+  const [snapshots, setSnapshots] = useState<VendorOperatingSnapshot[]>([]);
+  const [notice, setNotice] = useState("");
+  const refresh = async () => {
+    try {
+      setSnapshots(await loadVendorOperatingSnapshots(context));
+      setNotice("");
+    } catch {
+      setNotice("Vendor reconciliation could not refresh. No preview values were substituted.");
+    }
+  };
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [context.storeId, context.userId]);
+  return <section className="content owner-vendor-reconciliation" aria-label="Owner vendor reconciliation">
+    <div className="panel">
+      <div className="panel-head"><span><small className="eyebrow">ONE SHARED TRUTH</small><h3>What each vendor sees</h3></span><button onClick={() => void refresh()}><RefreshCw />Refresh</button></div>
+      <p>These stock, ledger, payout, and rent values come from the same snapshot used by each vendor board. The owner sees every authorized vendor. Each vendor sees only its own row.</p>
+      {notice && <output className="policy-saved" role="status">{notice}</output>}
+      <div className="reconciliation-table" role="table" aria-label="Matching owner and vendor figures">
+        <header role="row"><span role="columnheader">Vendor</span><span role="columnheader">Stock</span><span role="columnheader">Low stock</span><span role="columnheader">Credits</span><span role="columnheader">Deductions</span><span role="columnheader">Paid</span><span role="columnheader">Balance</span><span role="columnheader">Rent</span></header>
+        {snapshots.map((item) => <button role="row" key={item.vendorId} onClick={() => go("Vendors")}><b role="cell">{item.vendorName}</b><span role="cell">{item.stockUnits}</span><span role="cell">{item.lowStockVariants}</span><span role="cell">${item.credits.toFixed(2)}</span><span role="cell">${item.deductions.toFixed(2)}</span><span role="cell">${item.paid.toFixed(2)}</span><strong role="cell">${item.recordedBalance.toFixed(2)}</strong><em role="cell">{item.rentStatus}</em></button>)}
+        {!snapshots.length && !notice && <p>No production vendor snapshots are available yet.</p>}
+      </div>
+    </div>
+  </section>;
 }
 function OrderTable({ rows, context }: { rows: Order[]; context?: TenantContext | null }) {
   const [displayRows, setDisplayRows] = useState(rows);

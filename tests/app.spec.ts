@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+
 test.beforeEach(async ({ page }, testInfo) => {
   page.on("pageerror", (error) =>
     console.error(`Browser error: ${error.message}`),
@@ -38,6 +39,11 @@ test("renders the command center and live operating data", async ({ page }) => {
   await expect(page.getByText("$4,820").first()).toBeVisible();
   await expect(page.getByText("#BR-2048")).toBeVisible();
   await expect(page.getByText("GOOD MORNING, DELLY")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Owner operating controls" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Vendors Onboarding, leases, brands, and access/ })).toBeVisible();
+  const pulse = page.getByRole("region", { name: "owner live pulse" });
+  await pulse.getByRole("button", { name: "Week", exact: true }).click();
+  await expect(pulse.getByRole("button", { name: "Week", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Delly", { exact: true })).toBeVisible();
   await expect(page.getByText("Avery Royall")).toHaveCount(0);
 });
@@ -52,6 +58,20 @@ test("keeps the public mall separate from the protected operating system", async
   );
   await expect(page.getByRole("heading", { name: "Command Center" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Owner and staff access/ })).toHaveAttribute("href", "/auth");
+});
+
+test("gives customers a complete dashboard at a glance", async ({ page }, testInfo) => {
+  await page.goto("/");
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Customer Shop", exact: true }).click();
+  const dashboard = page.getByRole("region", { name: "Customer dashboard" });
+  await expect(dashboard.getByRole("heading", { name: "Everything beautiful, one glance away." })).toBeVisible();
+  await expect(dashboard.getByRole("button", { name: /MY FIT/ })).toBeVisible();
+  await expect(dashboard.getByRole("button", { name: /MY BAG/ })).toBeVisible();
+  await expect(dashboard.getByRole("button", { name: /MY ORDERS/ })).toBeVisible();
+  await expect(dashboard.getByRole("button", { name: /AFTERCARE/ })).toBeVisible();
+  await page.getByRole("button", { name: "Accessories", exact: true }).click();
+  await expect(page.getByText("Accessories", { exact: true }).last()).toBeVisible();
 });
 
 test("turns owner notifications into direct operating actions", async ({
@@ -76,19 +96,52 @@ test("turns owner notifications into direct operating actions", async ({
   await expect(page.locator(".notification-count")).toHaveCount(0);
 });
 
+test("keeps overlays and nested workspace headers inside the viewport", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Notifications" }).click();
+  const notifications = page.getByRole("dialog", { name: "Notifications" });
+  const notificationBox = await notifications.boundingBox();
+  expect(notificationBox).not.toBeNull();
+  expect(notificationBox!.width).toBeLessThanOrEqual(380);
+  expect(notificationBox!.x + notificationBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await notifications.getByRole("button", { name: "Close notifications" }).click();
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Customer Shop" }).click();
+  const collections = page.getByRole("navigation", { name: "Shop collections" }).getByRole("button");
+  const first = await collections.first().boundingBox();
+  const last = await collections.last().boundingBox();
+  expect(first).not.toBeNull();
+  expect(last).not.toBeNull();
+  expect(Math.abs(first!.y - last!.y)).toBeLessThan(6);
+  if (testInfo.project.name === "mobile") await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "My Fit", exact: true }).click();
+  await expect(page.locator(".fit-mannequin")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI photo fitting, guided preview" })).toBeVisible();
+  await expect(page.getByLabel("Front view")).toHaveAttribute("capture", "environment");
+  for (const value of ["Bust", "Natural waist", "Hips", "Inseam", "Shoulder width"]) {
+    await page.getByLabel(value, { exact: true }).fill("10");
+    await page.getByRole("button", { name: "Next measurement" }).click();
+  }
+  await expect(page.getByLabel("Ring size in millimeters", { exact: true })).toBeVisible();
+  await page.getByLabel("Ring size in millimeters", { exact: true }).fill("54.4");
+  await page.getByLabel("Second ring measurement", { exact: true }).fill("54.8");
+  await expect(page.getByRole("region", { name: "A ring recommendation that explains its confidence" }).getByText("Approximate US ring size 7 · ISO 54", { exact: true })).toBeVisible();
+  await expect(page.getByText("Verified at home", { exact: true })).toBeVisible();
+});
+
 test("navigates between core operating views", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-app-ready", "true");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Products" }).click();
+  await page.getByRole("button", { name: "Products", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Products & inventory" }),
   ).toBeVisible();
   await expect(page.getByText("Aurelia Satin Midi")).toBeVisible();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Vendors" }).click();
+  await page.getByRole("button", { name: "Vendors", exact: true }).click();
   const vendorDirectory = page.locator(".vendor-directory");
   await expect(
     vendorDirectory.getByRole("heading", { name: "Africstyle Fashion" }),
@@ -149,7 +202,7 @@ test("lets the owner configure tenant identity without code changes", async ({
   await page.goto("/");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Business Setup" }).click();
+  await page.getByRole("button", { name: "Business Setup", exact: true }).click();
   await page.getByLabel("Public store name").fill("Delly House");
   await page.getByLabel("Owner display name").fill("Delly");
   await page.getByLabel("Receipt email").fill("hello@example.com");
@@ -160,7 +213,7 @@ test("lets the owner configure tenant identity without code changes", async ({
   await expect(page.getByText("Delly House", { exact: true })).toBeVisible();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Business Setup" }).click();
+  await page.getByRole("button", { name: "Business Setup", exact: true }).click();
   await expect(page.getByLabel("Receipt email")).toHaveValue(
     "hello@example.com",
   );
@@ -202,7 +255,7 @@ test("configures shared checkout settlement and inventory controls", async ({
   await page.goto("/");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Shared Commerce" }).click();
+  await page.getByRole("button", { name: "Shared Commerce", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Shared commerce control" }),
   ).toBeVisible();
@@ -215,7 +268,7 @@ test("configures shared checkout settlement and inventory controls", async ({
   await page.reload();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Shared Commerce" }).click();
+  await page.getByRole("button", { name: "Shared Commerce", exact: true }).click();
   await expect(page.getByLabel("Payout cadence")).toHaveValue("weekly");
   await expect(page.getByLabel("Return reserve")).toHaveValue("10");
 });
@@ -226,7 +279,7 @@ test("configures online fulfillment and keeps the delivery promise", async ({
   await page.goto("/");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Delivery" }).click();
+  await page.getByRole("button", { name: "Delivery", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Delivery operations" }),
   ).toBeVisible();
@@ -239,7 +292,7 @@ test("configures online fulfillment and keeps the delivery promise", async ({
   await page.reload();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Delivery" }).click();
+  await page.getByRole("button", { name: "Delivery", exact: true }).click();
   await expect(page.getByLabel("Local radius")).toHaveValue("20");
   await expect(page.getByLabel("Routing priority")).toHaveValue("fastest");
   await expect(page.getByText("Mila Gold Clutch")).toBeVisible();
@@ -259,7 +312,7 @@ test("builds a transparent occasion edit across independent brands", async ({
   await page.getByLabel("Complete look budget").fill("400");
   await page.getByLabel("Need by").selectOption("Next week");
   await page.getByRole("button", { name: "Build my edit" }).click();
-  const result = page.getByRole("status");
+  const result = page.locator(".mission-result");
   await expect(result).toContainText(
     "Traditional ceremony, ready by next week",
   );
@@ -281,37 +334,37 @@ test("guides self measurement and uses My Fit while shopping", async ({
   await expect(page.getByText("Mesurez une fois. Achetez en confiance.")).toBeVisible();
   await page.getByLabel("My Fit language").selectOption("en");
 
-  await page.getByLabel("Bust").fill("36");
+  await page.getByRole("spinbutton", { name: "Bust", exact: true }).fill("36");
   await page.getByRole("button", { name: "Next measurement" }).click();
-  await page.getByLabel("Natural waist").fill("30");
+  await page.getByRole("spinbutton", { name: "Natural waist", exact: true }).fill("30");
   await page.getByRole("button", { name: "Next measurement" }).click();
-  await page.getByLabel("Hips").fill("40");
+  await page.getByRole("spinbutton", { name: "Hips", exact: true }).fill("40");
   await page.getByRole("button", { name: "Next measurement" }).click();
-  await page.getByLabel("Inseam").fill("30");
+  await page.getByRole("spinbutton", { name: "Inseam", exact: true }).fill("30");
   await page.getByRole("button", { name: "Next measurement" }).click();
-  await page.getByLabel("Shoulder width").fill("15");
+  await page.getByRole("spinbutton", { name: "Shoulder width", exact: true }).fill("15");
   await page.getByLabel(/I consent to saving/).check();
 
   await page.context().setOffline(true);
   await page.getByRole("button", { name: "Save My Fit" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved offline");
+  await expect(page.getByText("Saved offline. My Fit will sync after reconnecting.")).toBeVisible();
   expect(
     await page.evaluate(() =>
       localStorage.getItem("br-offline-writes:blossom-royall"),
     ),
   ).toContain("fit_profile");
   await page.context().setOffline(false);
-  await expect(page.getByRole("status")).toContainText("synced after reconnecting");
+  await expect(page.getByText(/synced after reconnecting/)).toBeVisible();
 
   await page.getByRole("button", { name: "Shop with My Fit" }).click();
-  await expect(page.getByText("Size 8 is ready for matching")).toBeVisible();
-  await expect(page.getByText("My Fit recommends size 8").first()).toBeVisible();
+  await expect(page.getByText("Your fit passport is ready")).toBeVisible();
+  await expect(page.getByText("Starting size 8 · Seller chart pending").first()).toBeVisible();
 
   await page.reload();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
   await page.getByRole("button", { name: "Customer Shop" }).click();
-  await expect(page.getByText("Size 8 is ready for matching")).toBeVisible();
+  await expect(page.getByText("Your fit passport is ready")).toBeVisible();
 
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
@@ -321,7 +374,7 @@ test("guides self measurement and uses My Fit while shopping", async ({
   expect((await downloadPromise).suggestedFilename()).toBe("blossom-royall-my-fit.json");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete My Fit" }).click();
-  await expect(page.getByRole("status")).toContainText("My Fit was deleted");
+  await expect(page.getByText(/My Fit was deleted from this device/)).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("br-my-fit:blossom-royall"))).toBeNull();
 });
 
@@ -426,7 +479,7 @@ test("mobile navigation exposes every core destination", async ({
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-app-ready", "true");
   await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Staff" }).click();
+  await page.getByRole("button", { name: "Staff", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Staff & payroll" }),
   ).toBeVisible();
@@ -492,7 +545,7 @@ test("configures and persists tenant retail policies", async ({
   await page.goto("/");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Policies" }).click();
+  await page.getByRole("button", { name: "Policies", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Retail policies you control" }),
   ).toBeVisible();
@@ -503,7 +556,7 @@ test("configures and persists tenant retail policies", async ({
   await page.reload();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Policies" }).click();
+  await page.getByRole("button", { name: "Policies", exact: true }).click();
   await expect(page.getByLabel("Return window in days")).toHaveValue("45");
   await expect(page.getByLabel("Layaway deposit percent")).toHaveValue("25");
 });
@@ -715,7 +768,7 @@ test("turns intelligence signals into accountable owner actions", async ({
   await page.goto("/");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Intelligence" }).click();
+  await page.getByRole("button", { name: "Intelligence", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Demand you can act on" }),
   ).toBeVisible();
@@ -1002,7 +1055,7 @@ test("formats and publishes one item or a bulk vendor collection", async ({
   await page.goto("/");
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Products" }).click();
+  await page.getByRole("button", { name: "Products", exact: true }).click();
   await page.getByRole("button", { name: "Add one or bulk upload" }).click();
   await page.getByLabel("Vendor").selectOption({ label: "Africstyle Fashion" });
   await page
@@ -1026,7 +1079,7 @@ test("formats and publishes one item or a bulk vendor collection", async ({
   await page.reload();
   if (testInfo.project.name === "mobile")
     await page.getByRole("button", { name: "Open menu" }).click();
-  await page.getByRole("button", { name: "Products" }).click();
+  await page.getByRole("button", { name: "Products", exact: true }).click();
   await expect(page.getByText("Live in storefront")).toHaveCount(2);
 });
 
