@@ -117,6 +117,7 @@ const manifest = {
   voice: captureOnly ? null : narrationMode === "ndamba" ? { provider: "edge-tts", name: ndambaVoice, rate: ndambaRate, source: "Ndamba American English role guides" } : { provider: "human" },
   roles: {},
 };
+const runFailures = [];
 
 for (const role of selectedRoles) {
   const envPrefix = `TRAINING_${role.toUpperCase()}`;
@@ -133,6 +134,7 @@ for (const role of selectedRoles) {
   });
   const page = await context.newPage();
   const captions = [];
+  let roleFailure = null;
   const started = Date.now();
   const explain = async (text) => {
     await page.waitForTimeout(450);
@@ -171,7 +173,8 @@ for (const role of selectedRoles) {
       await button.click();
       await page.waitForTimeout(400);
       const heading = page.getByRole("heading", { name: label, exact: true }).first();
-      if (await heading.count()) await heading.waitFor({ state: "visible" });
+      if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${label} heading`);
+      await heading.waitFor({ state: "visible" });
       await explain(`${label}: verified visible and available to the ${role} role.`);
     }
 
@@ -186,9 +189,10 @@ for (const role of selectedRoles) {
     await explain(`${role} role QA passed. This recording is evidence and training, pending human review.`);
     manifest.roles[role] = { status: "passed", checks: destinations.length + roleConfig[role].forbidden.length };
   } catch (error) {
-    manifest.roles[role] = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+    roleFailure = error instanceof Error ? error : new Error(String(error));
+    manifest.roles[role] = { status: "failed", error: roleFailure.message };
+    runFailures.push(`${role}: ${roleFailure.message}`);
     await explain(`${role} role QA failed. Do not publish this recording.`).catch(() => {});
-    throw error;
   } finally {
     const video = page.video();
     await page.close();
@@ -205,6 +209,7 @@ for (const role of selectedRoles) {
   }
 }
 
-manifest.status = Object.values(manifest.roles).every((entry) => entry.status === "passed") ? (captureOnly ? "capture_pending_human_narration" : "passed_pending_human_review") : "failed";
+manifest.status = Object.values(manifest.roles).every((entry) => entry.status === "passed") ? (captureOnly ? "capture_pending_narration" : "passed_pending_human_review") : "failed";
 await writeFile(join(artifactRoot, `manifest-${edition}.json`), JSON.stringify(manifest, null, 2), "utf8");
+if (runFailures.length) throw new Error(`Role training UI QA failed. Fix the application or verified expectation, then rerecord. ${runFailures.join(" | ")}`);
 console.log(`Training QA artifacts written to ${artifactRoot}`);
