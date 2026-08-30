@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -11,6 +11,9 @@ const baseUrl = process.env.TRAINING_BASE_URL || "http://127.0.0.1:3002";
 const productionApproved = process.env.TRAINING_PRODUCTION_APPROVED === "true";
 const narrationRoot = process.env.TRAINING_HUMAN_NARRATION_DIR;
 const captureOnly = process.env.TRAINING_CAPTURE_ONLY === "true";
+const narrationMode = process.env.TRAINING_NARRATION_MODE || "ndamba";
+const ndambaVoice = process.env.TRAINING_NARRATION_VOICE || "en-NG-EzinneNeural";
+const ndambaRate = process.env.TRAINING_NARRATION_RATE || "-6%";
 const isProduction = new URL(baseUrl).hostname === "app.blossomroyall.com";
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
@@ -19,6 +22,7 @@ const artifactRoot = join(process.cwd(), "artifacts", "training", `${date}-${com
 
 if (!selectedRoles.every((role) => roles.includes(role))) throw new Error(`Unsupported TRAINING_ROLE: ${requestedRole}`);
 if (!["detailed", "reel"].includes(edition)) throw new Error(`Unsupported TRAINING_EDITION: ${edition}`);
+if (!["ndamba", "human"].includes(narrationMode)) throw new Error(`Unsupported TRAINING_NARRATION_MODE: ${narrationMode}`);
 if (isProduction && !productionApproved) throw new Error("Production recording requires TRAINING_PRODUCTION_APPROVED=true.");
 
 const roleConfig = {
@@ -59,11 +63,20 @@ const stamp = async (page, text) => {
 };
 
 const createNarration = (role, captions, rawVideo, outputVideo) => {
-  if (!narrationRoot) throw new Error("TRAINING_HUMAN_NARRATION_DIR is required. Synthetic system voices are not permitted.");
-  const narrationDirectory = join(narrationRoot, role, edition);
+  const narrationDirectory = narrationMode === "human"
+    ? join(narrationRoot || "", role, edition)
+    : join(artifactRoot, `${role}-${edition}-voice`);
+  if (narrationMode === "human" && !narrationRoot) throw new Error("TRAINING_HUMAN_NARRATION_DIR is required for human narration mode.");
+  mkdirSync(narrationDirectory, { recursive: true });
   const audioFiles = captions.map((caption, index) => {
-    const input = join(narrationDirectory, `cue-${String(index + 1).padStart(2, "0")}.wav`);
-    if (!existsSync(input)) throw new Error(`Missing reviewed human narration for ${role} cue ${index + 1}: ${input}`);
+    const cue = `cue-${String(index + 1).padStart(2, "0")}`;
+    const input = join(narrationDirectory, `${cue}.${narrationMode === "human" ? "wav" : "mp3"}`);
+    if (narrationMode === "ndamba") {
+      const scriptFile = join(narrationDirectory, `${cue}.txt`);
+      writeFileSync(scriptFile, caption.text, "utf8");
+      execFileSync("python", ["-m", "edge_tts", `--rate=${ndambaRate}`, "--voice", ndambaVoice, "--file", scriptFile, "--write-media", input], { stdio: "ignore" });
+    }
+    if (!existsSync(input)) throw new Error(`Missing narration for ${role} cue ${index + 1}: ${input}`);
     return input;
   });
   const delayed = captions.map((caption, index) => `[${index + 1}:a]adelay=${caption.from}|${caption.from}[a${index + 1}]`).join(";");
@@ -82,7 +95,17 @@ const formatVttTime = (milliseconds) => {
 };
 
 await mkdir(artifactRoot, { recursive: true });
-const manifest = { date, commit, edition, baseUrl, production: isProduction, status: "recording", narration: captureOnly ? "capture_pending_human_narration" : "reviewed_human_voice_with_compact_side_captions_pending_translation_review", roles: {} };
+const manifest = {
+  date,
+  commit,
+  edition,
+  baseUrl,
+  production: isProduction,
+  status: "recording",
+  narration: captureOnly ? "capture_pending_narration" : "voice_and_compact_side_captions_pending_human_review",
+  voice: captureOnly ? null : narrationMode === "ndamba" ? { provider: "edge-tts", name: ndambaVoice, rate: ndambaRate, source: "Ndamba live UI training" } : { provider: "human" },
+  roles: {},
+};
 
 for (const role of selectedRoles) {
   const envPrefix = `TRAINING_${role.toUpperCase()}`;

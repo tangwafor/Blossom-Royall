@@ -30,9 +30,11 @@ The reviewed video must be delivered with the matching role package defined in `
 
 5. Set `TRAINING_EDITION` to `detailed` or `reel`.
 
-6. Record a natural human narration file for every cue. Store each file as `cue-01.wav`, `cue-02.wav`, and so on under the role and edition folders inside a private narration directory. Set `TRAINING_HUMAN_NARRATION_DIR` to that directory.
+6. The default narration uses the same voice as Ndamba live interface training: Ezinne, warm Nigerian English, at six percent below natural speed. The recorder generates it locally through Edge neural speech. Set `TRAINING_NARRATION_MODE=ndamba`, or omit the setting because Ndamba mode is the default.
 
-Set `TRAINING_CAPTURE_ONLY=true` for the first live interface pass when narration has not been recorded. This creates the raw recording, timed captions, and a numbered narration script with status `capture_pending_human_narration`. Capture only artifacts must never be published.
+For a reviewed human recording, set `TRAINING_NARRATION_MODE=human`. Store each file as `cue-01.wav`, `cue-02.wav`, and so on under the role and edition folders inside a private narration directory. Set `TRAINING_HUMAN_NARRATION_DIR` to that directory.
+
+Set `TRAINING_CAPTURE_ONLY=true` for the first live interface pass when narration has not been generated or recorded. This creates the raw recording, timed captions, and a numbered narration script with status `capture_pending_narration`. Capture only artifacts must never be published.
 
 7. Run `npm run training:record`.
 
@@ -40,7 +42,7 @@ Set `TRAINING_CAPTURE_ONLY=true` for the first live interface pass when narratio
 
 9. Record the reviewer name and approval outside the generated manifest before publishing. Failed recordings must never be published.
 
-10. The recorder combines reviewed human English narration with a compact right side caption card and an English WebVTT track positioned to the side. Synthetic system narration is prohibited. Reviewed French and Spanish voice and caption tracks remain in development. Publication remains blocked until translation and human review are complete.
+10. The recorder combines the approved Ndamba voice or reviewed human English narration with a compact right side caption card and an English WebVTT track positioned to the side. Browser speech synthesis and Windows system narration are prohibited because they sound robotic. Reviewed French and Spanish voice and caption tracks remain in development. Publication remains blocked until voice, picture, privacy, translation, and role behavior receive human review.
 
 ## Production safeguard
 
@@ -60,4 +62,4 @@ Production recording is blocked unless `TRAINING_BASE_URL` is the branded produc
 
 6. Keep features still in development explicitly identified. Current examples include automatic AI photo sizing, full intelligent size matching, vendor catalog editing, and production alert automation.
 
-7. Reject robotic, synthetic system, unclear, rushed, or unreviewed narration.
+7. Reject robotic browser or Windows narration, unclear delivery, rushed delivery, or any unreviewed narration.
