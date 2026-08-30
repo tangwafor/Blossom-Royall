@@ -32,6 +32,8 @@ The reviewed video must be delivered with the matching role package defined in `
 
 6. Record a natural human narration file for every cue. Store each file as `cue-01.wav`, `cue-02.wav`, and so on under the role and edition folders inside a private narration directory. Set `TRAINING_HUMAN_NARRATION_DIR` to that directory.
 
+Set `TRAINING_CAPTURE_ONLY=true` for the first live interface pass when narration has not been recorded. This creates the raw recording, timed captions, and a numbered narration script with status `capture_pending_human_narration`. Capture only artifacts must never be published.
+
 7. Run `npm run training:record`.
 
 8. Review the voice for natural delivery, pronunciation, pacing, background noise, captions, visible account data, permission assertions, and manifest in `artifacts/training`.

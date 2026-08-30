@@ -10,6 +10,7 @@ const edition = process.env.TRAINING_EDITION || "detailed";
 const baseUrl = process.env.TRAINING_BASE_URL || "http://127.0.0.1:3002";
 const productionApproved = process.env.TRAINING_PRODUCTION_APPROVED === "true";
 const narrationRoot = process.env.TRAINING_HUMAN_NARRATION_DIR;
+const captureOnly = process.env.TRAINING_CAPTURE_ONLY === "true";
 const isProduction = new URL(baseUrl).hostname === "app.blossomroyall.com";
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
@@ -81,7 +82,7 @@ const formatVttTime = (milliseconds) => {
 };
 
 await mkdir(artifactRoot, { recursive: true });
-const manifest = { date, commit, edition, baseUrl, production: isProduction, status: "recording", narration: "reviewed_human_voice_with_compact_side_captions_pending_translation_review", roles: {} };
+const manifest = { date, commit, edition, baseUrl, production: isProduction, status: "recording", narration: captureOnly ? "capture_pending_human_narration" : "reviewed_human_voice_with_compact_side_captions_pending_translation_review", roles: {} };
 
 for (const role of selectedRoles) {
   const envPrefix = `TRAINING_${role.toUpperCase()}`;
@@ -115,6 +116,14 @@ for (const role of selectedRoles) {
     await page.waitForURL(/\/workspace/, { timeout: 30000 });
     await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
     await explain(`Signed in as ${role}. The navigation now shows only authorized work.`);
+    const skipTour = page.getByRole("button", { name: "Skip tour", exact: true });
+    try {
+      await skipTour.waitFor({ state: "visible", timeout: 5000 });
+      await explain("The guided tour introduces the workspace. You can follow it or return to it from Help.");
+      await skipTour.click();
+    } catch {
+      // Returning training accounts may have already completed the tour.
+    }
 
     for (const label of roleConfig[role].forbidden) {
       if (await page.getByRole("button", { name: label, exact: true }).count()) throw new Error(`${role} can see forbidden navigation: ${label}`);
@@ -153,12 +162,14 @@ for (const role of selectedRoles) {
     const narratedVideo = join(artifactRoot, `${role}-${edition}-${date}-${commit}.mp4`);
     if (video) await video.saveAs(rawVideo);
     await browser.close();
-    if (video) createNarration(role, captions, rawVideo, narratedVideo);
+    if (video && !captureOnly) createNarration(role, captions, rawVideo, narratedVideo);
     const vtt = ["WEBVTT", "", ...captions.flatMap((caption, index) => [String(index + 1), `${formatVttTime(caption.from)} --> ${formatVttTime(caption.to)} line:10% position:78% size:20% align:start`, caption.text, ""])].join("\n");
     await writeFile(join(artifactRoot, `${role}-${edition}-${date}-${commit}.en.vtt`), vtt, "utf8");
+    const narrationScript = captions.map((caption, index) => `Cue ${String(index + 1).padStart(2, "0")}\n${caption.text}\n`).join("\n");
+    await writeFile(join(artifactRoot, `${role}-${edition}-${date}-${commit}.narration.txt`), narrationScript, "utf8");
   }
 }
 
-manifest.status = Object.values(manifest.roles).every((entry) => entry.status === "passed") ? "passed_pending_human_review" : "failed";
+manifest.status = Object.values(manifest.roles).every((entry) => entry.status === "passed") ? (captureOnly ? "capture_pending_human_narration" : "passed_pending_human_review") : "failed";
 await writeFile(join(artifactRoot, `manifest-${edition}.json`), JSON.stringify(manifest, null, 2), "utf8");
 console.log(`Training QA artifacts written to ${artifactRoot}`);
