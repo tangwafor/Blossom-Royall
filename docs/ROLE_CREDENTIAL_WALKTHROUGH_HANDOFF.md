@@ -94,7 +94,7 @@ Blossom Royall Platform Team
 
 5. Record the matching detailed and reel walkthroughs with real interface clicks.
 
-6. Review the picture, narration, side captions, private data, role boundaries, date, and commit.
+6. Review the picture, natural human narration, side captions, private data, role boundaries, date, and commit. Robotic or synthetic system narration blocks publication.
 
 7. Publish only through the branded watch page after human approval.
 

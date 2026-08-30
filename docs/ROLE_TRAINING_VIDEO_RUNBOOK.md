@@ -30,13 +30,15 @@ The reviewed video must be delivered with the matching role package defined in `
 
 5. Set `TRAINING_EDITION` to `detailed` or `reel`.
 
-6. Run `npm run training:record`.
+6. Record a natural human narration file for every cue. Store each file as `cue-01.wav`, `cue-02.wav`, and so on under the role and edition folders inside a private narration directory. Set `TRAINING_HUMAN_NARRATION_DIR` to that directory.
 
-7. Review the video, captions, visible account data, permission assertions, and manifest in `artifacts/training`.
+7. Run `npm run training:record`.
 
-8. Record the reviewer name and approval outside the generated manifest before publishing. Failed recordings must never be published.
+8. Review the voice for natural delivery, pronunciation, pacing, background noise, captions, visible account data, permission assertions, and manifest in `artifacts/training`.
 
-9. The recorder produces English voice narration, a compact right side caption card, and an English WebVTT track positioned to the side. Reviewed French and Spanish voice and caption tracks remain in development. Publication remains blocked until translation and human review are complete.
+9. Record the reviewer name and approval outside the generated manifest before publishing. Failed recordings must never be published.
+
+10. The recorder combines reviewed human English narration with a compact right side caption card and an English WebVTT track positioned to the side. Synthetic system narration is prohibited. Reviewed French and Spanish voice and caption tracks remain in development. Publication remains blocked until translation and human review are complete.
 
 ## Production safeguard
 
@@ -55,3 +57,5 @@ Production recording is blocked unless `TRAINING_BASE_URL` is the branded produc
 5. Recreate recordings after relevant interface, policy, or workflow changes.
 
 6. Keep features still in development explicitly identified. Current examples include automatic AI photo sizing, full intelligent size matching, vendor catalog editing, and production alert automation.
+
+7. Reject robotic, synthetic system, unclear, rushed, or unreviewed narration.

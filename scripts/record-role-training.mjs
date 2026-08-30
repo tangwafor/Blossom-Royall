@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 const roles = ["owner", "manager", "staff", "vendor", "customer"];
@@ -8,6 +9,7 @@ const requestedRole = process.env.TRAINING_ROLE || "all";
 const edition = process.env.TRAINING_EDITION || "detailed";
 const baseUrl = process.env.TRAINING_BASE_URL || "http://127.0.0.1:3002";
 const productionApproved = process.env.TRAINING_PRODUCTION_APPROVED === "true";
+const narrationRoot = process.env.TRAINING_HUMAN_NARRATION_DIR;
 const isProduction = new URL(baseUrl).hostname === "app.blossomroyall.com";
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
@@ -55,13 +57,13 @@ const stamp = async (page, text) => {
   await page.waitForTimeout(pause);
 };
 
-const createNarration = (captions, rawVideo, outputVideo, narrationDirectory) => {
+const createNarration = (role, captions, rawVideo, outputVideo) => {
+  if (!narrationRoot) throw new Error("TRAINING_HUMAN_NARRATION_DIR is required. Synthetic system voices are not permitted.");
+  const narrationDirectory = join(narrationRoot, role, edition);
   const audioFiles = captions.map((caption, index) => {
-    const output = join(narrationDirectory, `cue-${String(index + 1).padStart(2, "0")}.wav`);
-    const script = "$voice=New-Object -ComObject SAPI.SpVoice; $stream=New-Object -ComObject SAPI.SpFileStream; $stream.Open($args[1],3,$false); $voice.AudioOutputStream=$stream; $voice.Rate=1; $voice.Volume=100; [void]$voice.Speak($args[0]); $stream.Close()";
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", script, caption.text, output], { encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`Narration generation failed for cue ${index + 1}: ${result.stderr}`);
-    return output;
+    const input = join(narrationDirectory, `cue-${String(index + 1).padStart(2, "0")}.wav`);
+    if (!existsSync(input)) throw new Error(`Missing reviewed human narration for ${role} cue ${index + 1}: ${input}`);
+    return input;
   });
   const delayed = captions.map((caption, index) => `[${index + 1}:a]adelay=${caption.from}|${caption.from}[a${index + 1}]`).join(";");
   const inputs = captions.map((_, index) => `[a${index + 1}]`).join("");
@@ -79,7 +81,7 @@ const formatVttTime = (milliseconds) => {
 };
 
 await mkdir(artifactRoot, { recursive: true });
-const manifest = { date, commit, edition, baseUrl, production: isProduction, status: "recording", narration: "english_voice_with_compact_side_captions_pending_translation_review", roles: {} };
+const manifest = { date, commit, edition, baseUrl, production: isProduction, status: "recording", narration: "reviewed_human_voice_with_compact_side_captions_pending_translation_review", roles: {} };
 
 for (const role of selectedRoles) {
   const envPrefix = `TRAINING_${role.toUpperCase()}`;
@@ -151,7 +153,7 @@ for (const role of selectedRoles) {
     const narratedVideo = join(artifactRoot, `${role}-${edition}-${date}-${commit}.mp4`);
     if (video) await video.saveAs(rawVideo);
     await browser.close();
-    if (video) createNarration(captions, rawVideo, narratedVideo, captureDir);
+    if (video) createNarration(role, captions, rawVideo, narratedVideo);
     const vtt = ["WEBVTT", "", ...captions.flatMap((caption, index) => [String(index + 1), `${formatVttTime(caption.from)} --> ${formatVttTime(caption.to)} line:10% position:78% size:20% align:start`, caption.text, ""])].join("\n");
     await writeFile(join(artifactRoot, `${role}-${edition}-${date}-${commit}.en.vtt`), vtt, "utf8");
   }
