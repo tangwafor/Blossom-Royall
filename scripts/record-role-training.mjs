@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { join } from "node:path";
 
 const roles = ["owner", "manager", "staff", "vendor", "customer"];
@@ -105,6 +106,38 @@ const formatVttTime = (milliseconds) => {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
 };
 
+const decodeBase32 = (value) => {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const bits = value.toUpperCase().replace(/[^A-Z2-7]/g, "").split("").map((character) => alphabet.indexOf(character).toString(2).padStart(5, "0")).join("");
+  const bytes = [];
+  for (let index = 0; index + 8 <= bits.length; index += 8) bytes.push(Number.parseInt(bits.slice(index, index + 8), 2));
+  return Buffer.from(bytes);
+};
+
+const currentTotp = (secret) => {
+  const counter = Math.floor(Date.now() / 30000);
+  const message = Buffer.alloc(8);
+  message.writeBigUInt64BE(BigInt(counter));
+  const digest = createHmac("sha1", decodeBase32(secret)).update(message).digest();
+  const offset = digest[digest.length - 1] & 15;
+  const value = (digest.readUInt32BE(offset) & 0x7fffffff) % 1000000;
+  return String(value).padStart(6, "0");
+};
+
+const expectMaskedMfa = async (page) => {
+  const protectedFields = await page.evaluate(() => {
+    const qr = document.querySelector(".mfa-qr");
+    const secret = document.querySelector(".mfa-manual strong");
+    const code = document.querySelector('.mfa-code input');
+    return {
+      qr: qr ? getComputedStyle(qr).filter.includes("blur") : false,
+      secret: secret ? getComputedStyle(secret).filter.includes("blur") : false,
+      code: code ? getComputedStyle(code).getPropertyValue("-webkit-text-security") === "disc" : false,
+    };
+  });
+  if (!protectedFields.qr || !protectedFields.secret || !protectedFields.code) throw new Error("MFA recording protection failed before the owner secret was shown.");
+};
+
 await mkdir(artifactRoot, { recursive: true });
 const manifest = {
   date,
@@ -132,6 +165,17 @@ for (const role of selectedRoles) {
     viewport: { width: 1440, height: 900 },
     recordVideo: { dir: captureDir, size: { width: 1440, height: 900 } },
   });
+  await context.addInitScript(() => {
+    const protectMfa = () => {
+      if (!document.head || document.getElementById("training-mfa-mask")) return;
+      const style = document.createElement("style");
+      style.id = "training-mfa-mask";
+      style.textContent = ".mfa-qr,.mfa-manual strong{filter:blur(18px)!important}.mfa-code input{-webkit-text-security:disc!important;color:transparent!important;text-shadow:0 0 8px #111!important}";
+      document.head.appendChild(style);
+    };
+    new MutationObserver(protectMfa).observe(document, { childList: true, subtree: true });
+    protectMfa();
+  });
   const page = await context.newPage();
   const captions = [];
   let roleFailure = null;
@@ -150,6 +194,19 @@ for (const role of selectedRoles) {
     await page.getByLabel("Password", { exact: true }).fill(password);
     await explain(`${role} training begins with secure authentication.`);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page.waitForURL(/\/(workspace|auth\/mfa)/, { timeout: 30000 });
+    if (role === "owner" && new URL(page.url()).pathname === "/workspace") {
+      await page.waitForFunction(() => location.pathname === "/auth/mfa" || document.documentElement.dataset.appReady === "true", null, { timeout: 30000 });
+    }
+    if (role === "owner" && new URL(page.url()).pathname === "/auth/mfa") {
+      const secret = page.locator(".mfa-manual strong");
+      await secret.waitFor({ state: "attached", timeout: 30000 });
+      await expectMaskedMfa(page);
+      await explain("Owner protection requires a real code from an authentication app. The setup key and QR code are hidden in this recording.");
+      await page.locator('input[name="code"]').fill(currentTotp((await secret.textContent()) || ""));
+      await page.getByRole("button", { name: "Verify and open workspace", exact: true }).click();
+      await page.waitForURL(/\/workspace/, { timeout: 30000 });
+    }
     await page.waitForURL(/\/workspace/, { timeout: 30000 });
     await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
     await explain(`Signed in as ${role}. The navigation now shows only authorized work.`);
