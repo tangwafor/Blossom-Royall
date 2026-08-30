@@ -4,6 +4,8 @@
 
 This runbook creates training videos from real interface clicks while performing role permission QA. A recording is evidence only when its manifest says `passed_pending_human_review`. Human review is required before publishing.
 
+The reviewed video must be delivered with the matching role package defined in `docs/ROLE_CREDENTIAL_WALKTHROUGH_HANDOFF.md`. A walkthrough is never a substitute for production credential and permission testing.
+
 ## Roles
 
 1. Owner verifies the command center, products, vendors, orders, staff, and business setup.
