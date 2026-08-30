@@ -48,8 +48,8 @@ const roleConfig = {
   },
 };
 
-const pause = edition === "reel" ? 1900 : 3600;
-const stamp = async (page, text) => {
+const fallbackPause = edition === "reel" ? 1900 : 3600;
+const stamp = async (page, text, holdMilliseconds = fallbackPause) => {
   await page.evaluate(({ text, date, commit, edition, baseUrl }) => {
     document.getElementById("training-caption")?.remove();
     const card = document.createElement("aside");
@@ -59,26 +59,37 @@ const stamp = async (page, text) => {
     card.innerHTML = `<span style="display:block;margin-bottom:5px;color:#e5c46b;font-size:9px;letter-spacing:.09em">${date} · ${commit} · ${edition}</span>${text}`;
     document.body.appendChild(card);
   }, { text, date, commit, edition, baseUrl });
-  await page.waitForTimeout(pause);
+  await page.waitForTimeout(holdMilliseconds);
+};
+
+const mediaDurationMilliseconds = (file) => {
+  const seconds = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file], { encoding: "utf8" }).trim());
+  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error(`Unable to measure narration duration: ${file}`);
+  return Math.ceil(seconds * 1000);
+};
+
+const narrationFile = (role, index) => {
+  const directory = narrationMode === "human"
+    ? join(narrationRoot || "", role, edition)
+    : join(artifactRoot, `${role}-${edition}-voice`);
+  const cue = `cue-${String(index + 1).padStart(2, "0")}`;
+  return { directory, cue, audio: join(directory, `${cue}.${narrationMode === "human" ? "wav" : "mp3"}`), script: join(directory, `${cue}.txt`) };
+};
+
+const prepareNarrationCue = (role, index, text) => {
+  const cue = narrationFile(role, index);
+  if (narrationMode === "human" && !narrationRoot) throw new Error("TRAINING_HUMAN_NARRATION_DIR is required for human narration mode.");
+  mkdirSync(cue.directory, { recursive: true });
+  if (narrationMode === "ndamba") {
+    writeFileSync(cue.script, text, "utf8");
+    execFileSync("python", ["-m", "edge_tts", `--rate=${ndambaRate}`, "--voice", ndambaVoice, "--file", cue.script, "--write-media", cue.audio], { stdio: "ignore" });
+  }
+  if (!existsSync(cue.audio)) throw new Error(`Missing narration for ${role} cue ${index + 1}: ${cue.audio}`);
+  return { audio: cue.audio, duration: mediaDurationMilliseconds(cue.audio) };
 };
 
 const createNarration = (role, captions, rawVideo, outputVideo) => {
-  const narrationDirectory = narrationMode === "human"
-    ? join(narrationRoot || "", role, edition)
-    : join(artifactRoot, `${role}-${edition}-voice`);
-  if (narrationMode === "human" && !narrationRoot) throw new Error("TRAINING_HUMAN_NARRATION_DIR is required for human narration mode.");
-  mkdirSync(narrationDirectory, { recursive: true });
-  const audioFiles = captions.map((caption, index) => {
-    const cue = `cue-${String(index + 1).padStart(2, "0")}`;
-    const input = join(narrationDirectory, `${cue}.${narrationMode === "human" ? "wav" : "mp3"}`);
-    if (narrationMode === "ndamba") {
-      const scriptFile = join(narrationDirectory, `${cue}.txt`);
-      writeFileSync(scriptFile, caption.text, "utf8");
-      execFileSync("python", ["-m", "edge_tts", `--rate=${ndambaRate}`, "--voice", ndambaVoice, "--file", scriptFile, "--write-media", input], { stdio: "ignore" });
-    }
-    if (!existsSync(input)) throw new Error(`Missing narration for ${role} cue ${index + 1}: ${input}`);
-    return input;
-  });
+  const audioFiles = captions.map((_, index) => narrationFile(role, index).audio);
   const delayed = captions.map((caption, index) => `[${index + 1}:a]adelay=${caption.from}|${caption.from}[a${index + 1}]`).join(";");
   const inputs = captions.map((_, index) => `[a${index + 1}]`).join("");
   const filter = `${delayed};${inputs}amix=inputs=${captions.length}:normalize=0,apad[audio]`;
@@ -125,8 +136,9 @@ for (const role of selectedRoles) {
   const started = Date.now();
   const explain = async (text) => {
     await page.waitForTimeout(450);
+    const narration = captureOnly ? null : prepareNarrationCue(role, captions.length, text);
     const from = Date.now() - started;
-    await stamp(page, text);
+    await stamp(page, text, narration ? narration.duration + 700 : fallbackPause);
     captions.push({ from, to: Date.now() - started, text });
   };
 
@@ -156,11 +168,11 @@ for (const role of selectedRoles) {
     for (const label of destinations) {
       const button = page.getByRole("button", { name: label, exact: true });
       await button.waitFor({ state: "visible" });
-      await explain(`${label}: verified visible and available to the ${role} role.`);
       await button.click();
       await page.waitForTimeout(400);
       const heading = page.getByRole("heading", { name: label, exact: true }).first();
       if (await heading.count()) await heading.waitFor({ state: "visible" });
+      await explain(`${label}: verified visible and available to the ${role} role.`);
     }
 
     if (role === "customer" && edition === "detailed") {

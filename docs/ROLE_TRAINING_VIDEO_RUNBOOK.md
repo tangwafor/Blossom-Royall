@@ -56,6 +56,8 @@ Production recording is blocked unless `TRAINING_BASE_URL` is the branded produc
 
 3. The picture must settle before each explanation.
 
+The recorder measures every narration cue before continuing. The visible screen and compact side caption remain in place until the spoken cue finishes, followed by a short visual breathing space. A screen transition before its narration ends is a release failure.
+
 4. Every artifact name and visible caption includes the date and commit.
 
 5. Recreate recordings after relevant interface, policy, or workflow changes.
