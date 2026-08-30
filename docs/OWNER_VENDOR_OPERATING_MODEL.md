@@ -33,6 +33,6 @@ Vendor visibility is determined by database RLS and vendor ownership. The interf
 
 ## Current production boundary
 
-Vendor read isolation and rent submission are active in production. The owner and vendor board interface is implemented locally. Vendor order attribution is staged in migration `20260830093000_vendor_order_summary_boundary.sql` and must not be represented as active until explicit production approval, migration verification, and real credential tests pass.
+Vendor read isolation, rent submission, and the vendor order summary boundary are active in production. Migration `20260830093000_vendor_order_summary_boundary.sql` was applied and its security definer search path, authenticated grant, and order policy were verified on August 30, 2026. The owner and vendor board interface remains a local release candidate. Vendor order visibility must not be represented as ready for recipient use until the application deploys and real Delly and Duplex credential tests pass.
 
 Production product editing, storefront draft submission, stock proposal approval, vendor fulfillment updates, refunds, payouts, and settlements remain in development. Each must receive a protected database workflow and real role test before its control is enabled.
