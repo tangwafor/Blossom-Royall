@@ -168,14 +168,15 @@ for (const role of selectedRoles) {
 
     const destinations = edition === "reel" ? roleConfig[role].allowed.slice(0, 2) : roleConfig[role].allowed;
     for (const label of destinations) {
+      const expectedHeading = label === "My Products" ? "Products" : label;
       const button = page.getByRole("button", { name: label, exact: true });
       await button.waitFor({ state: "visible" });
       await button.click();
       await page.waitForTimeout(400);
-      const heading = page.getByRole("heading", { name: label, exact: true }).first();
-      if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${label} heading`);
+      const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
+      if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${expectedHeading} heading`);
       await heading.waitFor({ state: "visible" });
-      await explain(`${label}: verified visible and available to the ${role} role.`);
+      await explain(`${label} opens the ${expectedHeading} workspace, verified visible and available to the ${role} role.`);
     }
 
     if (role === "customer" && edition === "detailed") {
