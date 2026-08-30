@@ -12,8 +12,8 @@ const productionApproved = process.env.TRAINING_PRODUCTION_APPROVED === "true";
 const narrationRoot = process.env.TRAINING_HUMAN_NARRATION_DIR;
 const captureOnly = process.env.TRAINING_CAPTURE_ONLY === "true";
 const narrationMode = process.env.TRAINING_NARRATION_MODE || "ndamba";
-const ndambaVoice = process.env.TRAINING_NARRATION_VOICE || "en-NG-EzinneNeural";
-const ndambaRate = process.env.TRAINING_NARRATION_RATE || "-6%";
+const ndambaVoice = process.env.TRAINING_NARRATION_VOICE || "en-US-AriaNeural";
+const ndambaRate = process.env.TRAINING_NARRATION_RATE || "-4%";
 const isProduction = new URL(baseUrl).hostname === "app.blossomroyall.com";
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
@@ -103,7 +103,7 @@ const manifest = {
   production: isProduction,
   status: "recording",
   narration: captureOnly ? "capture_pending_narration" : "voice_and_compact_side_captions_pending_human_review",
-  voice: captureOnly ? null : narrationMode === "ndamba" ? { provider: "edge-tts", name: ndambaVoice, rate: ndambaRate, source: "Ndamba live UI training" } : { provider: "human" },
+  voice: captureOnly ? null : narrationMode === "ndamba" ? { provider: "edge-tts", name: ndambaVoice, rate: ndambaRate, source: "Ndamba American English role guides" } : { provider: "human" },
   roles: {},
 };
 

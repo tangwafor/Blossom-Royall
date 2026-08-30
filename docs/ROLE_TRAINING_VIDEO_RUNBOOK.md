@@ -30,7 +30,7 @@ The reviewed video must be delivered with the matching role package defined in `
 
 5. Set `TRAINING_EDITION` to `detailed` or `reel`.
 
-6. The default narration uses the same voice as Ndamba live interface training: Ezinne, warm Nigerian English, at six percent below natural speed. The recorder generates it locally through Edge neural speech. Set `TRAINING_NARRATION_MODE=ndamba`, or omit the setting because Ndamba mode is the default.
+6. The default narration uses the same voice as Ndamba role guides: Aria, neutral American English, at four percent below natural speed. The recorder generates it locally through Edge neural speech. Set `TRAINING_NARRATION_MODE=ndamba`, or omit the setting because Ndamba mode is the default.
 
 For a reviewed human recording, set `TRAINING_NARRATION_MODE=human`. Store each file as `cue-01.wav`, `cue-02.wav`, and so on under the role and edition folders inside a private narration directory. Set `TRAINING_HUMAN_NARRATION_DIR` to that directory.
 
