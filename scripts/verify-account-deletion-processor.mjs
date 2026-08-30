@@ -40,6 +40,8 @@ requireText(config, "verify_jwt = false", "Function gateway configuration");
 requireText(workflow, "ACCOUNT_DELETION_PROCESSOR_ENABLED == 'true'", "Disabled by default workflow gate");
 requireText(workflow, "secrets.AUTOMATION_RUNNER_SECRET", "Workflow secret injection");
 if (workflow.includes("SUPABASE_SERVICE_ROLE_KEY")) failures.push("Workflow exposes the database service role secret");
+if (worker.includes('Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")')) failures.push("Processor still depends on the legacy service role key");
+if (!worker.includes('Deno.env.get("SUPABASE_SECRET_KEYS")')) failures.push("Processor does not use the revocable Supabase secret key set");
 requireText(netlify, 'from = "/automation/account-deletions"', "Branded automation route");
 requireText(netlify, "process-account-deletions", "Automation function proxy");
 

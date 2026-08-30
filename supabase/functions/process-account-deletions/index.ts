@@ -15,7 +15,8 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}") as Record<string, string>;
+  const serviceRoleKey = secretKeys.default || "";
   const runnerSecret = Deno.env.get("AUTOMATION_RUNNER_SECRET") || "";
   const suppliedSecret = request.headers.get("x-automation-secret") || "";
   if (!supabaseUrl || !serviceRoleKey || !runnerSecret) return json({ error: "processor_not_configured" }, 503);

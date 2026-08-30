@@ -19,7 +19,17 @@ for (const roleCase of roles) {
     await page.getByLabel("Email address").fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await page.waitForURL(/\/workspace/, { timeout: 30000 });
+    await page.waitForURL((url) => url.pathname === "/workspace" || (roleCase.role === "owner" && url.pathname === "/auth/mfa"), { timeout: 30000 });
+    if (roleCase.role === "owner" && new URL(page.url()).pathname === "/auth/mfa") {
+      throw new Error("Owner credential release is blocked until Delly completes multifactor enrollment.");
+    }
+    const closeTour = page.getByRole("button", { name: "Skip tour", exact: true });
+    try {
+      await closeTour.waitFor({ state: "visible", timeout: 5000 });
+      await closeTour.click();
+    } catch {
+      // Returning users may have already completed the guided tour.
+    }
     await expect(page.getByText("Live tenant records", { exact: true })).toBeVisible();
     await expect(page.getByText("Preview data", { exact: true })).toHaveCount(0);
     await expect(page.getByText(roleCase.role[0].toUpperCase() + roleCase.role.slice(1), { exact: true })).toBeVisible();

@@ -1,13 +1,17 @@
 import {defineConfig,devices} from '@playwright/test';
 
+const credentialRelease=process.env.CREDENTIAL_RELEASE_RUN==='true';
+const credentialBaseUrl=process.env.CREDENTIAL_BASE_URL;
+if(credentialRelease&&credentialBaseUrl!=='https://app.blossomroyall.com')throw new Error('Credential release requires CREDENTIAL_BASE_URL=https://app.blossomroyall.com');
+
 export default defineConfig({
   testDir:'./tests',
-  testIgnore:process.env.CREDENTIAL_RELEASE_RUN==='true'?[]:['**/credential-release.spec.ts'],
+  testIgnore:credentialRelease?[]:['**/credential-release.spec.ts'],
   fullyParallel:true,
   retries:1,
   reporter:'list',
-  use:{baseURL:'http://127.0.0.1:3002',trace:'on-first-retry',serviceWorkers:'block'},
-  webServer:{
+  use:{baseURL:credentialRelease?credentialBaseUrl:'http://127.0.0.1:3002',trace:'on-first-retry',serviceWorkers:'block'},
+  webServer:credentialRelease?undefined:{
     command:'npm run dev -- --hostname 127.0.0.1 --port 3002',
     url:'http://127.0.0.1:3002',
     reuseExistingServer:true,
