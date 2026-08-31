@@ -35,6 +35,7 @@
 27. Use canonical share buttons and branded watch pages with social player metadata. Never publish a raw video URL.
 28. TaTech authentication styling is mandatory. Tenant branding remains primary. Login must include Powered by TA Tech, the exact approved motto, premium visual treatment, localization, accessible controls, password visibility, branded recovery, and safe returned error handling.
 29. Cost discipline is mandatory. The core product must remain useful on free or very low cost infrastructure. No paid AI call may be required for a core customer, staff, vendor, or owner workflow. Paid services require a measured usage threshold, a budget cap, and an explicit business case.
+30. Maintain a role based workflow course that is also executable release QA. Every authorized role must use the real interface to complete every meaningful workflow, control, signature, approval, and handoff while narration teaches the task continuously. Every action must assert its visible result and matching backend state. Cross role figures and handoffs must reconcile. Missing controls, silent stretches, permission leaks, stale recordings, narration drift, unverified writes, or development features presented as complete block release. Fix the application or verified expectation, then rerun the complete affected course. Detailed courses are primary evidence. Reel editions are derived only after detailed courses pass. Publication requires current commit stamping, privacy review, captions, natural voice review, and human approval.
 
 ## Mission
 

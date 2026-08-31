@@ -115,6 +115,24 @@ function inspectRepo(repo) {
         writeFileSync(packagePath, `${JSON.stringify(packageData, null, 2)}\n`, "utf8");
       }
     }
+    const trainingRecorder = files.find((file) => {
+      const relative = file.slice(repo.length + 1).replaceAll("\\", "/");
+      return relative.startsWith("scripts/") && /(?:record|run).*(?:role|training|course).*\.(?:js|mjs|ts)$/i.test(basename(file));
+    });
+    const trainingRunbook = files.some((file) => /(?:role.*training|role.*course|fleet.*role.*course).*\.md$/i.test(basename(file)));
+    const trainingVerifier = Object.entries(scripts).find(([name]) => /(?:test|verify):.*training|training:verify/i.test(name));
+    if (!trainingRecorder) findings.push(finding(repo, "block", "NO_ROLE_COURSE_RECORDER", "No executable role workflow course recorder was found."));
+    if (!trainingRunbook) findings.push(finding(repo, "block", "NO_ROLE_COURSE_RUNBOOK", "No canonical role workflow course runbook was found."));
+    if (!trainingVerifier || !scripts.prepush?.includes(trainingVerifier[0])) findings.push(finding(repo, "block", "TRAINING_GATE_NOT_WIRED", "The role workflow course verifier is not wired into prepush."));
+    if (trainingRecorder) {
+      const recorderSource = readFileSync(trainingRecorder, "utf8");
+      for (const [token, code, message] of [
+        ["recordVideo", "COURSE_NOT_REAL_UI", "Role course recorder does not capture the real interface."],
+        ["backendAssertions", "COURSE_NO_BACKEND_ASSERTIONS", "Role course recorder has no explicit backend assertion contract."],
+        ["runFailures", "COURSE_FAILURES_NOT_BLOCKING", "Role course recorder does not preserve blocking workflow failures."],
+        ["pending_human_review", "COURSE_NO_HUMAN_REVIEW_GATE", "Role course recorder does not block publication pending human review."],
+      ]) if (!recorderSource.includes(token)) findings.push(finding(repo, "block", code, message, trainingRecorder));
+    }
   }
 
   const hasCredentialTest = files.some((file) => /credential.*(?:spec|test)\.(?:js|jsx|ts|tsx)$/i.test(basename(file)));

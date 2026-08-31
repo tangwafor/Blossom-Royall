@@ -16,7 +16,7 @@ const guard = join(process.cwd(), "scripts", "fleet-release-guard.mjs");
 const audit = spawnSync(process.execPath, [guard, repo, "--json"], { encoding: "utf8" });
 if (audit.status !== 1) throw new Error("Audit must block an unsafe repository.");
 const auditReport = JSON.parse(audit.stdout);
-for (const code of ["ROLE_OVERRIDE", "UNPROVEN_CLAIM", "NO_CREDENTIAL_GATE", "NO_REAL_ACCOUNT_TEST", "NO_SIGN_OUT", "PREPUSH_NOT_WIRED"]) {
+for (const code of ["ROLE_OVERRIDE", "UNPROVEN_CLAIM", "NO_CREDENTIAL_GATE", "NO_REAL_ACCOUNT_TEST", "NO_SIGN_OUT", "PREPUSH_NOT_WIRED", "NO_ROLE_COURSE_RECORDER", "NO_ROLE_COURSE_RUNBOOK", "TRAINING_GATE_NOT_WIRED"]) {
   if (!auditReport.findings.some((item) => item.code === code)) throw new Error(`Missing expected finding ${code}`);
 }
 
