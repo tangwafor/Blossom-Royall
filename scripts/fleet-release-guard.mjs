@@ -132,6 +132,7 @@ function inspectRepo(repo) {
         ["runFailures", "COURSE_FAILURES_NOT_BLOCKING", "Role course recorder does not preserve blocking workflow failures."],
         ["pending_human_review", "COURSE_NO_HUMAN_REVIEW_GATE", "Role course recorder does not block publication pending human review."],
       ]) if (!recorderSource.includes(token)) findings.push(finding(repo, "block", code, message, trainingRecorder));
+      if (!/courseActionCoverageComplete\s*=\s*true/.test(recorderSource)) findings.push(finding(repo, "block", "COURSE_ACTION_COVERAGE_INCOMPLETE", "Role course has not verified every required workflow action and backend result.", trainingRecorder));
     }
   }
 

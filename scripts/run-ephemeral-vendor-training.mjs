@@ -23,6 +23,20 @@ const serverKey = keys.find((key) => key.type === "secret" && key.api_key)?.api_
 if (!serverKey) throw new Error("No active production server key is available.");
 
 const admin = createClient(url, serverKey, { auth: { autoRefreshToken: false, persistSession: false } });
+const deleteUserWithRetry = async (userId) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const result = await admin.auth.admin.deleteUser(userId);
+      lastError = result.error;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (!lastError) return null;
+    await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+  }
+  return lastError;
+};
 const vendorSearch = process.env.EPHEMERAL_VENDOR_NAME || "Africstyle";
 const { data: vendors, error: vendorError } = await admin.from("vendors").select("id, store_id, owner_user_id, name").ilike("name", `%${vendorSearch}%`);
 if (vendorError) throw vendorError;
@@ -60,6 +74,10 @@ try {
         TRAINING_NARRATION_MODE: "ndamba",
         TRAINING_VENDOR_EMAIL: email,
         TRAINING_VENDOR_PASSWORD: password,
+        TRAINING_USER_ID: qaUserId,
+        TRAINING_SERVER_KEY: serverKey,
+        TRAINING_SUPABASE_URL: url,
+        TRAINING_DIAGNOSTIC: "true",
       },
     });
     if (result.status !== 0) throw new Error(`${edition} production vendor recording failed its UI gate.`);
@@ -72,8 +90,8 @@ try {
     if (error) runError ||= error;
   }
   if (qaUserId) {
-    const { error } = await admin.auth.admin.deleteUser(qaUserId);
-    if (error) runError ||= error;
+    const deletionError = await deleteUserWithRetry(qaUserId);
+    if (deletionError) runError ||= deletionError;
     const [{ count: membershipCount }, { count: profileCount }, { count: ownerCount }] = await Promise.all([
       admin.from("store_memberships").select("id", { count: "exact", head: true }).eq("user_id", qaUserId),
       admin.from("profiles").select("id", { count: "exact", head: true }).eq("id", qaUserId),

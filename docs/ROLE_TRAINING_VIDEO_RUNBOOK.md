@@ -6,6 +6,8 @@ This runbook creates training videos from real interface clicks while performing
 
 The recording run is also a release UI test. Missing controls, incorrect headings, broken navigation, permission leaks, and role mismatches must return a nonzero exit and write a failed manifest. Fix the application or correct an outdated verified expectation, then run the complete recording again. Never edit a failed recording into an apparent pass.
 
+A chapter diagnostic may verify authentication, role isolation, every authorized surface, visible production counts, and baseline backend evidence while workflow action coverage is still being built. Its manifest must say `diagnostic_pass_workflow_actions_incomplete`. It is not review footage and cannot be published. Only a run with complete required action coverage, visible result assertions, matching backend assertions, cross role reconciliation, cleanup verification, and status `passed_pending_human_review` may enter human review.
+
 The reviewed video must be delivered with the matching role package defined in `docs/ROLE_CREDENTIAL_WALKTHROUGH_HANDOFF.md`. A walkthrough is never a substitute for production credential and permission testing.
 
 ## Roles

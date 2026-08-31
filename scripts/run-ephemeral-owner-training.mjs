@@ -20,6 +20,20 @@ const keys = await keyResponse.json();
 const serverKey = keys.find((key) => key.type === "secret" && key.api_key)?.api_key || keys.find((key) => key.name === "service_role" && key.api_key)?.api_key;
 if (!serverKey) throw new Error("No active production server key is available.");
 const admin = createClient(url, serverKey, { auth: { autoRefreshToken: false, persistSession: false } });
+const deleteUserWithRetry = async (userId) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const result = await admin.auth.admin.deleteUser(userId);
+      lastError = result.error;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    if (!lastError) return null;
+    await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+  }
+  return lastError;
+};
 const { data: stores, error: storeError } = await admin.from("stores").select("id, name").ilike("name", "%Blossom Royall%");
 if (storeError) throw storeError;
 if (!stores || stores.length !== 1) throw new Error(`Expected exactly one Blossom Royall store; found ${stores?.length || 0}.`);
@@ -48,6 +62,10 @@ for (const edition of ["detailed", "reel"]) {
         TRAINING_NARRATION_MODE: "ndamba",
         TRAINING_OWNER_EMAIL: email,
         TRAINING_OWNER_PASSWORD: password,
+        TRAINING_USER_ID: qaUserId,
+        TRAINING_SERVER_KEY: serverKey,
+        TRAINING_SUPABASE_URL: url,
+        TRAINING_DIAGNOSTIC: "true",
       },
     });
     if (result.status !== 0) throw new Error(`${edition} production owner recording failed its MFA or UI gate.`);
@@ -55,8 +73,8 @@ for (const edition of ["detailed", "reel"]) {
     runError ||= error instanceof Error ? error : new Error(String(error));
   } finally {
     if (qaUserId) {
-      const { error } = await admin.auth.admin.deleteUser(qaUserId);
-      if (error) runError ||= error;
+      const deletionError = await deleteUserWithRetry(qaUserId);
+      if (deletionError) runError ||= deletionError;
       const [{ count: membershipCount }, { count: profileCount }] = await Promise.all([
         admin.from("store_memberships").select("id", { count: "exact", head: true }).eq("user_id", qaUserId),
         admin.from("profiles").select("id", { count: "exact", head: true }).eq("id", qaUserId),

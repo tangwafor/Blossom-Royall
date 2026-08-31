@@ -4,6 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { join } from "node:path";
+import { createClient } from "@supabase/supabase-js";
+import { roleCourseMatrix } from "./role-course-matrix.mjs";
 
 const roles = ["owner", "manager", "staff", "vendor", "customer"];
 const requestedRole = process.env.TRAINING_ROLE || "all";
@@ -16,6 +18,11 @@ const narrationMode = process.env.TRAINING_NARRATION_MODE || "ndamba";
 const ndambaVoice = process.env.TRAINING_NARRATION_VOICE || "en-US-AriaNeural";
 const ndambaRate = process.env.TRAINING_NARRATION_RATE || "-4%";
 const isProduction = new URL(baseUrl).hostname === "app.blossomroyall.com";
+const trainingServerKey = process.env.TRAINING_SERVER_KEY;
+const trainingUserId = process.env.TRAINING_USER_ID;
+const trainingSupabaseUrl = process.env.TRAINING_SUPABASE_URL;
+const diagnosticMode = process.env.TRAINING_DIAGNOSTIC === "true";
+const courseActionCoverageComplete = false;
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
 const date = new Date().toISOString().slice(0, 10);
@@ -25,10 +32,82 @@ if (!selectedRoles.every((role) => roles.includes(role))) throw new Error(`Unsup
 if (!["detailed", "reel"].includes(edition)) throw new Error(`Unsupported TRAINING_EDITION: ${edition}`);
 if (!["ndamba", "human"].includes(narrationMode)) throw new Error(`Unsupported TRAINING_NARRATION_MODE: ${narrationMode}`);
 if (isProduction && !productionApproved) throw new Error("Production recording requires TRAINING_PRODUCTION_APPROVED=true.");
+if (isProduction && (!trainingServerKey || !trainingUserId || !trainingSupabaseUrl)) throw new Error("Production role courses require sealed server side backend assertion credentials.");
+
+const trainingAdmin = trainingServerKey && trainingSupabaseUrl
+  ? createClient(trainingSupabaseUrl, trainingServerKey, { auth: { autoRefreshToken: false, persistSession: false } })
+  : null;
+
+const assertNoError = (result, label) => {
+  if (result.error) throw new Error(`${label} backend assertion failed: ${result.error.message}`);
+  return result.data;
+};
+
+const backendAssertions = {
+  owner: async () => {
+    if (!trainingAdmin || !trainingUserId) throw new Error("Owner backend assertion client is unavailable.");
+    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).single(), "Owner membership");
+    if (membership.role !== "owner") throw new Error(`Owner backend role mismatch: ${membership.role}`);
+    const [vendors, products, orders, leases] = await Promise.all([
+      trainingAdmin.from("vendors").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+      trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+      trainingAdmin.from("orders").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+      trainingAdmin.from("leases").select("id, vendors!inner(store_id)", { count: "exact", head: true }).eq("vendors.store_id", membership.store_id),
+    ]);
+    for (const [result, label] of [[vendors, "Owner vendors"], [products, "Owner products"], [orders, "Owner orders"], [leases, "Owner leases"]]) if (result.error) throw new Error(`${label} backend assertion failed: ${result.error.message}`);
+    return { storeId: membership.store_id, role: membership.role, vendors: vendors.count || 0, products: products.count || 0, orders: orders.count || 0, leases: leases.count || 0 };
+  },
+  vendor: async () => {
+    if (!trainingAdmin || !trainingUserId) throw new Error("Vendor backend assertion client is unavailable.");
+    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).single(), "Vendor membership");
+    if (membership.role !== "vendor") throw new Error(`Vendor backend role mismatch: ${membership.role}`);
+    const owned = assertNoError(await trainingAdmin.from("vendors").select("id, name").eq("store_id", membership.store_id).eq("owner_user_id", trainingUserId), "Vendor ownership");
+    if (owned.length !== 1) throw new Error(`Vendor backend ownership mismatch: expected 1, received ${owned.length}`);
+    const vendorId = owned[0].id;
+    const [products, orderItems, leases, ledger] = await Promise.all([
+      trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id).eq("vendor_id", vendorId),
+      trainingAdmin.from("order_items").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
+      trainingAdmin.from("leases").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
+      trainingAdmin.from("vendor_ledger_entries").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id).eq("vendor_id", vendorId),
+    ]);
+    for (const [result, label] of [[products, "Vendor products"], [orderItems, "Vendor order items"], [leases, "Vendor leases"], [ledger, "Vendor ledger"]]) if (result.error) throw new Error(`${label} backend assertion failed: ${result.error.message}`);
+    return { storeId: membership.store_id, role: membership.role, vendorId, vendorName: owned[0].name, products: products.count || 0, orderItems: orderItems.count || 0, leases: leases.count || 0, ledger: ledger.count || 0 };
+  },
+};
+
+const expectVisibleText = async (page, text, label) => {
+  const locator = page.getByText(text, { exact: true }).first();
+  await locator.waitFor({ state: "visible", timeout: 15000 }).catch(() => { throw new Error(`${label} UI assertion failed: ${text} is not visible.`); });
+};
+
+const chapterAssertions = async (page, role, label, backend) => {
+  await expectVisibleText(page, "Live tenant records", `${role} ${label}`);
+  if (role === "owner" && label === "Products") {
+    const visibleProducts = await page.locator(".product-grid .product").count();
+    if (visibleProducts !== backend.products) throw new Error(`Owner Products mismatch: UI ${visibleProducts}, backend ${backend.products}.`);
+    return { chapter: label, uiProducts: visibleProducts, backendProducts: backend.products };
+  }
+  if (role === "owner" && label === "Vendors") {
+    await expectVisibleText(page, `${backend.vendors} managed brands`, "Owner Vendors");
+    return { chapter: label, uiVendors: backend.vendors, backendVendors: backend.vendors };
+  }
+  if (role === "vendor" && label === "Vendor Board") {
+    await expectVisibleText(page, "Vendor isolation active", "Vendor Board");
+    await page.getByText(backend.vendorName, { exact: false }).first().waitFor({ state: "visible", timeout: 15000 });
+    return { chapter: label, vendorId: backend.vendorId, vendorName: backend.vendorName, backendProducts: backend.products, backendOrderItems: backend.orderItems, backendLeases: backend.leases, backendLedger: backend.ledger };
+  }
+  if (role === "vendor" && label === "My Products") {
+    const visibleProducts = await page.locator(".product-grid .product").count();
+    if (visibleProducts !== backend.products) throw new Error(`Vendor Products mismatch: UI ${visibleProducts}, backend ${backend.products}.`);
+    await page.getByText("Vendor catalog editing is still in development.", { exact: false }).first().waitFor({ state: backend.products ? "visible" : "hidden", timeout: 5000 }).catch(() => {});
+    return { chapter: label, uiProducts: visibleProducts, backendProducts: backend.products, developmentBoundary: "Vendor catalog editing is still in development" };
+  }
+  return { chapter: label, backendStoreId: backend.storeId, backendRole: backend.role };
+};
 
 const roleConfig = {
   owner: {
-    allowed: ["Command Center", "Products", "Vendors", "Rent", "Orders", "Staff", "Business Setup"],
+    allowed: roleCourseMatrix.owner.map((chapter) => chapter.label),
     forbidden: [],
   },
   manager: {
@@ -40,7 +119,7 @@ const roleConfig = {
     forbidden: ["Business Setup", "Vendors", "Staff & payroll"],
   },
   vendor: {
-    allowed: ["Vendor Board", "My Products", "Orders", "Rent", "Help"],
+    allowed: roleCourseMatrix.vendor.map((chapter) => chapter.label),
     forbidden: ["Command Center", "Checkout", "Cash Drawer", "Staff & payroll", "Business Setup"],
   },
   customer: {
@@ -148,6 +227,8 @@ const manifest = {
   status: "recording",
   narration: captureOnly ? "capture_pending_narration" : "voice_and_compact_side_captions_pending_human_review",
   voice: captureOnly ? null : narrationMode === "ndamba" ? { provider: "edge-tts", name: ndambaVoice, rate: ndambaRate, source: "Ndamba American English role guides" } : { provider: "human" },
+  courseActionCoverageComplete,
+  courseMode: diagnosticMode ? "chapter_diagnostic" : "release_course",
   roles: {},
 };
 const runFailures = [];
@@ -179,6 +260,8 @@ for (const role of selectedRoles) {
   const page = await context.newPage();
   const captions = [];
   let roleFailure = null;
+  let roleBackendEvidence = null;
+  const roleChapterEvidence = [];
   const started = Date.now();
   const explain = async (text) => {
     await page.waitForTimeout(450);
@@ -209,6 +292,8 @@ for (const role of selectedRoles) {
     }
     await page.waitForURL(/\/workspace/, { timeout: 30000 });
     await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
+    if (!backendAssertions[role]) throw new Error(`${role} detailed course has no backend assertion contract yet.`);
+    roleBackendEvidence = await backendAssertions[role]();
     await explain(`Signed in as ${role}. The navigation now shows only authorized work.`);
     const skipTour = page.getByRole("button", { name: "Skip tour", exact: true });
     try {
@@ -233,7 +318,9 @@ for (const role of selectedRoles) {
       const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
       if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${expectedHeading} heading`);
       await heading.waitFor({ state: "visible" });
-      await explain(`${label} opens the ${expectedHeading} workspace, verified visible and available to the ${role} role.`);
+      roleChapterEvidence.push(await chapterAssertions(page, role, label, roleBackendEvidence));
+      const chapter = roleCourseMatrix[role]?.find((item) => item.label === label);
+      await explain(chapter ? `${label}. ${chapter.teaches} Current status: ${chapter.status}.` : `${label} opens the ${expectedHeading} workspace, verified visible and available to the ${role} role.`);
     }
 
     if (role === "customer" && edition === "detailed") {
@@ -245,7 +332,7 @@ for (const role of selectedRoles) {
     }
 
     await explain(`${role} role QA passed. This recording is evidence and training, pending human review.`);
-    manifest.roles[role] = { status: "passed", checks: destinations.length + roleConfig[role].forbidden.length };
+    manifest.roles[role] = { status: "passed", checks: destinations.length + roleConfig[role].forbidden.length, backendAssertions: roleBackendEvidence, chapterAssertions: roleChapterEvidence };
   } catch (error) {
     roleFailure = error instanceof Error ? error : new Error(String(error));
     manifest.roles[role] = { status: "failed", error: roleFailure.message };
@@ -267,7 +354,12 @@ for (const role of selectedRoles) {
   }
 }
 
-manifest.status = Object.values(manifest.roles).every((entry) => entry.status === "passed") ? (captureOnly ? "capture_pending_narration" : "passed_pending_human_review") : "failed";
+manifest.status = Object.values(manifest.roles).every((entry) => entry.status === "passed")
+  ? courseActionCoverageComplete
+    ? captureOnly ? "capture_pending_narration" : "passed_pending_human_review"
+    : "diagnostic_pass_workflow_actions_incomplete"
+  : "failed";
 await writeFile(join(artifactRoot, `manifest-${edition}.json`), JSON.stringify(manifest, null, 2), "utf8");
 if (runFailures.length) throw new Error(`Role training UI QA failed. Fix the application or verified expectation, then rerecord. ${runFailures.join(" | ")}`);
+if (!courseActionCoverageComplete && !diagnosticMode) throw new Error("Role course chapter diagnostic passed, but complete workflow action coverage is not implemented. Release remains blocked.");
 console.log(`Training QA artifacts written to ${artifactRoot}`);
