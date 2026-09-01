@@ -52,36 +52,41 @@ insert into public.leases(id, vendor_id, monthly_rent, rent_due_day, start_date,
   ('70000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000002', 900, 1, current_date, 'signed', now());
 
 set local role authenticated;
+select set_config('request.jwt.claim.sub', :'test_user', true);
+select set_config('test.role_case', :'test_case', true);
+select set_config('request.jwt.claims', case when :'test_case' = 'owner' then '{"aal":"aal2"}' else '{"aal":"aal1"}' end, true);
 
 do $$
-declare visible_count integer;
-declare attributed_amount numeric;
+declare
+  visible_count integer;
+  attributed_amount numeric;
+  role_case text := current_setting('test.role_case');
 begin
-  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000003', true);
-  select count(*) into visible_count from public.orders;
-  if visible_count <> 0 then raise exception 'vendor can read protected mall order rows, saw %', visible_count; end if;
-  select attributed_total into attributed_amount from public.get_vendor_order_summaries('20000000-0000-4000-8000-000000000001');
-  if attributed_amount <> 100 then raise exception 'vendor attributed sales summary failed, received %', attributed_amount; end if;
-  select count(*) into visible_count from public.products;
-  if visible_count <> 1 then raise exception 'vendor product isolation failed, saw %', visible_count; end if;
-  select count(*) into visible_count from public.leases;
-  if visible_count <> 1 then raise exception 'vendor lease isolation failed, saw %', visible_count; end if;
-
-  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000002', true);
-  select count(*) into visible_count from public.orders;
-  if visible_count <> 1 then raise exception 'staff tenant isolation failed, saw % orders', visible_count; end if;
-  select count(*) into visible_count from public.leases;
-  if visible_count <> 0 then raise exception 'staff lease restriction failed, saw %', visible_count; end if;
-
-  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000001', true);
-  select count(*) into visible_count from public.orders;
-  if visible_count <> 1 then raise exception 'owner tenant isolation failed, saw % orders', visible_count; end if;
-  select count(*) into visible_count from public.leases;
-  if visible_count <> 1 then raise exception 'owner lease scope failed, saw %', visible_count; end if;
-
-  perform set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000005', true);
-  select count(*) into visible_count from public.orders;
-  if visible_count <> 1 then raise exception 'customer self isolation failed, saw % orders', visible_count; end if;
+  if role_case = 'vendor' then
+    select count(*) into visible_count from public.orders;
+    if visible_count <> 0 then raise exception 'vendor can read protected mall order rows, saw %', visible_count; end if;
+    select attributed_total into attributed_amount from public.get_vendor_order_summaries('20000000-0000-4000-8000-000000000001');
+    if attributed_amount <> 100 then raise exception 'vendor attributed sales summary failed, received %', attributed_amount; end if;
+    select count(*) into visible_count from public.products;
+    if visible_count <> 1 then raise exception 'vendor product isolation failed, saw %', visible_count; end if;
+    select count(*) into visible_count from public.leases;
+    if visible_count <> 1 then raise exception 'vendor lease isolation failed, saw %', visible_count; end if;
+  elsif role_case = 'staff' then
+    select count(*) into visible_count from public.orders;
+    if visible_count <> 1 then raise exception 'staff tenant isolation failed, saw % orders', visible_count; end if;
+    select count(*) into visible_count from public.leases;
+    if visible_count <> 0 then raise exception 'staff lease restriction failed, saw %', visible_count; end if;
+  elsif role_case = 'owner' then
+    select count(*) into visible_count from public.orders;
+    if visible_count <> 1 then raise exception 'owner tenant isolation failed, saw % orders', visible_count; end if;
+    select count(*) into visible_count from public.leases;
+    if visible_count <> 1 then raise exception 'owner lease scope failed, saw %', visible_count; end if;
+  elsif role_case = 'customer' then
+    select count(*) into visible_count from public.orders;
+    if visible_count <> 1 then raise exception 'customer self isolation failed, saw % orders', visible_count; end if;
+  else
+    raise exception 'unsupported credential role case: %', role_case;
+  end if;
 end $$;
 
 rollback;

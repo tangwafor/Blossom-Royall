@@ -10,7 +10,22 @@ returns event_trigger
 language plpgsql
 security definer
 set search_path = pg_catalog
-as $$ begin null; end $$;
+as $$
+declare command record;
+begin
+  for command in
+    select * from pg_event_trigger_ddl_commands()
+    where command_tag = 'CREATE TABLE' and schema_name = 'public'
+  loop
+    execute format('alter table %s enable row level security', command.object_identity);
+  end loop;
+end
+$$;
+
+create event trigger rls_auto_enable_on_public_table
+on ddl_command_end
+when tag in ('CREATE TABLE')
+execute function public.rls_auto_enable();
 
 create table auth.users (
   id uuid primary key,
@@ -62,3 +77,8 @@ $$;
 grant usage on schema auth, storage to anon, authenticated, service_role;
 grant select, insert, update, delete on storage.objects to authenticated;
 grant select on storage.buckets to authenticated;
+
+grant usage on schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
