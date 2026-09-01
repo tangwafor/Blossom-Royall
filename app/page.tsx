@@ -50,6 +50,7 @@ import {
   loadTenantVendors,
   loadVendorRentWorkspace,
   loadVendorLedger,
+  loadOwnedVendorProfile,
   loadVendorOperatingSnapshots,
   submitVendorRentPayment,
   reviewVendorRentPayment,
@@ -6959,6 +6960,7 @@ function RolePulse({ role, orders, go, preview = false }: { role: WorkspaceRole;
 }
 
 function VendorBoard({ context, go }: { context: TenantContext; go: (destination: string) => void }) {
+  const [vendorProfile, setVendorProfile] = useState<{ id: string; name: string } | null>(null);
   const [products, setProducts] = useState<TenantProductSummary[]>([]);
   const [vendorOrders, setVendorOrders] = useState<Order[]>([]);
   const [rent, setRent] = useState<VendorRentRecord[]>([]);
@@ -6972,20 +6974,24 @@ function VendorBoard({ context, go }: { context: TenantContext; go: (destination
     if (context.mode !== "production" || context.role !== "vendor") return;
     setLoading(true);
     try {
-      const [nextProducts, nextOrders, nextRent, nextLedger, nextSnapshots] = await Promise.all([
+      const results = await Promise.allSettled([
+        loadOwnedVendorProfile(context),
         loadTenantProducts(context),
         loadTenantOrders(context),
         loadVendorRentWorkspace(context),
         loadVendorLedger(context),
         loadVendorOperatingSnapshots(context),
       ]);
-      setProducts(nextProducts);
-      setVendorOrders(nextOrders as Order[]);
-      setRent(nextRent);
-      setLedger(nextLedger);
-      setSnapshot(nextSnapshots[0] || null);
+      const [profileResult, productsResult, ordersResult, rentResult, ledgerResult, snapshotsResult] = results;
+      if (profileResult.status === "fulfilled") setVendorProfile(profileResult.value);
+      if (productsResult.status === "fulfilled") setProducts(productsResult.value);
+      if (ordersResult.status === "fulfilled") setVendorOrders(ordersResult.value as Order[]);
+      if (rentResult.status === "fulfilled") setRent(rentResult.value);
+      if (ledgerResult.status === "fulfilled") setLedger(ledgerResult.value);
+      if (snapshotsResult.status === "fulfilled") setSnapshot(snapshotsResult.value[0] || null);
       setLastUpdated(new Date());
-      setNotice("");
+      const failed = results.filter((result) => result.status === "rejected").length;
+      setNotice(failed ? `${failed} live vendor data source${failed === 1 ? "" : "s"} could not refresh. Available production records remain visible and no preview records were substituted.` : "");
     } catch {
       setNotice("Live vendor records could not be refreshed. No preview records were substituted.");
     } finally {
@@ -7008,7 +7014,7 @@ function VendorBoard({ context, go }: { context: TenantContext; go: (destination
   const paid = ledger.filter((entry) => entry.type === "payout_debit").reduce((sum, entry) => sum + entry.amount, 0);
   const recordedBalance = snapshot?.recordedBalance ?? credits - deductions - paid;
   const lowStock = products.flatMap((product) => product.variants.map((variant) => ({ ...variant, productName: product.name }))).filter((variant) => variant.quantity <= 3);
-  const vendorName = snapshot?.vendorName || rent[0]?.vendorName || products[0]?.vendorName || "Your store";
+  const vendorName = vendorProfile?.name || snapshot?.vendorName || rent[0]?.vendorName || products[0]?.vendorName || "Your store";
 
   return <div className="content vendor-board">
     <section className="welcome vendor-board-welcome"><div><span className="eyebrow">YOUR STORE OPERATIONS</span><h2>Run your store from one board.</h2><p>Only orders, products, inventory, rent, and approvals authorized for your vendor membership are loaded.</p></div><button onClick={() => void refresh()} disabled={loading}><RefreshCw />{loading ? "Refreshing" : "Refresh live data"}</button></section>

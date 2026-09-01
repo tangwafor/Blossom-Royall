@@ -247,6 +247,21 @@ export async function loadVendorLedger(context: TenantContext): Promise<VendorLe
   return (data || []).map((entry) => ({ id: entry.id, orderId: entry.order_id, type: entry.entry_type, amount: Number(entry.amount), currency: entry.currency, memo: entry.memo || "", createdAt: entry.created_at }));
 }
 
+export type OwnedVendorProfile = { id: string; name: string };
+
+export async function loadOwnedVendorProfile(context: TenantContext): Promise<OwnedVendorProfile | null> {
+  if (context.mode !== "production" || context.role !== "vendor" || !context.storeId || !context.userId) return null;
+  const { data, error } = await createClient()
+    .from("vendors")
+    .select("id, name")
+    .eq("store_id", context.storeId)
+    .eq("owner_user_id", context.userId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { id: data.id, name: data.name } : null;
+}
+
 export type VendorOperatingSnapshot = {
   vendorId: string;
   vendorName: string;
