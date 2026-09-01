@@ -770,7 +770,7 @@ export function OperatingSystem() {
             title="Products & inventory"
             subtitle="Live stock across every vendor and sales channel."
           >
-            <ProductCatalogManager />
+            {tenantContext && <ProductCatalogManager context={tenantContext} />}
           </ListView>
         )}
         {active === "Vendors" && (
@@ -1171,28 +1171,23 @@ async function normalizeProductImage(file: File) {
   }
 }
 
-function ProductCatalogManager() {
+function ProductCatalogManager({ context }: { context: TenantContext }) {
   const storageKey = "br-product-drafts:blossom-royall";
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState<ProductDraft[]>([]);
   const [message, setMessage] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
   const [tenantProducts, setTenantProducts] = useState<TenantProductSummary[]>([]);
   useEffect(() => {
-    const stored = localStorage.getItem(storageKey);
-    if (stored) setDrafts(JSON.parse(stored));
-    void resolveTenantContext().then(async (context) => {
-      setTenantContext(context);
-      if (context.mode === "production") {
-        try {
-          setTenantProducts(await loadTenantProducts(context));
-        } catch {
-          setTenantProducts([]);
-        }
-      }
-    });
-  }, []);
+    if (context.mode === "preview") {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) setDrafts(JSON.parse(stored));
+      setTenantProducts([]);
+      return;
+    }
+    setDrafts([]);
+    void loadTenantProducts(context).then(setTenantProducts).catch(() => setTenantProducts([]));
+  }, [context]);
   const persist = (next: ProductDraft[]) => {
     setDrafts(next);
     localStorage.setItem(storageKey, JSON.stringify(next));
@@ -1263,13 +1258,13 @@ function ProductCatalogManager() {
   return (
     <>
       <section className="panel collection-studio">
-        <div className={`tenant-runtime ${tenantContext.mode}`}><ShieldCheck /><span><b>{tenantContext.mode === "production" ? "Tenant catalog active" : "Private preview mode"}</b><small>{tenantContext.reason}</small></span></div>
+        <div className={`tenant-runtime ${context.mode}`}><ShieldCheck /><span><b>{context.mode === "production" ? "Tenant catalog active" : "Private preview mode"}</b><small>{context.reason}</small></span></div>
         <div className="panel-head">
           <span>
             <small className="eyebrow">COLLECTION STUDIO</small>
             <h3>Luxury item exposure</h3>
           </span>
-          {tenantContext.mode === "preview" && <div>
+          {context.mode === "preview" && <div>
             <button onClick={() => setOpen((value) => !value)}>
               <Upload />
               {open ? "Close importer" : "Add one or bulk upload"}
@@ -1287,8 +1282,8 @@ function ProductCatalogManager() {
           resized, renamed, and converted to a storefront ready WebP asset
           automatically.
         </p>
-        {tenantContext.mode === "production" && <p className="control-note"><ShieldCheck />Production displays only tenant catalog records. New product publishing activates after private media storage and the mandatory fresh database snapshot are available.</p>}
-        {tenantContext.mode === "preview" && open && (
+        {context.mode === "production" && <p className="control-note"><ShieldCheck />Production displays only tenant catalog records. New product publishing activates after private media storage and the mandatory fresh database snapshot are available.</p>}
+        {context.mode === "preview" && open && (
           <form className="collection-importer" onSubmit={importItems}>
             <label>
               Vendor
@@ -1327,7 +1322,7 @@ function ProductCatalogManager() {
             {message}
           </output>
         )}
-        {drafts.length > 0 && (
+        {context.mode === "preview" && drafts.length > 0 && (
           <div className="collection-preview">
             {drafts.map((item) => (
               <article key={item.id}>
@@ -1362,11 +1357,11 @@ function ProductCatalogManager() {
           </div>
         )}
       </section>
-      {tenantContext.mode === "production" ? <div className="product-grid">
+      {context.mode === "production" ? <div className="product-grid">
         {tenantProducts.map((product) => {
           const quantity = product.variants.reduce((sum, variant) => sum + variant.quantity, 0);
           const price = product.variants[0]?.price || 0;
-          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer>{operatorRoles.includes(tenantContext.role) ? <button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button> : <small className="channel-source">Vendor catalog editing is still in development. Only your authorized products appear here.</small>}</article>;
+          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer>{operatorRoles.includes(context.role) ? <button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button> : <small className="channel-source">Vendor catalog editing is still in development. Only your authorized products appear here.</small>}</article>;
         })}
         {!tenantProducts.length && <section className="panel help-empty"><Package /><h3>No production products yet</h3><p>Vendor and product records will appear here after approved catalog data is added.</p></section>}
       </div> : <div className="product-grid">
