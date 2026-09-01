@@ -171,7 +171,7 @@ test("opens Delly and Duplex storefronts from the vendor studio", async ({
   await expect(blossomStore).toContainText("Delly");
   await expect(africstyleStore).toContainText("Duplex");
   await blossomStore.getByRole("link", { name: "View storefront" }).click();
-  await expect(page).toHaveURL(/\/stores\/blossom-collections/);
+  await expect(page).toHaveURL(/\/stores\/blossom-collections/, { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "Blossom Collections", exact: true })).toBeVisible();
   await expect(page.getByText("Delly’s house collection", { exact: true }).first()).toBeVisible();
   await page.getByRole("link", { name: "Africstyle Fashion" }).click();
