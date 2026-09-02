@@ -42,4 +42,4 @@ Staff can open, operate, and close drawers. Owners and managers can also create 
 
 ## Production status
 
-The implementation is currently local and migration ready. Apply the migration only after explicit production approval and a fresh production backup check.
+Production migration `20260829103000` was applied on September 2, 2026 after explicit approval and a fresh production schema backup. Structural inspection confirmed all three tables, row level security on every table, eight policies, audit triggers, payment attribution, and three protected workflow functions. An owner assurance level two transaction opened a register at $100, recorded $5 paid in, closed at $105, and reconciled to zero variance. The verification transaction was rolled back and left no test register or financial activity in production.
