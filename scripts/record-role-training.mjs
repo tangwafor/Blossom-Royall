@@ -124,9 +124,14 @@ const roleConfig = {
   },
   customer: {
     allowed: ["Customer Shop", "My Fit", "Checkout", "My Orders", "Aftercare", "Help"],
-    forbidden: ["Command Center", "Checkout", "Cash Drawer", "Vendors", "Staff & payroll", "Business Setup"],
+    forbidden: ["Command Center", "Cash Drawer", "Vendors", "Staff & payroll", "Business Setup"],
   },
 };
+
+for (const [role, config] of Object.entries(roleConfig)) {
+  const overlap = config.allowed.filter((label) => config.forbidden.includes(label));
+  if (overlap.length) throw new Error(`${role} training configuration lists the same navigation as allowed and forbidden: ${overlap.join(", ")}`);
+}
 
 const fallbackPause = edition === "reel" ? 1900 : 3600;
 const stamp = async (page, text, holdMilliseconds = fallbackPause) => {
