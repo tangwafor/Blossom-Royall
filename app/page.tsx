@@ -799,7 +799,7 @@ export function OperatingSystem() {
             <StaffOperations />
           </ListView>
         )}
-        {active === "Intelligence" && <IntelligenceHub />}
+        {active === "Intelligence" && <IntelligenceHub context={tenantContext} />}
         {active === "Policies" && <PolicyCenter />}
         {active === "Business Setup" && <BusinessSetup />}
         {active === "Help" && (
@@ -1398,7 +1398,7 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
 function VendorOperations() {
   const storageKey = "br-vendors:blossom-royall";
   const auditKey = "br-vendor-audit:blossom-royall";
-  const [records, setRecords] = useState<VendorRecord[]>(defaultVendorRecords);
+  const [records, setRecords] = useState<VendorRecord[]>([]);
   const [audits, setAudits] = useState<VendorAuditEvent[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<VendorRecord | null>(null);
@@ -1413,13 +1413,15 @@ function VendorOperations() {
     reason: "Checking production access.",
   });
   useEffect(() => {
-    const stored = localStorage.getItem(storageKey);
-    const storedAudits = localStorage.getItem(auditKey);
-    if (stored) setRecords(JSON.parse(stored));
-    if (storedAudits) setAudits(JSON.parse(storedAudits));
     void resolveTenantContext().then(async (context) => {
       setTenantContext(context);
-      if (context.mode !== "production") return;
+      if (context.mode !== "production") {
+        const stored = localStorage.getItem(storageKey);
+        const storedAudits = localStorage.getItem(auditKey);
+        setRecords(stored ? JSON.parse(stored) : defaultVendorRecords);
+        if (storedAudits) setAudits(JSON.parse(storedAudits));
+        return;
+      }
       try {
         const productionVendors = await loadTenantVendors(context);
         setRecords(
@@ -1441,11 +1443,11 @@ function VendorOperations() {
           })),
         );
       } catch {
+        setRecords([]);
         setTenantContext({
           ...context,
-          mode: "preview",
           reason:
-            "Production vendor records could not be loaded. Changes remain in this device preview.",
+            "Production vendor records could not be loaded. No preview vendor data is being shown.",
         });
       }
     });
@@ -5827,7 +5829,7 @@ function StaffOperations() {
   const leaveKey = "br-staff-leave:blossom-royall";
   const auditKey = "br-staff-audit:blossom-royall";
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const [staff, setStaff] = useState<StaffRecord[]>(defaultStaffRecords);
+  const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [leave, setLeave] = useState<LeaveRequest[]>([]);
   const [audits, setAudits] = useState<StaffAuditEvent[]>([]);
   const [editing, setEditing] = useState<StaffRecord | null>(null);
@@ -5843,23 +5845,26 @@ function StaffOperations() {
     reason: "Checking production access.",
   });
   useEffect(() => {
-    const savedStaff = localStorage.getItem(staffKey);
-    const savedLeave = localStorage.getItem(leaveKey);
-    const savedAudits = localStorage.getItem(auditKey);
-    if (savedStaff) setStaff(JSON.parse(savedStaff));
-    if (savedLeave) setLeave(JSON.parse(savedLeave));
-    if (savedAudits) setAudits(JSON.parse(savedAudits));
-    void resolveTenantContext().then((context) =>
-      setTenantContext(
-        context.mode === "production"
-          ? {
-              ...context,
-              reason:
-                "Tenant identity is connected. Staff writes remain in preview until real employee identities and wage rules are approved.",
-            }
-          : context,
-      ),
-    );
+    void resolveTenantContext().then((context) => {
+      if (context.mode === "production") {
+        setStaff([]);
+        setLeave([]);
+        setAudits([]);
+        setTenantContext({
+          ...context,
+          reason:
+            "Production identity is connected. Staff onboarding and payroll writes are still in development pending approved employee identities and wage rules.",
+        });
+        return;
+      }
+      const savedStaff = localStorage.getItem(staffKey);
+      const savedLeave = localStorage.getItem(leaveKey);
+      const savedAudits = localStorage.getItem(auditKey);
+      setStaff(savedStaff ? JSON.parse(savedStaff) : defaultStaffRecords);
+      if (savedLeave) setLeave(JSON.parse(savedLeave));
+      if (savedAudits) setAudits(JSON.parse(savedAudits));
+      setTenantContext(context);
+    });
   }, []);
   const addAudit = (staffName: string, action: string) => {
     const next = [
@@ -6008,6 +6013,31 @@ function StaffOperations() {
   const weeklyPayroll = staff
     .filter((person) => person.status === "Active")
     .reduce((sum, person) => sum + hoursFor(person) * person.hourlyRate, 0);
+  if (tenantContext.mode === "production") {
+    return (
+      <section className="panel staff-center">
+        <div className="tenant-runtime production" role="status">
+          <ShieldCheck />
+          <span>
+            <b>Production staff activation</b>
+            <small>{tenantContext.reason}</small>
+          </span>
+        </div>
+        <div className="panel-head">
+          <span>
+            <small className="eyebrow">CURRENT STATUS</small>
+            <h3>No production employees are enrolled yet</h3>
+          </span>
+        </div>
+        <p>Owner action is required before scheduling, clock activity, leave decisions, and payroll estimates can become live.</p>
+        <ol>
+          <li>Confirm each employee name, email, phone number, job title, and access role.</li>
+          <li>Approve wage, break, overtime, and payroll planning rules.</li>
+          <li>Invite employees, verify their access, then run the complete staff course.</li>
+        </ol>
+      </section>
+    );
+  }
   return (
     <div className="staff-operations">
       <section className="staff-summary">
@@ -6068,11 +6098,7 @@ function StaffOperations() {
         <div className={`tenant-runtime ${tenantContext.mode}`} role="status">
           <ShieldCheck />
           <span>
-            <b>
-              {tenantContext.mode === "production"
-                ? "Production tenant identified"
-                : "Private preview mode"}
-            </b>
+            <b>Private preview mode</b>
             <small>{tenantContext.reason}</small>
           </span>
         </div>
@@ -6609,9 +6635,32 @@ function HelpCenter({
   );
 }
 
-function IntelligenceHub() {
+function IntelligenceHub({ context }: { context?: TenantContext | null }) {
   const [briefReady, setBriefReady] = useState(false);
   const [reorderApproved, setReorderApproved] = useState(false);
+  if (context?.mode === "production") {
+    return (
+      <ListView
+        eyebrow="BLOSSOM INTELLIGENCE"
+        title="Intelligence activation"
+        subtitle="Only verified production signals appear here. Sample sales claims are never mixed with live tenant data."
+      >
+        <section className="panel trust-card">
+          <BrainCircuit />
+          <div>
+            <span className="eyebrow">LIVE STATUS</span>
+            <h3>Waiting for operating history</h3>
+            <p>The production catalog contains 173 Africstyle draft items with zero verified stock. There are no completed production orders yet, so demand lift, customer value, stock cover, and reorder recommendations cannot be calculated responsibly.</p>
+            <ol>
+              <li>Duplex confirms photographs, prices, sizes, colors, and quantities.</li>
+              <li>The owner approves items for sale and verifies opening stock.</li>
+              <li>Completed sales and customer consent signals begin the live intelligence baseline.</li>
+            </ol>
+          </div>
+        </section>
+      </ListView>
+    );
+  }
   return (
     <ListView
       eyebrow="BLOSSOM INTELLIGENCE"
