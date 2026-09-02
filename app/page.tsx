@@ -65,6 +65,11 @@ import {
   createPaymentEvidenceUrl,
   reviewTenantPendingPayment,
   loadTenantProducts,
+  saveTenantProduct,
+  saveTenantProductVariant,
+  reviewTenantProduct,
+  adjustTenantProductStock,
+  removeTenantProduct,
   loadTenantVendorStorefronts,
   loadCashDrawerWorkspace,
   saveCashRegister,
@@ -1199,6 +1204,9 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
   const [message, setMessage] = useState("");
   const [processing, setProcessing] = useState(false);
   const [tenantProducts, setTenantProducts] = useState<TenantProductSummary[]>([]);
+  const [tenantVendors, setTenantVendors] = useState<Array<{ id: string; name: string }>>([]);
+  const [editingProduct, setEditingProduct] = useState<TenantProductSummary | null>(null);
+  const refreshProductionCatalog = async () => setTenantProducts(await loadTenantProducts(context));
   useEffect(() => {
     if (context.mode === "preview") {
       const stored = localStorage.getItem(storageKey);
@@ -1207,7 +1215,9 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
       return;
     }
     setDrafts([]);
-    void loadTenantProducts(context).then(setTenantProducts).catch(() => setTenantProducts([]));
+    void Promise.all([loadTenantProducts(context), loadTenantVendors(context)])
+      .then(([productRows, vendorRows]) => { setTenantProducts(productRows); setTenantVendors(vendorRows.map((vendor) => ({ id: vendor.id, name: vendor.name }))); })
+      .catch(() => { setTenantProducts([]); setTenantVendors([]); });
   }, [context]);
   const persist = (next: ProductDraft[]) => {
     setDrafts(next);
@@ -1276,6 +1286,42 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
     localStorage.setItem(storageKey, JSON.stringify(next));
     setMessage(`${product.name} was added to the production checkout bag.`);
   };
+  const createProductionProduct = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setProcessing(true); setMessage("");
+    try {
+      const productId = await saveTenantProduct(context, {
+        id: editingProduct?.id,
+        vendorId: String(data.get("vendorId")), name: String(data.get("name")).trim(), description: String(data.get("description")).trim(), category: String(data.get("category")).trim(),
+        status: data.get("submitForReview") ? "review" : "draft", onsiteEnabled: data.get("onsiteEnabled") === "on", onlineEnabled: data.get("onlineEnabled") === "on", preorderEnabled: data.get("preorderEnabled") === "on", measurementKind: String(data.get("measurementKind")),
+      });
+      await saveTenantProductVariant(context, {
+        id: editingProduct?.variants[0]?.id, productId, sku: String(data.get("sku")).trim(), size: String(data.get("size")).trim(), color: String(data.get("color")).trim(), price: Number(data.get("price")), barcode: String(data.get("barcode")).trim(), sizeSystem: String(data.get("sizeSystem")).trim(),
+        ringSize: data.get("ringSize") ? Number(data.get("ringSize")) : null, wristCircumference: data.get("wristCircumference") ? Number(data.get("wristCircumference")) : null, necklaceLength: data.get("necklaceLength") ? Number(data.get("necklaceLength")) : null, measurementUnit: String(data.get("measurementUnit")), reorderPoint: Number(data.get("reorderPoint")),
+      });
+      const openingStock = Number(data.get("openingStock"));
+      const productsAfterVariant = await loadTenantProducts(context);
+      const variant = productsAfterVariant.find((product) => product.id === productId)?.variants[0];
+      if (variant && openingStock > 0) await adjustTenantProductStock(context, variant.id, openingStock, "Opening stock count");
+      await refreshProductionCatalog(); form.reset(); setOpen(false); setEditingProduct(null); setMessage("Product and variant saved. Publication still requires owner approval.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Product was not saved."); }
+    finally { setProcessing(false); }
+  };
+  const reviewProduct = async (productId: string, decision: "published" | "rejected" | "suspended") => {
+    try { await reviewTenantProduct(context, productId, decision, decision === "rejected" ? "Catalog details require correction" : ""); await refreshProductionCatalog(); setMessage(`Product status changed to ${decision}.`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Product review failed."); }
+  };
+  const changeStock = async (variantId: string, delta: number) => {
+    try { await adjustTenantProductStock(context, variantId, delta, delta > 0 ? "Received stock" : "Count correction"); await refreshProductionCatalog(); setMessage("Stock adjustment recorded with an audit entry."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Stock was not adjusted."); }
+  };
+  const deleteProduct = async (product: TenantProductSummary) => {
+    if (!window.confirm(`Remove ${product.name}? This is allowed only when no order history depends on it.`)) return;
+    try { await removeTenantProduct(context, product.id); await refreshProductionCatalog(); setMessage(`${product.name} was removed with an audit record.`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Product was not removed."); }
+  };
   return (
     <>
       <section className="panel collection-studio">
@@ -1285,6 +1331,7 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
             <small className="eyebrow">COLLECTION STUDIO</small>
             <h3>Luxury item exposure</h3>
           </span>
+          {context.mode === "production" && ["owner", "manager", "vendor"].includes(context.role || "") && <button className="primary" onClick={() => { setEditingProduct(null); setOpen((value) => !value); }}><Plus />{open ? "Close product form" : "Add product"}</button>}
           {context.mode === "preview" && <div>
             <button onClick={() => setOpen((value) => !value)}>
               <Upload />
@@ -1303,7 +1350,18 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
           resized, renamed, and converted to a storefront ready WebP asset
           automatically.
         </p>
-        {context.mode === "production" && <p className="control-note"><ShieldCheck />Production displays only tenant catalog records. New product publishing activates after private media storage and the mandatory fresh database snapshot are available.</p>}
+        {context.mode === "production" && <p className="control-note"><ShieldCheck />Vendors create drafts and submit them for review. Only an owner or manager can publish a product. Stock changes create permanent inventory and audit records.</p>}
+        {context.mode === "production" && open && <form key={editingProduct?.id || "new-product"} className="collection-importer" onSubmit={createProductionProduct}>
+          <label>Vendor<select name="vendorId" required defaultValue={editingProduct?.vendorId}>{tenantVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
+          <label>Product name<input name="name" required maxLength={160} defaultValue={editingProduct?.name} /></label><label>Category<input name="category" required maxLength={120} defaultValue={editingProduct?.category} /></label>
+          <label className="wide">Description<textarea name="description" maxLength={4000} defaultValue={editingProduct?.description} /></label>
+          <label>Measurement type<select name="measurementKind" defaultValue={editingProduct?.measurementKind || "standard"}><option value="standard">Standard</option><option value="apparel">Apparel</option><option value="shoe">Shoe</option><option value="ring">Ring</option><option value="bracelet">Bracelet</option><option value="necklace">Necklace</option><option value="custom">Custom</option></select></label>
+          <label>SKU<input name="sku" required maxLength={80} defaultValue={editingProduct?.variants[0]?.sku} /></label><label>Barcode<input name="barcode" maxLength={120} defaultValue={editingProduct?.variants[0]?.barcode || ""} /></label><label>Size<input name="size" maxLength={80} defaultValue={editingProduct?.variants[0]?.size || ""} /></label><label>Size system<input name="sizeSystem" maxLength={40} placeholder="US, EU, UK" defaultValue={editingProduct?.variants[0]?.sizeSystem} /></label><label>Color<input name="color" maxLength={80} defaultValue={editingProduct?.variants[0]?.color || ""} /></label>
+          <label>Price<input name="price" type="number" min="0" step="0.01" required defaultValue={editingProduct?.variants[0]?.price} /></label><label>{editingProduct ? "Stock adjustment" : "Opening stock"}<input name="openingStock" type="number" min="0" defaultValue="0" /></label><label>Reorder point<input name="reorderPoint" type="number" min="0" defaultValue={editingProduct?.variants[0]?.reorderPoint || 0} /></label>
+          <label>Measurement unit<select name="measurementUnit" defaultValue={editingProduct?.variants[0]?.measurementUnit || "in"}><option value="in">Inches</option><option value="cm">Centimeters</option><option value="mm">Millimeters</option></select></label><label>Ring size<input name="ringSize" type="number" min="0.01" step="0.01" defaultValue={editingProduct?.variants[0]?.ringSize || ""} /></label><label>Wrist circumference<input name="wristCircumference" type="number" min="0.01" step="0.01" defaultValue={editingProduct?.variants[0]?.wristCircumference || ""} /></label><label>Necklace length<input name="necklaceLength" type="number" min="0.01" step="0.01" defaultValue={editingProduct?.variants[0]?.necklaceLength || ""} /></label>
+          <label><input name="onsiteEnabled" type="checkbox" defaultChecked={editingProduct?.onsiteEnabled ?? true} />Available onsite</label><label><input name="onlineEnabled" type="checkbox" defaultChecked={editingProduct?.onlineEnabled} />Available online</label><label><input name="preorderEnabled" type="checkbox" defaultChecked={editingProduct?.preorderEnabled} />Allow preorder</label><label><input name="submitForReview" type="checkbox" defaultChecked={editingProduct?.status === "review"} />Submit for owner review</label>
+          <button className="primary" disabled={processing}>{processing ? "Saving product" : "Save product and variant"}</button>
+        </form>}
         {context.mode === "preview" && open && (
           <form className="collection-importer" onSubmit={importItems}>
             <label>
@@ -1382,7 +1440,8 @@ function ProductCatalogManager({ context }: { context: TenantContext }) {
         {tenantProducts.map((product) => {
           const quantity = product.variants.reduce((sum, variant) => sum + variant.quantity, 0);
           const price = product.variants[0]?.price || 0;
-          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{product.variants[0]?.sku || "No SKU"}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${price.toFixed(2)}</b><span>{quantity} available</span></footer>{operatorRoles.includes(context.role) ? <button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button> : <small className="channel-source">Vendor catalog editing is still in development. Only your authorized products appear here.</small>}</article>;
+          const variant = product.variants[0];
+          return <article className="product" key={product.id}><div><ShoppingBag /><span>{product.status}</span></div><small>{variant?.sku || "No SKU"} · {product.measurementKind}</small><h3>{product.name}</h3><p>{product.category}</p><small>{product.onsiteEnabled ? "Onsite" : ""}{product.onsiteEnabled && product.onlineEnabled ? " and " : ""}{product.onlineEnabled ? "Online" : ""}{product.preorderEnabled ? " · Preorder" : ""}</small>{variant && product.measurementKind === "ring" && <small>Ring size {variant.ringSize || variant.size || "Not set"} {variant.measurementUnit}</small>}{variant && product.measurementKind === "bracelet" && <small>Wrist {variant.wristCircumference || "Not set"} {variant.measurementUnit}</small>}{variant && product.measurementKind === "necklace" && <small>Length {variant.necklaceLength || "Not set"} {variant.measurementUnit}</small>}<footer><b>${price.toFixed(2)}</b><span>{quantity} on hand{variant?.reserved ? ` · ${variant.reserved} reserved` : ""}</span></footer>{operatorRoles.includes(context.role) && product.status === "published" ? <button disabled={!quantity} onClick={() => addTenantProductToBag(product)}>{quantity ? "Add to checkout" : "Unavailable"}</button> : null}{["owner", "manager", "vendor"].includes(context.role || "") && <div><button onClick={() => { setEditingProduct(product); setOpen(true); }}>Edit</button>{["draft", "rejected"].includes(product.status) && <button onClick={() => void deleteProduct(product)}>Remove</button>}</div>}{variant && ["owner", "manager", "vendor", "staff"].includes(context.role || "") && <div><button onClick={() => void changeStock(variant.id, 1)}>Receive one</button><button disabled={variant.quantity <= variant.reserved} onClick={() => void changeStock(variant.id, -1)}>Remove one</button></div>}{["owner", "manager"].includes(context.role || "") && <div>{product.status !== "published" && <button className="primary" onClick={() => void reviewProduct(product.id, "published")}>Approve and publish</button>}{product.status !== "rejected" && <button onClick={() => void reviewProduct(product.id, "rejected")}>Return for correction</button>}{product.status === "published" && <button onClick={() => void reviewProduct(product.id, "suspended")}>Suspend</button>}</div>}{context.role === "vendor" && <small className="channel-source">You can manage your own drafts, variants, and stock. Publication requires owner approval.</small>}</article>;
         })}
         {!tenantProducts.length && <section className="panel help-empty"><Package /><h3>No production products yet</h3><p>Vendor and product records will appear here after approved catalog data is added.</p></section>}
       </div> : <div className="product-grid">

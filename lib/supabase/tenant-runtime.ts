@@ -539,18 +539,25 @@ export async function reviewTenantReturnRequest(context: TenantContext, requestI
 
 export type TenantProductSummary = {
   id: string;
+  vendorId: string;
   name: string;
   vendorName: string;
   category: string;
   status: string;
-  variants: Array<{ id: string; sku: string; size: string | null; color: string | null; price: number; quantity: number }>;
+  description: string;
+  onsiteEnabled: boolean;
+  onlineEnabled: boolean;
+  preorderEnabled: boolean;
+  measurementKind: string;
+  rejectionNote: string;
+  variants: Array<{ id: string; sku: string; size: string | null; color: string | null; price: number; quantity: number; reserved: number; reorderPoint: number; barcode: string | null; sizeSystem: string; ringSize: number | null; wristCircumference: number | null; necklaceLength: number | null; measurementUnit: string; active: boolean }>;
 };
 
 export async function loadTenantProducts(context: TenantContext): Promise<TenantProductSummary[]> {
   if (context.mode !== "production" || !context.storeId) return [];
   let query = createClient()
     .from("products")
-    .select("id, name, category, status, vendors(name), product_variants(id, sku, size, color, price, qty_on_hand)")
+    .select("id, vendor_id, name, description, category, status, onsite_enabled, online_enabled, preorder_enabled, measurement_kind, rejection_note, vendors(name), product_variants(id, sku, size, color, price, qty_on_hand, qty_reserved, reorder_point, barcode, size_system, ring_size, wrist_circumference, necklace_length, measurement_unit, active)")
     .eq("store_id", context.storeId);
   if (context.role === "customer") query = query.eq("status", "published");
   const { data, error } = await query
@@ -558,19 +565,76 @@ export async function loadTenantProducts(context: TenantContext): Promise<Tenant
   if (error) throw error;
   return (data || []).map((product) => ({
     id: product.id,
+    vendorId: product.vendor_id,
     name: product.name,
     vendorName: (product.vendors as { name?: string } | null)?.name || "Tenant vendor",
     category: product.category || "Uncategorized",
     status: product.status || "draft",
-    variants: (product.product_variants || []).map((variant: { id: string; sku: string; size: string | null; color: string | null; price: number | string; qty_on_hand: number }) => ({
+    description: product.description || "",
+    onsiteEnabled: product.onsite_enabled,
+    onlineEnabled: product.online_enabled,
+    preorderEnabled: product.preorder_enabled,
+    measurementKind: product.measurement_kind,
+    rejectionNote: product.rejection_note || "",
+    variants: (product.product_variants || []).map((variant: { id: string; sku: string; size: string | null; color: string | null; price: number | string; qty_on_hand: number; qty_reserved: number; reorder_point: number; barcode: string | null; size_system: string; ring_size: number | string | null; wrist_circumference: number | string | null; necklace_length: number | string | null; measurement_unit: string; active: boolean }) => ({
       id: variant.id,
       sku: variant.sku,
       size: variant.size,
       color: variant.color,
       price: Number(variant.price),
       quantity: Number(variant.qty_on_hand),
+      reserved: Number(variant.qty_reserved),
+      reorderPoint: Number(variant.reorder_point),
+      barcode: variant.barcode,
+      sizeSystem: variant.size_system,
+      ringSize: variant.ring_size === null ? null : Number(variant.ring_size),
+      wristCircumference: variant.wrist_circumference === null ? null : Number(variant.wrist_circumference),
+      necklaceLength: variant.necklace_length === null ? null : Number(variant.necklace_length),
+      measurementUnit: variant.measurement_unit,
+      active: variant.active,
     })),
   }));
+}
+
+export async function saveTenantProduct(context: TenantContext, input: { id?: string; vendorId: string; name: string; description: string; category: string; status: "draft" | "review"; onsiteEnabled: boolean; onlineEnabled: boolean; preorderEnabled: boolean; measurementKind: string }) {
+  if (context.mode !== "production" || !context.storeId || !context.userId) throw new Error("Authenticated tenant access is required.");
+  const payload = { store_id: context.storeId, vendor_id: input.vendorId, name: input.name, description: input.description || null, category: input.category || null, status: input.status, onsite_enabled: input.onsiteEnabled, online_enabled: input.onlineEnabled, preorder_enabled: input.preorderEnabled, measurement_kind: input.measurementKind };
+  const query = input.id ? createClient().from("products").update(payload).eq("id", input.id).eq("store_id", context.storeId) : createClient().from("products").insert(payload);
+  const { data, error } = await query.select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function saveTenantProductVariant(context: TenantContext, input: { id?: string; productId: string; sku: string; size: string; color: string; price: number; barcode: string; sizeSystem: string; ringSize: number | null; wristCircumference: number | null; necklaceLength: number | null; measurementUnit: string; reorderPoint: number }) {
+  if (context.mode !== "production") throw new Error("Authenticated tenant access is required.");
+  const payload = { product_id: input.productId, sku: input.sku, size: input.size || null, color: input.color || null, price: input.price, barcode: input.barcode || null, size_system: input.sizeSystem, ring_size: input.ringSize, wrist_circumference: input.wristCircumference, necklace_length: input.necklaceLength, measurement_unit: input.measurementUnit, reorder_point: input.reorderPoint };
+  const query = input.id ? createClient().from("product_variants").update(payload).eq("id", input.id) : createClient().from("product_variants").insert(payload);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function reviewTenantProduct(context: TenantContext, productId: string, decision: "published" | "rejected" | "suspended", note = "") {
+  if (context.mode !== "production" || !canManageTenant(context.role)) throw new Error("Owner or manager production access is required.");
+  const { error } = await createClient().rpc("review_catalog_product", { p_product_id: productId, p_decision: decision, p_note: note });
+  if (error) throw error;
+}
+
+export async function adjustTenantProductStock(context: TenantContext, variantId: string, quantityDelta: number, reason: string) {
+  if (context.mode !== "production") throw new Error("Authenticated tenant access is required.");
+  const { error } = await createClient().rpc("adjust_catalog_stock", { p_variant_id: variantId, p_quantity_delta: quantityDelta, p_reason: reason });
+  if (error) throw error;
+}
+
+export async function removeTenantProduct(context: TenantContext, productId: string) {
+  if (context.mode !== "production" || !context.storeId) throw new Error("Authenticated tenant access is required.");
+  const { error } = await createClient().from("products").delete().eq("id", productId).eq("store_id", context.storeId);
+  if (error) throw error;
+}
+
+export async function removeTenantProductVariant(context: TenantContext, variantId: string) {
+  if (context.mode !== "production") throw new Error("Authenticated tenant access is required.");
+  const { error } = await createClient().from("product_variants").delete().eq("id", variantId);
+  if (error) throw error;
 }
 
 export async function saveTenantVendor(context: TenantContext, vendor: { id: string; name: string; status: string }) {
