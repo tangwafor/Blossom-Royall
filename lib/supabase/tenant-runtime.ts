@@ -677,6 +677,69 @@ export async function saveTenantCommerceSettings(context: TenantContext, setting
   if (error) throw error;
 }
 
+export type TenantOperatingSettings = {
+  publicName: string;
+  legalName: string;
+  ownerDisplayName: string;
+  address: string;
+  receiptPhone: string;
+  receiptEmail: string;
+  locale: string;
+  timezone: string;
+  orderPrefix: string;
+  retailPolicy: Record<string, unknown>;
+  commerceControls: Record<string, unknown>;
+  deliveryControls: Record<string, unknown>;
+};
+
+export async function loadTenantOperatingSettings(context: TenantContext): Promise<TenantOperatingSettings | null> {
+  if (context.mode !== "production" || !context.storeId) return null;
+  const { data, error } = await createClient()
+    .from("store_operating_settings")
+    .select("public_name, legal_name, owner_display_name, operating_address, receipt_phone, receipt_email, locale, timezone, order_prefix, retail_policy, commerce_controls, delivery_controls")
+    .eq("store_id", context.storeId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    publicName: data.public_name,
+    legalName: data.legal_name,
+    ownerDisplayName: data.owner_display_name,
+    address: data.operating_address,
+    receiptPhone: data.receipt_phone,
+    receiptEmail: data.receipt_email,
+    locale: data.locale,
+    timezone: data.timezone,
+    orderPrefix: data.order_prefix,
+    retailPolicy: data.retail_policy || {},
+    commerceControls: data.commerce_controls || {},
+    deliveryControls: data.delivery_controls || {},
+  };
+}
+
+export async function saveTenantOperatingSettings(context: TenantContext, settings: TenantOperatingSettings) {
+  if (context.mode !== "production" || !context.storeId || !context.userId || !canManageTenant(context.role)) throw new Error("Owner or manager production access is required.");
+  const { error } = await createClient().from("store_operating_settings").upsert({
+    store_id: context.storeId,
+    public_name: settings.publicName,
+    legal_name: settings.legalName,
+    owner_display_name: settings.ownerDisplayName,
+    operating_address: settings.address,
+    receipt_phone: settings.receiptPhone,
+    receipt_email: settings.receiptEmail,
+    locale: settings.locale,
+    timezone: settings.timezone,
+    order_prefix: settings.orderPrefix,
+    retail_policy: settings.retailPolicy,
+    commerce_controls: settings.commerceControls,
+    delivery_controls: settings.deliveryControls,
+    created_by: context.userId,
+    updated_by: context.userId,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "store_id" });
+  if (error) throw error;
+}
+
 export type TenantCheckoutRequest = {
   channel: "onsite" | "online";
   fulfillmentMethod: "pickup" | "delivery" | "shipping";

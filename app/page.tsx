@@ -80,6 +80,8 @@ import {
   saveTenantVendor,
   saveTenantVendorStorefront,
   saveTenantCommerceSettings,
+  loadTenantOperatingSettings,
+  saveTenantOperatingSettings,
   signOutTenant,
   placeTenantOrder,
   type TenantContext,
@@ -101,9 +103,27 @@ import {
   type CommerceSettings,
   type DeliverySettings,
   type RetailPolicy,
+  type StoreSettings,
 } from "../lib/tenant-config";
 
 type WorkspaceRole = TenantContext["role"];
+
+function operatingSettingsPayload(store: StoreSettings, policy: RetailPolicy, commerce: CommerceSettings, delivery: DeliverySettings) {
+  return {
+    publicName: store.publicName,
+    legalName: store.legalName,
+    ownerDisplayName: store.ownerDisplayName,
+    address: store.address,
+    receiptPhone: store.receiptPhone,
+    receiptEmail: store.receiptEmail,
+    locale: store.locale,
+    timezone: store.timezone,
+    orderPrefix: store.orderPrefix,
+    retailPolicy: policy,
+    commerceControls: commerce,
+    deliveryControls: delivery,
+  };
+}
 type NavItem = { label: string; destination: string; icon: typeof LayoutDashboard; roles: WorkspaceRole[] };
 const operatorRoles: WorkspaceRole[] = ["owner", "manager", "staff"];
 const nav: NavItem[] = [
@@ -1809,6 +1829,16 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
   const [notice, setNotice] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   useEffect(() => {
+    if (tenantContext.mode === "production") {
+      setProfiles([]);
+      void loadTenantVendorStorefronts(tenantContext)
+        .then(setProfiles)
+        .catch(() => {
+          setProfiles([]);
+          setNotice("Production storefront profiles could not be loaded. No preview storefront data is being shown.");
+        });
+      return;
+    }
     const stored = localStorage.getItem(storageKey);
     if (stored) setProfiles(JSON.parse(stored));
     else {
@@ -1819,9 +1849,8 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
       if (africstyle) seeded.push({ id: "preview-africstyle-fashion", vendorId: africstyle.id, slug: "africstyle-fashion", publicName: "Africstyle Fashion", ownerDisplayName: "Duplex", tagline: "Contemporary African fashion shaped by heritage, movement, and confidence.", story: "Africstyle Fashion is owned by Duplex and presented inside Blossom Royall.", categories: ["African heritage fashion", "Activewear", "Formalwear"], facebookUrl: "https://www.facebook.com/africstyefashion/", websiteUrl: "https://africstylefashion.com/", contactEmail: africstyle.email, contactPhone: africstyle.phone, primaryColor: "#123d35", secondaryColor: "#e8b647", fulfillmentMethods: ["Store pickup", "Shipping", "Vendor fulfilled"], mediaRightsStatus: "confirmed", status: "published" });
       setProfiles(seeded);
     }
-    if (tenantContext.mode === "production") void loadTenantVendorStorefronts(tenantContext).then((rows) => { if (rows.length) setProfiles(rows); }).catch(() => setNotice("Production storefront profiles could not be loaded. The studio remains in private preview mode."));
   }, [tenantContext.mode, tenantContext.storeId, vendors]);
-  const persist = (next: TenantVendorStorefront[]) => { setProfiles(next); localStorage.setItem(storageKey, JSON.stringify(next)); };
+  const persist = (next: TenantVendorStorefront[]) => { setProfiles(next); if (tenantContext.mode !== "production") localStorage.setItem(storageKey, JSON.stringify(next)); };
   const save = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -1842,13 +1871,24 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
       fulfillmentMethods: data.getAll("fulfillmentMethods").map(String), mediaRightsStatus, status: requestedStatus,
     };
     const next = current ? profiles.map((item) => item.vendorId === vendorId ? profile : item) : [profile, ...profiles];
+    if (tenantContext.mode === "production") {
+      void saveTenantVendorStorefront(tenantContext, profile)
+        .then(() => { persist(next); setEditing(null); setNotice(`${profile.publicName} production storefront saved as ${profile.status}.`); })
+        .catch(() => setNotice("The production storefront was not saved. No device preview was substituted."));
+      return;
+    }
     persist(next); setEditing(null); setNotice(`${profile.publicName} storefront saved as ${profile.status}.`);
-    if (tenantContext.mode === "production") void saveTenantVendorStorefront(tenantContext, profile).catch(() => setNotice("The storefront remains saved on this device, but production synchronization needs attention."));
   };
   const remove = (profile: TenantVendorStorefront) => {
     if (deleteId !== profile.id) { setDeleteId(profile.id); setNotice(`Select remove again to confirm deleting ${profile.publicName} storefront.`); return; }
-    persist(profiles.filter((item) => item.id !== profile.id)); setDeleteId(null); setNotice(`${profile.publicName} storefront removed.`);
-    if (tenantContext.mode === "production" && !profile.id.startsWith("preview")) void removeTenantVendorStorefront(tenantContext, profile.id).catch(() => setNotice("The local storefront was removed, but production removal needs attention."));
+    const next = profiles.filter((item) => item.id !== profile.id);
+    if (tenantContext.mode === "production" && !profile.id.startsWith("preview")) {
+      void removeTenantVendorStorefront(tenantContext, profile.id)
+        .then(() => { persist(next); setDeleteId(null); setNotice(`${profile.publicName} production storefront removed.`); })
+        .catch(() => setNotice("The production storefront was not removed."));
+      return;
+    }
+    persist(next); setDeleteId(null); setNotice(`${profile.publicName} storefront removed.`);
   };
   const selected = editing || profiles[0];
   const blankProfile = (): TenantVendorStorefront => ({
@@ -2648,17 +2688,33 @@ function VendorBrandManager() {
 }
 
 function BusinessSetup() {
-  const { value: settings, update, save, saved } = useStoreSettings();
-  const { value: delivery } = useDeliverySettings();
+  const { value: settings, setValue: setStoreSettings, update, save, saved } = useStoreSettings();
+  const { value: delivery, setValue: setDeliverySettings } = useDeliverySettings();
+  const { value: policy, setValue: setRetailPolicy } = useRetailPolicy();
+  const { value: commerce, setValue: setCommerceSettings } = useCommerceSettings();
   const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
   const [productionNotice, setProductionNotice] = useState("");
-  useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  useEffect(() => {
+    void resolveTenantContext().then(async (context) => {
+      setTenantContext(context);
+      if (context.mode !== "production") return;
+      try {
+        const production = await loadTenantOperatingSettings(context);
+        if (!production) return;
+        setStoreSettings((current) => ({ ...current, publicName: production.publicName, legalName: production.legalName, ownerDisplayName: production.ownerDisplayName, address: production.address, receiptPhone: production.receiptPhone, receiptEmail: production.receiptEmail, locale: production.locale, timezone: production.timezone, orderPrefix: production.orderPrefix }));
+        setRetailPolicy((current) => ({ ...current, ...production.retailPolicy }));
+        setCommerceSettings((current) => ({ ...current, ...production.commerceControls }));
+        setDeliverySettings((current) => ({ ...current, ...production.deliveryControls }));
+      } catch { setProductionNotice("Production operating settings are awaiting the staged database migration."); }
+    });
+  }, [setCommerceSettings, setDeliverySettings, setRetailPolicy, setStoreSettings]);
   const saveSettings = async () => {
     save();
     if (tenantContext.mode !== "production") { setProductionNotice("Settings remain in the private device preview until an authorized production account signs in."); return; }
     try {
       await saveTenantCommerceSettings(tenantContext, { currency: settings.currency, taxRatePercent: settings.taxRatePercent, taxInclusive: settings.taxInclusive, deliveryTaxable: delivery.deliveryTaxable, pickupEnabled: delivery.pickupEnabled, localDeliveryEnabled: delivery.localDeliveryEnabled, localFee: delivery.localFee, freeLocalMinimum: delivery.freeLocalMinimum, shippingEnabled: delivery.shippingEnabled, shippingFee: delivery.shippingFee });
-      setProductionNotice("Authoritative tenant tax and delivery settings were saved with an audit record.");
+      await saveTenantOperatingSettings(tenantContext, operatingSettingsPayload(settings, policy, commerce, delivery));
+      setProductionNotice("Authoritative identity, tax, policy, commerce, and delivery settings were saved with an audit record.");
     } catch (error) { setProductionNotice(error instanceof Error ? error.message : "Production settings were not saved."); }
   };
   return (
@@ -2829,18 +2885,35 @@ function BusinessSetup() {
       </section>
       <p className="control-note">
         <ShieldCheck />
-        Preview settings stay on this device. Once Delly submits the production
-        identity and the database snapshot is available, the same controls save
-        tenant scoped records with permission checks and audit history.
+        {tenantContext.mode === "production" ? "Production settings are tenant scoped and audited. Blank identity fields remain visible until Delly supplies the operating details." : "Preview settings stay on this device. Production accounts save tenant scoped records with permission checks and audit history."}
       </p>
     </div>
   );
 }
 
 function SharedCommerceCenter() {
-  const { value: settings, update, save, saved } = useCommerceSettings();
+  const { value: settings, setValue: setCommerceSettings, update, save, saved } = useCommerceSettings();
+  const { value: storeSettings } = useStoreSettings();
+  const { value: policy } = useRetailPolicy();
+  const { value: delivery } = useDeliverySettings();
   const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
-  useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  const [productionNotice, setProductionNotice] = useState("");
+  useEffect(() => { void resolveTenantContext().then(async (context) => {
+    setTenantContext(context);
+    if (context.mode !== "production") return;
+    try {
+      const production = await loadTenantOperatingSettings(context);
+      if (production) setCommerceSettings((current) => ({ ...current, ...production.commerceControls }));
+    } catch { setProductionNotice("Production commerce controls are awaiting the staged database migration."); }
+  }); }, [setCommerceSettings]);
+  const saveSettings = async () => {
+    save();
+    if (tenantContext.mode !== "production") { setProductionNotice("Commerce controls remain in the private device preview."); return; }
+    try {
+      await saveTenantOperatingSettings(tenantContext, operatingSettingsPayload(storeSettings, policy, settings, delivery));
+      setProductionNotice("Production payout and inventory controls were saved with an audit record.");
+    } catch (error) { setProductionNotice(error instanceof Error ? error.message : "Production commerce controls were not saved."); }
+  };
   const payouts = tenantContext.mode === "production" ? [] : [
     ["Africstyle Fashion", "$6,842.20", "$547.38", "$6,294.82", "Ready"],
     ["Blossom Collections", "$4,118.00", "$329.44", "$3,788.56", "Ready"],
@@ -2858,11 +2931,12 @@ function SharedCommerceCenter() {
             one accountable ledger.
           </p>
         </div>
-        <button className="primary" onClick={save}>
+        <button className="primary" onClick={() => void saveSettings()}>
           <Check />
           {saved ? "Settings saved" : "Save controls"}
         </button>
       </div>
+      {productionNotice && <output className="policy-saved" role="status">{productionNotice}</output>}
       <section className="commerce-flow" aria-label="Shared checkout flow">
         <article>
           <ScanLine />
@@ -3072,11 +3146,11 @@ function SharedCommerceCenter() {
         </div>
         <footer>
           <span>Customer tender</span>
-          <b>$17,710.70</b>
+          <b>{tenantContext.mode === "production" ? "$0.00" : "$17,710.70"}</b>
           <span>Return reserve</span>
-          <b>$1,416.86</b>
+          <b>{tenantContext.mode === "production" ? "$0.00" : "$1,416.86"}</b>
           <span>Vendor liability</span>
-          <b>$16,293.84</b>
+          <b>{tenantContext.mode === "production" ? "$0.00" : "$16,293.84"}</b>
         </footer>
       </section>
     </div>
@@ -3084,16 +3158,26 @@ function SharedCommerceCenter() {
 }
 
 function DeliveryCenter() {
-  const { value: settings, update, save, saved } = useDeliverySettings();
+  const { value: settings, setValue: setDeliverySettings, update, save, saved } = useDeliverySettings();
   const { value: storeSettings } = useStoreSettings();
+  const { value: policy } = useRetailPolicy();
+  const { value: commerce } = useCommerceSettings();
   const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
   const [productionNotice, setProductionNotice] = useState("");
-  useEffect(() => { void resolveTenantContext().then(setTenantContext); }, []);
+  useEffect(() => { void resolveTenantContext().then(async (context) => {
+    setTenantContext(context);
+    if (context.mode !== "production") return;
+    try {
+      const production = await loadTenantOperatingSettings(context);
+      if (production) setDeliverySettings((current) => ({ ...current, ...production.deliveryControls }));
+    } catch { setProductionNotice("Production delivery controls are awaiting the staged database migration."); }
+  }); }, [setDeliverySettings]);
   const saveSettings = async () => {
     save();
     if (tenantContext.mode !== "production") { setProductionNotice("Delivery settings remain in the private device preview."); return; }
     try {
       await saveTenantCommerceSettings(tenantContext, { currency: storeSettings.currency, taxRatePercent: storeSettings.taxRatePercent, taxInclusive: storeSettings.taxInclusive, deliveryTaxable: settings.deliveryTaxable, pickupEnabled: settings.pickupEnabled, localDeliveryEnabled: settings.localDeliveryEnabled, localFee: settings.localFee, freeLocalMinimum: settings.freeLocalMinimum, shippingEnabled: settings.shippingEnabled, shippingFee: settings.shippingFee });
+      await saveTenantOperatingSettings(tenantContext, operatingSettingsPayload(storeSettings, policy, commerce, settings));
       setProductionNotice("Authoritative delivery and tax settings were saved with an audit record.");
     } catch (error) { setProductionNotice(error instanceof Error ? error.message : "Production delivery settings were not saved."); }
   };
@@ -3447,9 +3531,30 @@ function DeliveryCenter() {
 }
 
 function PolicyCenter() {
-  const { value: policy, update, save: savePolicy, saved } = useRetailPolicy();
+  const { value: policy, setValue: setRetailPolicy, update, save: savePolicy, saved } = useRetailPolicy();
+  const { value: storeSettings } = useStoreSettings();
+  const { value: commerce } = useCommerceSettings();
+  const { value: delivery } = useDeliverySettings();
+  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
+  const [productionNotice, setProductionNotice] = useState("");
   const [previewAge, setPreviewAge] = useState(12);
   const eligible = previewAge <= policy.returnWindowDays;
+  useEffect(() => { void resolveTenantContext().then(async (context) => {
+    setTenantContext(context);
+    if (context.mode !== "production") return;
+    try {
+      const production = await loadTenantOperatingSettings(context);
+      if (production) setRetailPolicy((current) => ({ ...current, ...production.retailPolicy }));
+    } catch { setProductionNotice("Production policy persistence is awaiting the staged database migration."); }
+  }); }, [setRetailPolicy]);
+  const publishPolicy = async () => {
+    savePolicy();
+    if (tenantContext.mode !== "production") return;
+    try {
+      await saveTenantOperatingSettings(tenantContext, operatingSettingsPayload(storeSettings, policy, commerce, delivery));
+      setProductionNotice("Production retail policy was published with an audit record. Future orders receive this snapshot.");
+    } catch (error) { setProductionNotice(error instanceof Error ? error.message : "Production policy was not published."); }
+  };
   return (
     <div className="content policy-center">
       <div className="view-head">
@@ -3461,11 +3566,12 @@ function PolicyCenter() {
             checkout, online, and at every store.
           </p>
         </div>
-        <button className="primary" onClick={savePolicy}>
+        <button className="primary" onClick={() => void publishPolicy()}>
           <Check />
           Save and publish
         </button>
       </div>
+      {productionNotice && <output className="policy-saved" role="status">{productionNotice}</output>}
       {saved && (
         <div className="policy-saved" role="status">
           <Check />
