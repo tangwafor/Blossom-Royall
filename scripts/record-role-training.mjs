@@ -43,6 +43,22 @@ const assertNoError = (result, label) => {
   return result.data;
 };
 
+const memberBackendAssertion = async (expectedRole) => {
+  if (!trainingAdmin || !trainingUserId) throw new Error(`${expectedRole} backend assertion client is unavailable.`);
+  const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).single(), `${expectedRole} membership`);
+  if (membership.role !== expectedRole) throw new Error(`${expectedRole} backend role mismatch: ${membership.role}`);
+  const [products, orders, returns, payments] = await Promise.all([
+    trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+    trainingAdmin.from("orders").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+    trainingAdmin.from("return_requests").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+    trainingAdmin.from("payments").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+  ]);
+  for (const [result, label] of [[products, "products"], [orders, "orders"], [returns, "returns"], [payments, "payments"]]) {
+    if (result.error) throw new Error(`${expectedRole} ${label} backend assertion failed: ${result.error.message}`);
+  }
+  return { storeId: membership.store_id, role: membership.role, products: products.count || 0, orders: orders.count || 0, returns: returns.count || 0, payments: payments.count || 0 };
+};
+
 const backendAssertions = {
   owner: async () => {
     if (!trainingAdmin || !trainingUserId) throw new Error("Owner backend assertion client is unavailable.");
@@ -72,6 +88,29 @@ const backendAssertions = {
     ]);
     for (const [result, label] of [[products, "Vendor products"], [orderItems, "Vendor order items"], [leases, "Vendor leases"], [ledger, "Vendor ledger"]]) if (result.error) throw new Error(`${label} backend assertion failed: ${result.error.message}`);
     return { storeId: membership.store_id, role: membership.role, vendorId, vendorName: owned[0].name, products: products.count || 0, orderItems: orderItems.count || 0, leases: leases.count || 0, ledger: ledger.count || 0 };
+  },
+  manager: async () => memberBackendAssertion("manager"),
+  staff: async () => memberBackendAssertion("staff"),
+  customer: async () => {
+    if (!trainingAdmin || !trainingUserId) throw new Error("Customer backend assertion client is unavailable.");
+    const profile = assertNoError(await trainingAdmin.from("profiles").select("role").eq("id", trainingUserId).single(), "Customer profile");
+    if (profile.role !== "customer") throw new Error(`Customer backend role mismatch: ${profile.role}`);
+    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).limit(1).maybeSingle(), "Customer membership boundary");
+    if (membership) throw new Error(`Customer must not receive an operating membership during the course: ${membership.role}`);
+    const configuredStoreId = process.env.TRAINING_STORE_ID;
+    const storesResult = configuredStoreId
+      ? await trainingAdmin.from("stores").select("id").eq("id", configuredStoreId)
+      : await trainingAdmin.from("stores").select("id").ilike("name", "%Blossom Royall%");
+    const stores = assertNoError(storesResult, "Customer storefront");
+    if (stores.length !== 1) throw new Error(`Customer course expected one storefront, received ${stores.length}.`);
+    const storeId = stores[0].id;
+    const [products, orders, returns] = await Promise.all([
+      trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("status", "published"),
+      trainingAdmin.from("orders").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("customer_id", trainingUserId),
+      trainingAdmin.from("return_requests").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("customer_id", trainingUserId),
+    ]);
+    for (const [result, label] of [[products, "published products"], [orders, "orders"], [returns, "returns"]]) if (result.error) throw new Error(`Customer ${label} backend assertion failed: ${result.error.message}`);
+    return { storeId, role: "customer", products: products.count || 0, orders: orders.count || 0, returns: returns.count || 0 };
   },
 };
 
@@ -111,11 +150,11 @@ const roleConfig = {
     forbidden: [],
   },
   manager: {
-    allowed: ["Command Center", "Products", "Vendors", "Rent", "Orders", "Staff", "Policies"],
+    allowed: roleCourseMatrix.manager.map((chapter) => chapter.label),
     forbidden: ["Vendor Board", "My Fit", "My Orders", "Business Setup"],
   },
   staff: {
-    allowed: ["Command Center", "Checkout", "Cash Drawer", "Orders", "Delivery", "Aftercare", "Help"],
+    allowed: roleCourseMatrix.staff.map((chapter) => chapter.label),
     forbidden: ["Business Setup", "Vendors", "Staff & payroll"],
   },
   vendor: {
@@ -123,12 +162,16 @@ const roleConfig = {
     forbidden: ["Command Center", "Checkout", "Cash Drawer", "Staff & payroll", "Business Setup"],
   },
   customer: {
-    allowed: ["Customer Shop", "My Fit", "Checkout", "My Orders", "Aftercare", "Help"],
+    allowed: roleCourseMatrix.customer.map((chapter) => chapter.label),
     forbidden: ["Command Center", "Cash Drawer", "Vendors", "Staff & payroll", "Business Setup"],
   },
 };
 
 for (const [role, config] of Object.entries(roleConfig)) {
+  if (!roleCourseMatrix[role]?.length) throw new Error(`${role} training configuration has no canonical course matrix.`);
+  for (const chapter of roleCourseMatrix[role]) {
+    if (!chapter.requiredActions?.length) throw new Error(`${role} ${chapter.label} has no required workflow actions.`);
+  }
   const overlap = config.allowed.filter((label) => config.forbidden.includes(label));
   if (overlap.length) throw new Error(`${role} training configuration lists the same navigation as allowed and forbidden: ${overlap.join(", ")}`);
 }
