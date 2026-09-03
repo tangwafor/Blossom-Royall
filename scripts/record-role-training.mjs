@@ -161,7 +161,7 @@ const boundaryActions = new Set([
   "verify_other_vendor_absent", "verify_owner_governance_boundary", "verify_owner_controls_absent",
   "verify_owner_consent_boundary", "verify_no_production_write", "label_preview", "label_preview_controls",
   "label_catalog_editing_development", "label_awaiting_owner_answers", "label_photo_sizing_development",
-  "verify_alert_automation_development",
+  "verify_alert_automation_development", "label_settlement_development", "label_routing_development",
 ]);
 
 const exerciseFixtureInventory = async ({ page }) => {
@@ -663,6 +663,69 @@ const interfaceActionExecutors = {
     }
     throw new Error(`${vendor.name} remained in production after removal.`);
   },
+  save_production_controls: async ({ page, role, chapter }) => {
+    const controls = {
+      "Shared Commerce": { button: /Save controls|Settings saved/, notice: "Production payout and inventory controls were saved with an audit record." },
+      Delivery: { button: /Save delivery|Delivery saved/, notice: "Authoritative delivery and tax settings were saved with an audit record." },
+      Policies: { button: "Save and publish", notice: "Production retail policy was published with an audit record." },
+      "Business Setup": { button: /Save business settings|Business settings saved/, notice: "Authoritative identity, tax, policy, commerce, and delivery settings were saved with an audit record." },
+    }[chapter.label];
+    if (!controls) throw new Error(`${chapter.label} has no production control save contract.`);
+    await page.getByRole("button", { name: controls.button, exact: typeof controls.button === "string" }).click();
+    await page.getByText(controls.notice, { exact: true }).waitFor();
+    const record = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_by, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), `${chapter.label} production settings`);
+    if (record.updated_by !== trainingUserIdFor(role)) throw new Error(`${chapter.label} settings were not attributed to ${role}.`);
+    workflowEvidence.set(`${role}:${chapter.label}:settings`, record);
+    return { control: String(controls.button), result: `${chapter.label} persisted with actor ${record.updated_by}`, updatedAt: record.updated_at };
+  },
+  verify_production_write: async ({ role, chapter }) => {
+    const evidence = workflowEvidence.get(`${role}:${chapter.label}:settings`);
+    if (!evidence) throw new Error(`${role} ${chapter.label} has no production write evidence.`);
+    const record = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_by, updated_at").eq("store_id", evidence.store_id).single(), `${chapter.label} persisted settings`);
+    if (record.updated_by !== trainingUserIdFor(role) || record.updated_at !== evidence.updated_at) throw new Error(`${chapter.label} production write evidence changed before verification.`);
+    return { control: "Production settings record", result: `${chapter.label} write and actor match the database`, updatedAt: record.updated_at };
+  },
+  exercise_preview_controls: async ({ page, chapter }) => {
+    const before = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), `${chapter.label} preview boundary baseline`);
+    workflowEvidence.set(`preview:${chapter.label}`, before);
+    if (chapter.label === "Staff") {
+      await page.getByRole("button", { name: "Invite staff", exact: true }).click();
+      await page.locator(".staff-form").waitFor();
+      await page.locator(".staff-form").getByRole("button", { name: "Cancel", exact: true }).click();
+      return { control: "Invite staff", result: "Preview staff form opened and closed without submission" };
+    }
+    if (chapter.label === "Delivery") {
+      const control = page.getByLabel("Local delivery", { exact: true });
+      const before = await control.isChecked();
+      await control.setChecked(!before);
+      await control.setChecked(before);
+      return { control: "Local delivery", result: "Staff preview control was exercised and restored without saving" };
+    }
+    throw new Error(`${chapter.label} has no preview control executor.`);
+  },
+  record_preview_decision: async ({ page }) => {
+    const before = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), "Intelligence preview boundary baseline");
+    workflowEvidence.set("preview:Intelligence", before);
+    await page.getByRole("button", { name: "Create merchandising brief", exact: true }).click();
+    await page.getByRole("button", { name: "Approve reorder", exact: true }).click();
+    await page.getByText("Reorder approved", { exact: false }).waitFor();
+    return { control: "Approve reorder", result: "Preview merchandising decision changed visibly without a production claim" };
+  },
+  verify_no_production_write: async ({ chapter }) => {
+    const before = workflowEvidence.get(`preview:${chapter.label}`);
+    if (!before) throw new Error(`${chapter.label} has no preview boundary baseline.`);
+    const after = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), `${chapter.label} preview boundary result`);
+    if (after.updated_at !== before.updated_at) throw new Error(`${chapter.label} changed the production settings record during a preview action.`);
+    return { control: "Production write boundary", result: `${chapter.label} left the production settings record unchanged`, updatedAt: after.updated_at };
+  },
+  route_authorized_task: async ({ page }) => {
+    const board = page.getByLabel("Staff operating controls");
+    await board.getByRole("button", { name: /Checkout/ }).click();
+    await page.getByRole("heading", { name: /Ready when your customer is|Your complete edit/ }).waitFor();
+    await page.getByRole("button", { name: "Command Center", exact: true }).click();
+    await page.getByRole("heading", { name: "Command Center", exact: true }).first().waitFor();
+    return { control: "Checkout task", result: "Staff routed to an authorized checkout task and returned to the command center" };
+  },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
 };
@@ -680,7 +743,9 @@ const collectActionEvidence = async (page, role, chapter, action, backend) => {
     await page.getByText("Production alert automation is still in development.", { exact: false }).waitFor();
     await page.getByLabel("Close notifications").click();
   }
-  if (boundaryActions.has(action) && chapter.status === "preview" && !/preview/i.test(dataSource)) {
+  if (action === "label_settlement_development") await page.getByText("Settlement execution and payout disbursement are still in development.", { exact: true }).waitFor();
+  if (action === "label_routing_development") await page.getByText("Consolidated route planning automation is still in development.", { exact: false }).waitFor();
+  if (boundaryActions.has(action) && !executor && chapter.status === "preview" && !/preview/i.test(dataSource)) {
     throw new Error(`${role} ${chapter.label} action ${action} did not prove the preview boundary.`);
   }
   const interaction = executor ? await executor({ page, role, chapter, backend }) : null;

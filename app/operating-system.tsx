@@ -3250,6 +3250,7 @@ function SharedCommerceCenter() {
           <span>Vendor liability</span>
           <b>{tenantContext.mode === "production" ? "$0.00" : "$16,293.84"}</b>
         </footer>
+        {tenantContext.mode === "production" && <p className="control-note">Settlement execution and payout disbursement are still in development.</p>}
       </section>
     </div>
   );
@@ -3322,6 +3323,7 @@ function DeliveryCenter() {
         </button>
       </div>
       {productionNotice && <p className="policy-saved" aria-live="polite">{productionNotice}</p>}
+      {tenantContext.mode === "production" && <p className="control-note">Consolidated route planning automation is still in development. Fulfillment transitions remain available in Orders.</p>}
       <section className="delivery-modes">
         <label className={settings.deliveryTaxable ? "enabled" : ""}>
           <input type="checkbox" checked={settings.deliveryTaxable} onChange={(event) => update("deliveryTaxable", event.target.checked)} />
