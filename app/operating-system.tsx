@@ -441,7 +441,6 @@ export function OperatingSystem() {
       (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(next);
     document.documentElement.dataset.theme = next;
-    document.documentElement.dataset.appReady = "true";
     const savedNotifications = localStorage.getItem(
       "br-reviewed-notifications:blossom-royall",
     );
@@ -467,6 +466,7 @@ export function OperatingSystem() {
           setVisibleOrders([]);
         }
       }
+      document.documentElement.dataset.appReady = "true";
     });
   }, []);
   const toggleTheme = () => {

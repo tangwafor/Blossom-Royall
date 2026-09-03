@@ -289,10 +289,7 @@ const interfaceActionExecutors = {
     const receiptLabel = await receipt.getAttribute("aria-label");
     const receiptNo = receiptLabel?.replace("Receipt for order ", "");
     if (!receiptNo) throw new Error("Checkout completed without a visible receipt number.");
-    const reference = `QA-${process.env.TRAINING_FIXTURE_RUN_ID}-${role}`;
-    const paymentRow = await waitForAdminRow(() => trainingAdmin.from("payments").select("order_id").eq("provider_ref", reference).maybeSingle(), "Checkout payment");
-    let order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("id", paymentRow.order_id).single(), "Checkout order");
-    if (order.receipt_no !== receiptNo) throw new Error(`Visible receipt ${receiptNo} does not match persisted receipt ${order.receipt_no}.`);
+    let order = await waitForAdminRow(() => trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("receipt_no", receiptNo).maybeSingle(), "Checkout order");
     if (role === "customer" && order.payment_status !== "succeeded") {
       const payment = assertNoError(await trainingAdmin.from("payments").select("id").eq("order_id", order.id).single(), "Customer course payment");
       const staffClient = await authenticatedTrainingClient("staff");

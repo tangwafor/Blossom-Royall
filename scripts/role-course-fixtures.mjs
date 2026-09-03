@@ -61,7 +61,7 @@ export async function createRoleCourseFixtures() {
       const created = requireData(await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: `${role} role course QA`, ephemeral: true, training_run_id: runId } }), `${role} authentication fixture`);
       const userId = created.user.id;
       requireData(await admin.from("profiles").upsert({ id: userId, full_name: `${role} role course QA`, role }), `${role} profile fixture`);
-      if (role !== "customer") requireData(await admin.from("store_memberships").insert({ store_id: storeId, user_id: userId, role }), `${role} membership fixture`);
+      requireData(await admin.from("store_memberships").insert({ store_id: storeId, user_id: userId, role }), `${role} membership fixture`);
       identities[role] = { userId, email, password };
     }
     vendorId = randomUUID();
