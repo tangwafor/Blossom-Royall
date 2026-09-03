@@ -475,7 +475,7 @@ const interfaceActionExecutors = {
       () => trainingAdmin.from("rent_payments").select("id, status, provider_reference, submitted_by").eq("lease_id", leaseId).eq("status", "pending").maybeSingle(),
       "Vendor rent submission",
     );
-    await page.getByText("Submitted and waiting for owner verification.", { exact: true }).waitFor();
+    await article.getByText("Submitted and waiting for owner verification.", { exact: true }).waitFor();
     if (payment.provider_reference !== reference || payment.submitted_by !== trainingUserIdFor(role)) throw new Error("Vendor rent evidence was not persisted with its reference and actor.");
     workflowEvidence.set("vendor:rent-submission", payment);
     return { control: "Submit payment", result: `Pending payment ${payment.id} recorded with reference ${reference}`, paymentId: payment.id };

@@ -4815,7 +4815,7 @@ function CustomerOrders({ tenantContext }: { tenantContext: TenantContext }) {
       }
     })();
   }, [tenantContext]);
-  if (loading && !order)
+  if (loading && tenantContext.mode === "production" && tenantContext.role === "customer")
     return (
       <ListView
         eyebrow="YOUR PURCHASES"
