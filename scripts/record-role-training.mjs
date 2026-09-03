@@ -119,6 +119,43 @@ const expectVisibleText = async (page, text, label) => {
   await locator.waitFor({ state: "visible", timeout: 15000 }).catch(() => { throw new Error(`${label} UI assertion failed: ${text} is not visible.`); });
 };
 
+const observationActions = new Set([
+  "review_attention", "browse_catalog", "open_product", "verify_seller_and_fulfillment",
+  "inspect_payment", "verify_receipt", "inspect_lease", "inspect_stock", "verify_inventory_source",
+  "inspect_attribution", "inspect_fulfillment_board", "inspect_staff_tools", "inspect_signal",
+  "inspect_policy", "review_identity", "review_address", "review_contacts", "review_tax",
+  "search_help", "open_guide", "refresh_board", "verify_stock", "verify_sales", "verify_ledger",
+  "verify_rent", "inspect_authorized_products", "inspect_attributed_orders", "inspect_vendor",
+  "inspect_storefront", "verify_audit_history", "inspect_operating_pulse", "review_bag",
+  "inspect_order", "verify_fulfillment", "inspect_return_status", "verify_order_history",
+]);
+
+const boundaryActions = new Set([
+  "verify_other_vendor_absent", "verify_owner_governance_boundary", "verify_owner_controls_absent",
+  "verify_owner_consent_boundary", "verify_no_production_write", "label_preview", "label_preview_controls",
+  "label_catalog_editing_development", "label_awaiting_owner_answers", "label_photo_sizing_development",
+]);
+
+const collectActionEvidence = async (page, role, chapter, action, backend) => {
+  const heading = page.getByRole("heading", { name: chapter.label === "My Products" ? "Products" : chapter.label, exact: true }).first();
+  await heading.waitFor({ state: "visible", timeout: 15000 });
+  if (!observationActions.has(action) && !boundaryActions.has(action)) {
+    throw new Error(`${role} ${chapter.label} action ${action} has no real interface executor yet.`);
+  }
+  const dataSource = await page.getByLabel("Data source").innerText();
+  if (boundaryActions.has(action) && chapter.status === "preview" && !/preview/i.test(dataSource)) {
+    throw new Error(`${role} ${chapter.label} action ${action} did not prove the preview boundary.`);
+  }
+  return {
+    action,
+    kind: observationActions.has(action) ? "visible_read" : "visible_boundary",
+    heading: await heading.innerText(),
+    dataSource,
+    backendStoreId: backend.storeId,
+    backendRole: backend.role,
+  };
+};
+
 const chapterAssertions = async (page, role, label, backend) => {
   await expectVisibleText(page, "Live tenant records", `${role} ${label}`);
   if (role === "owner" && label === "Products") {
@@ -310,6 +347,7 @@ for (const role of selectedRoles) {
   let roleFailure = null;
   let roleBackendEvidence = null;
   const roleChapterEvidence = [];
+  const roleActionEvidence = [];
   const started = Date.now();
   const explain = async (text) => {
     await page.waitForTimeout(450);
@@ -366,8 +404,13 @@ for (const role of selectedRoles) {
       const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
       if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${expectedHeading} heading`);
       await heading.waitFor({ state: "visible" });
-      roleChapterEvidence.push(await chapterAssertions(page, role, label, roleBackendEvidence));
       const chapter = roleCourseMatrix[role]?.find((item) => item.label === label);
+      roleChapterEvidence.push(await chapterAssertions(page, role, label, roleBackendEvidence));
+      if (!diagnosticMode && chapter) {
+        for (const action of chapter.requiredActions) {
+          roleActionEvidence.push(await collectActionEvidence(page, role, chapter, action, roleBackendEvidence));
+        }
+      }
       await explain(chapter ? `${label}. ${chapter.teaches} Current status: ${chapter.status}.` : `${label} opens the ${expectedHeading} workspace, verified visible and available to the ${role} role.`);
     }
 
@@ -380,7 +423,7 @@ for (const role of selectedRoles) {
     }
 
     await explain(`${role} role QA passed. This recording is evidence and training, pending human review.`);
-    manifest.roles[role] = { status: "passed", checks: destinations.length + roleConfig[role].forbidden.length, backendAssertions: roleBackendEvidence, chapterAssertions: roleChapterEvidence };
+    manifest.roles[role] = { status: "passed", checks: destinations.length + roleConfig[role].forbidden.length, backendAssertions: roleBackendEvidence, chapterAssertions: roleChapterEvidence, actionEvidence: roleActionEvidence };
   } catch (error) {
     roleFailure = error instanceof Error ? error : new Error(String(error));
     manifest.roles[role] = { status: "failed", error: roleFailure.message };
