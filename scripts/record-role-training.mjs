@@ -660,7 +660,13 @@ const interfaceActionExecutors = {
     await studio.getByRole("button", { name: "Create storefront", exact: true }).click();
     const form = studio.locator(".storefront-form");
     await form.locator(`option[value="${vendor.id}"]`).waitFor({ state: "attached", timeout: 30000 });
-    await form.getByLabel("Vendor", { exact: true }).selectOption(vendor.id);
+    await page.evaluate((vendorId) => {
+      const select = document.querySelector('.storefront-form select[name="vendorId"]');
+      if (!(select instanceof HTMLSelectElement)) throw new Error("Storefront vendor selector is unavailable.");
+      select.value = vendorId;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }, vendor.id);
+    await page.waitForFunction((vendorId) => document.querySelector('.storefront-form select[name="vendorId"]')?.value === vendorId, vendor.id);
     const publicName = `${vendor.name} Store`;
     const slug = `qa-${process.env.TRAINING_FIXTURE_RUN_ID}`.replace(/[^a-z0-9-]/g, "-");
     await form.getByLabel("Public store name").fill(publicName);
