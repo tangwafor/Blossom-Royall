@@ -339,7 +339,8 @@ const interfaceActionExecutors = {
     }
     const panel = page.locator(".drawer-open");
     await panel.locator(`option[value="${register.id}"]`).waitFor({ state: "attached" });
-    await panel.getByLabel("Register", { exact: true }).selectOption(register.id);
+    const registerSelect = panel.getByLabel("Register", { exact: true });
+    if ((await registerSelect.inputValue()) !== register.id) await registerSelect.selectOption(register.id);
     await panel.getByLabel("Opening float", { exact: true }).fill("100");
     await panel.getByLabel("Note", { exact: true }).fill(`Release course ${role}`);
     await panel.getByRole("button", { name: "Open drawer", exact: true }).click();
@@ -1045,10 +1046,9 @@ for (const role of selectedRoles) {
     const destinations = edition === "reel" ? roleConfig[role].allowed.slice(0, 2) : roleConfig[role].allowed;
     for (const label of destinations) {
       const expectedHeading = label === "My Products" ? "Products" : label;
-      const button = page.getByRole("button", { name: label, exact: true });
+      const button = page.locator(".shell > aside nav").getByRole("button", { name: label, exact: true });
       await button.waitFor({ state: "attached" });
-      await button.scrollIntoViewIfNeeded();
-      await button.click();
+      await button.evaluate((element) => element.click());
       await page.waitForTimeout(400);
       const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
       if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${expectedHeading} heading`);

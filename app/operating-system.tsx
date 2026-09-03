@@ -766,7 +766,7 @@ export function OperatingSystem() {
             </section>
           </div>
         )}
-        {active === "Customer Shop" && <CustomerShop go={go} />}
+        {active === "Customer Shop" && tenantContext && <CustomerShop go={go} tenantContext={tenantContext} />}
         {active === "My Fit" && tenantContext && <MyFit go={go} tenantContext={tenantContext} />}
         {active === "Orders" && (
           <ListView
@@ -5546,7 +5546,7 @@ function MyFit({ go, tenantContext }: { go: (destination: string) => void; tenan
   );
 }
 
-function CustomerShop({ go }: { go: (destination: string) => void }) {
+function CustomerShop({ go, tenantContext }: { go: (destination: string) => void; tenantContext: TenantContext }) {
   const picks = [
     [
       "Aurelia Satin Midi",
@@ -5580,10 +5580,19 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
   const [completeLookAdded, setCompleteLookAdded] = useState(false);
   const [activeCollection, setActiveCollection] = useState("New arrivals");
   const [fitProfile, setFitProfile] = useState<FitProfile | null>(null);
+  const [tenantProducts, setTenantProducts] = useState<TenantProductSummary[]>([]);
+  const [liveBagAdded, setLiveBagAdded] = useState(false);
   useEffect(() => {
     const savedFit = localStorage.getItem(fitStorageKey);
     if (savedFit) setFitProfile(JSON.parse(savedFit) as FitProfile);
-  }, []);
+    if (tenantContext.mode === "production") void loadTenantProducts(tenantContext).then(setTenantProducts).catch(() => setTenantProducts([]));
+  }, [tenantContext]);
+  const addLiveProduct = (product: TenantProductSummary) => {
+    const variant = product.variants.find((item) => item.quantity > item.reserved);
+    if (!variant) return;
+    localStorage.setItem("br-customer-bag:blossom-royall", JSON.stringify([{ name: product.name, vendor: product.vendorName, price: variant.price, fulfillment: "Pickup", variantId: variant.id, quantity: 1 }]));
+    setLiveBagAdded(true);
+  };
   const visiblePicks = picks.filter((pick) => !hidden.includes(pick[0]));
   const jewelrySize = fitProfile?.measurements.finger ? recommendRingSize(fitProfile.measurements.finger, false) : "Jewelry sizing not added";
   const missionSavings = budget - 312;
@@ -5652,6 +5661,13 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
         ))}
       </nav>
       <output className="collection-focus" aria-live="polite"><Sparkles /><span><small>NOW EXPLORING</small><b>{activeCollection}</b></span></output>
+      {tenantContext.mode === "production" && <section className="panel" aria-label="Live catalog">
+        <div className="panel-head"><span><small className="eyebrow">LIVE CATALOG</small><h3>Available from Blossom Royall sellers</h3></span></div>
+        <div className="product-grid">{tenantProducts.filter((product) => product.status === "published" && product.onlineEnabled).map((product) => {
+          const variant = product.variants.find((item) => item.quantity > item.reserved);
+          return <article className="product" key={product.id}><div className="product-media"><ShoppingBag /><span>{variant ? "Available" : "Unavailable"}</span></div><small>{product.vendorName}</small><h3>{product.name}</h3><p>{product.category}</p><footer><b>${(variant?.price || 0).toFixed(2)}</b><span>{variant ? `${variant.quantity - variant.reserved} available` : "Out of stock"}</span></footer><button disabled={!variant} aria-label={`Add ${product.name} to bag`} onClick={() => addLiveProduct(product)}>{variant ? "Add to bag" : "Unavailable"}</button></article>;
+        })}</div>
+      </section>}
       <section className="shop-fit-bridge panel" aria-label="My Fit shopping status">
         <span>
           <Ruler />
@@ -5925,13 +5941,13 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
           Restore hidden picks
         </button>
       )}
-      {(saved.length > 0 || completeLookAdded) && (
+      {(saved.length > 0 || completeLookAdded || liveBagAdded) && (
         <section className="smart-bag-bar" aria-label="Shopping bag summary">
           <span>
             <ShoppingBag />
             <b>
-              {completeLookAdded ? 3 : saved.length}{" "}
-              {completeLookAdded || saved.length !== 1 ? "pieces" : "piece"}
+              {liveBagAdded ? 1 : completeLookAdded ? 3 : saved.length}{" "}
+              {liveBagAdded || completeLookAdded || saved.length !== 1 ? "pieces" : "piece"}
             </b>
             <small>
               {completeLookAdded
@@ -5939,7 +5955,7 @@ function CustomerShop({ go }: { go: (destination: string) => void }) {
                 : "Your private edit is ready"}
             </small>
           </span>
-          <button onClick={openBag}>
+          <button onClick={liveBagAdded ? () => go("Checkout") : openBag}>
             Review bag <ArrowUpRight />
           </button>
         </section>
