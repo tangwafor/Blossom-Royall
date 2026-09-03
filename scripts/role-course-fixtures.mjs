@@ -20,7 +20,14 @@ export async function productionTrainingAdmin() {
   const keys = await response.json();
   const serverKey = keys.find((key) => key.type === "secret" && key.api_key)?.api_key || keys.find((key) => key.name === "service_role" && key.api_key)?.api_key;
   if (!serverKey) throw new Error("No active production server key is available.");
-  return { url, serverKey, admin: createClient(url, serverKey, { auth: { autoRefreshToken: false, persistSession: false } }) };
+  const query = async (sql) => {
+    const result = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ query: sql }),
+    });
+    if (!result.ok) throw new Error(`Production SQL fixture operation failed: ${result.status} ${await result.text()}`);
+    return result.json();
+  };
+  return { url, serverKey, query, admin: createClient(url, serverKey, { auth: { autoRefreshToken: false, persistSession: false } }) };
 }
 
 const deleteUser = async (admin, userId) => {
@@ -35,13 +42,16 @@ const deleteUser = async (admin, userId) => {
 };
 
 export async function createRoleCourseFixtures() {
-  const { admin, url, serverKey } = await productionTrainingAdmin();
+  const { admin, url, serverKey, query } = await productionTrainingAdmin();
   const runId = `course-${Date.now()}-${randomBytes(4).toString("hex")}`;
   const stores = requireData(await admin.from("stores").select("id, name").ilike("name", "%Blossom Royall%"), "Blossom Royall store lookup");
   if (stores.length !== 1) throw new Error(`Expected one Blossom Royall store, received ${stores.length}.`);
   const storeId = stores[0].id;
   const identities = {};
   let vendorId = null;
+  let productId = null;
+  let variantId = null;
+  let leaseId = null;
   try {
     for (const role of roles) {
       const email = `${role}.${runId}@blossomroyall.invalid`;
@@ -54,20 +64,53 @@ export async function createRoleCourseFixtures() {
     }
     vendorId = randomUUID();
     requireData(await admin.from("vendors").insert({ id: vendorId, store_id: storeId, owner_user_id: identities.vendor.userId, name: `Role Course QA ${runId}`, status: "Invited" }), "Vendor fixture");
-    return { admin, url, serverKey, runId, storeId, vendorId, identities };
+    productId = randomUUID();
+    variantId = randomUUID();
+    leaseId = randomUUID();
+    await query(`begin;
+      set local role authenticated;
+      select set_config('request.jwt.claim.sub','${identities.owner.userId}',true);
+      select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+      insert into public.products(id,store_id,vendor_id,name,description,category,status,onsite_enabled,online_enabled,measurement_kind)
+      values('${productId}','${storeId}','${vendorId}','Role Course Gold Ring ${runId}','Disposable training inventory','Training','draft',true,true,'ring');
+      insert into public.product_variants(id,product_id,sku,size,color,price,ring_size,measurement_unit,reorder_point)
+      values('${variantId}','${productId}','QA-${runId}','7','Gold',125,7,'mm',2);
+      select public.adjust_catalog_stock('${variantId}',5,'Opening training fixture stock');
+      select public.review_catalog_product('${productId}','published','');
+      insert into public.leases(id,vendor_id,space_code,monthly_rent,deposit,start_date,end_date,status,signed_at,rent_due_day)
+      values('${leaseId}','${vendorId}','QA-${runId}',800,1600,current_date,current_date + 365,'signed',now(),1);
+      commit;`);
+    return { admin, query, url, serverKey, runId, storeId, vendorId, productId, variantId, leaseId, identities };
   } catch (error) {
-    await cleanupRoleCourseFixtures({ admin, runId, vendorId, identities }).catch(() => {});
+    await cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, identities }).catch(() => {});
     throw error;
   }
 }
 
-export async function cleanupRoleCourseFixtures({ admin, runId, vendorId, identities }) {
-  if (vendorId) requireData(await admin.from("vendors").delete().eq("id", vendorId), "Vendor fixture cleanup");
+export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, identities }) {
+  if (query) {
+    const cleanup = [
+      leaseId && `delete from public.rent_payments where lease_id='${leaseId}';`,
+      leaseId && `delete from public.leases where id='${leaseId}';`,
+      variantId && `delete from public.inventory_movements where variant_id='${variantId}';`,
+      variantId && `delete from public.product_variants where id='${variantId}';`,
+      productId && `delete from public.products where id='${productId}';`,
+      vendorId && `delete from public.vendors where id='${vendorId}';`,
+    ].filter(Boolean);
+    const auditIds = [vendorId, productId, variantId, leaseId].filter(Boolean).map((id) => `'${id}'`).join(",");
+    if (auditIds) cleanup.push(`delete from public.audit_log where entity_id in (${auditIds});`);
+    if (cleanup.length) await query(`begin; ${cleanup.join("\n")} commit;`);
+  }
+  else if (vendorId) requireData(await admin.from("vendors").delete().eq("id", vendorId), "Vendor fixture cleanup");
   for (const identity of Object.values(identities).reverse()) await deleteUser(admin, identity.userId);
   const users = requireData(await admin.auth.admin.listUsers({ page: 1, perPage: 1000 }), "Fixture user cleanup audit");
   const leakedUsers = users.users.filter((user) => user.user_metadata?.training_run_id === runId);
-  const leakedVendors = requireData(await admin.from("vendors").select("id").ilike("name", `%${runId}%`), "Fixture vendor cleanup audit");
-  if (leakedUsers.length || leakedVendors.length) throw new Error(`Role course cleanup leaked ${leakedUsers.length} users and ${leakedVendors.length} vendors for ${runId}.`);
+  const [leakedVendors, leakedProducts, leakedLeases] = await Promise.all([
+    admin.from("vendors").select("id").ilike("name", `%${runId}%`),
+    admin.from("products").select("id").ilike("name", `%${runId}%`),
+    admin.from("leases").select("id").eq("space_code", `QA-${runId}`),
+  ]).then((results) => results.map((result, index) => requireData(result, ["Fixture vendor", "Fixture product", "Fixture lease"][index])));
+  if (leakedUsers.length || leakedVendors.length || leakedProducts.length || leakedLeases.length) throw new Error(`Role course cleanup leaked records for ${runId}.`);
 }
 
 export { roles as roleCourseFixtureRoles };

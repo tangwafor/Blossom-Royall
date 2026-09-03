@@ -24,6 +24,7 @@ const trainingSupabaseUrl = process.env.TRAINING_SUPABASE_URL;
 const diagnosticMode = process.env.TRAINING_DIAGNOSTIC === "true";
 const courseActionCoverageComplete = false;
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
+const trainingUserIdFor = (role) => process.env[`TRAINING_${role.toUpperCase()}_USER_ID`] || trainingUserId;
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
 const date = new Date().toISOString().slice(0, 10);
 const artifactRoot = join(process.cwd(), "artifacts", "training", `${date}-${commit}`);
@@ -32,7 +33,7 @@ if (!selectedRoles.every((role) => roles.includes(role))) throw new Error(`Unsup
 if (!["detailed", "reel"].includes(edition)) throw new Error(`Unsupported TRAINING_EDITION: ${edition}`);
 if (!["ndamba", "human"].includes(narrationMode)) throw new Error(`Unsupported TRAINING_NARRATION_MODE: ${narrationMode}`);
 if (isProduction && !productionApproved) throw new Error("Production recording requires TRAINING_PRODUCTION_APPROVED=true.");
-if (isProduction && (!trainingServerKey || !trainingUserId || !trainingSupabaseUrl)) throw new Error("Production role courses require sealed server side backend assertion credentials.");
+if (isProduction && (!trainingServerKey || !trainingSupabaseUrl || selectedRoles.some((role) => !trainingUserIdFor(role)))) throw new Error("Production role courses require sealed server side backend assertion credentials for every selected role.");
 
 const trainingAdmin = trainingServerKey && trainingSupabaseUrl
   ? createClient(trainingSupabaseUrl, trainingServerKey, { auth: { autoRefreshToken: false, persistSession: false } })
@@ -44,8 +45,9 @@ const assertNoError = (result, label) => {
 };
 
 const memberBackendAssertion = async (expectedRole) => {
-  if (!trainingAdmin || !trainingUserId) throw new Error(`${expectedRole} backend assertion client is unavailable.`);
-  const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).single(), `${expectedRole} membership`);
+  const userId = trainingUserIdFor(expectedRole);
+  if (!trainingAdmin || !userId) throw new Error(`${expectedRole} backend assertion client is unavailable.`);
+  const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", userId).single(), `${expectedRole} membership`);
   if (membership.role !== expectedRole) throw new Error(`${expectedRole} backend role mismatch: ${membership.role}`);
   const [products, orders, returns, payments] = await Promise.all([
     trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
@@ -61,8 +63,9 @@ const memberBackendAssertion = async (expectedRole) => {
 
 const backendAssertions = {
   owner: async () => {
-    if (!trainingAdmin || !trainingUserId) throw new Error("Owner backend assertion client is unavailable.");
-    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).single(), "Owner membership");
+    const userId = trainingUserIdFor("owner");
+    if (!trainingAdmin || !userId) throw new Error("Owner backend assertion client is unavailable.");
+    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", userId).single(), "Owner membership");
     if (membership.role !== "owner") throw new Error(`Owner backend role mismatch: ${membership.role}`);
     const [vendors, products, orders, leases] = await Promise.all([
       trainingAdmin.from("vendors").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
@@ -74,10 +77,11 @@ const backendAssertions = {
     return { storeId: membership.store_id, role: membership.role, vendors: vendors.count || 0, products: products.count || 0, orders: orders.count || 0, leases: leases.count || 0 };
   },
   vendor: async () => {
-    if (!trainingAdmin || !trainingUserId) throw new Error("Vendor backend assertion client is unavailable.");
-    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).single(), "Vendor membership");
+    const userId = trainingUserIdFor("vendor");
+    if (!trainingAdmin || !userId) throw new Error("Vendor backend assertion client is unavailable.");
+    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", userId).single(), "Vendor membership");
     if (membership.role !== "vendor") throw new Error(`Vendor backend role mismatch: ${membership.role}`);
-    const owned = assertNoError(await trainingAdmin.from("vendors").select("id, name").eq("store_id", membership.store_id).eq("owner_user_id", trainingUserId), "Vendor ownership");
+    const owned = assertNoError(await trainingAdmin.from("vendors").select("id, name").eq("store_id", membership.store_id).eq("owner_user_id", userId), "Vendor ownership");
     if (owned.length !== 1) throw new Error(`Vendor backend ownership mismatch: expected 1, received ${owned.length}`);
     const vendorId = owned[0].id;
     const [products, orderItems, leases, ledger] = await Promise.all([
@@ -92,10 +96,11 @@ const backendAssertions = {
   manager: async () => memberBackendAssertion("manager"),
   staff: async () => memberBackendAssertion("staff"),
   customer: async () => {
-    if (!trainingAdmin || !trainingUserId) throw new Error("Customer backend assertion client is unavailable.");
-    const profile = assertNoError(await trainingAdmin.from("profiles").select("role").eq("id", trainingUserId).single(), "Customer profile");
+    const userId = trainingUserIdFor("customer");
+    if (!trainingAdmin || !userId) throw new Error("Customer backend assertion client is unavailable.");
+    const profile = assertNoError(await trainingAdmin.from("profiles").select("role").eq("id", userId).single(), "Customer profile");
     if (profile.role !== "customer") throw new Error(`Customer backend role mismatch: ${profile.role}`);
-    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", trainingUserId).limit(1).maybeSingle(), "Customer membership boundary");
+    const membership = assertNoError(await trainingAdmin.from("store_memberships").select("store_id, role").eq("user_id", userId).limit(1).maybeSingle(), "Customer membership boundary");
     if (membership) throw new Error(`Customer must not receive an operating membership during the course: ${membership.role}`);
     const configuredStoreId = process.env.TRAINING_STORE_ID;
     const storesResult = configuredStoreId
@@ -106,8 +111,8 @@ const backendAssertions = {
     const storeId = stores[0].id;
     const [products, orders, returns] = await Promise.all([
       trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("status", "published"),
-      trainingAdmin.from("orders").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("customer_id", trainingUserId),
-      trainingAdmin.from("return_requests").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("customer_id", trainingUserId),
+      trainingAdmin.from("orders").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("customer_id", userId),
+      trainingAdmin.from("return_requests").select("id", { count: "exact", head: true }).eq("store_id", storeId).eq("customer_id", userId),
     ]);
     for (const [result, label] of [[products, "published products"], [orders, "orders"], [returns, "returns"]]) if (result.error) throw new Error(`Customer ${label} backend assertion failed: ${result.error.message}`);
     return { storeId, role: "customer", products: products.count || 0, orders: orders.count || 0, returns: returns.count || 0 };
