@@ -188,7 +188,10 @@ const addFixtureProductToCheckout = async (page) => {
   if (!trainingAdmin || !productId) throw new Error("Checkout course action requires the disposable product fixture.");
   const product = assertNoError(await trainingAdmin.from("products").select("name").eq("id", productId).single(), "Checkout fixture product");
   const card = page.locator(".product", { has: page.getByRole("heading", { name: product.name, exact: true }) });
-  await card.getByRole("button", { name: "Add to checkout", exact: true }).click();
+  const addButton = card.getByRole("button", { name: "Add to checkout", exact: true });
+  await addButton.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollBy(0, -160));
+  await addButton.click();
   return product;
 };
 
@@ -570,7 +573,7 @@ const interfaceActionExecutors = {
     const nextName = `${current.name} ${role}`;
     await form.getByLabel("Public brand name").fill(nextName);
     await form.getByRole("button", { name: "Save vendor", exact: true }).click();
-    await page.getByText(`${nextName} was updated.`, { exact: true }).waitFor();
+    await page.getByRole("heading", { name: nextName, exact: true }).waitFor();
     const updated = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("id", target.id).eq("name", nextName).maybeSingle(), `${role} updated vendor`);
     if (role === "owner") workflowEvidence.set("owner:lifecycle-vendor", updated);
     return { control: "Save vendor", result: `${updated.name} verified in production`, vendorId: updated.id };
@@ -1000,11 +1003,14 @@ for (const role of selectedRoles) {
       await page.waitForURL(/\/workspace/, { timeout: 30000 });
     }
     await page.waitForURL(/\/workspace/, { timeout: 30000 });
-    for (let attempt = 0; attempt < 3 && !(await page.locator("html[data-app-ready='true']").count()); attempt += 1) {
-      const assignmentBoundary = page.getByText("Your account is secure.", { exact: true });
-      if (await assignmentBoundary.count()) {
+    for (let attempt = 0; attempt < 4 && !(await page.locator("html[data-app-ready='true']").count()); attempt += 1) {
+      await Promise.race([
+        page.locator("html[data-app-ready='true']").waitFor({ timeout: 10000 }),
+        page.getByText("Your account is secure.", { exact: true }).waitFor({ timeout: 10000 }),
+      ]).catch(() => null);
+      if (!(await page.locator("html[data-app-ready='true']").count())) {
         await page.waitForTimeout(1000);
-        await page.reload({ waitUntil: "networkidle" });
+        await page.reload({ waitUntil: "domcontentloaded" });
       }
     }
     await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
