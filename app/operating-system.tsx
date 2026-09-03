@@ -767,7 +767,7 @@ export function OperatingSystem() {
           </div>
         )}
         {active === "Customer Shop" && <CustomerShop go={go} />}
-        {active === "My Fit" && <MyFit go={go} />}
+        {active === "My Fit" && tenantContext && <MyFit go={go} tenantContext={tenantContext} />}
         {active === "Orders" && (
           <ListView
             eyebrow="FULFILLMENT"
@@ -803,9 +803,7 @@ export function OperatingSystem() {
         {active === "Rent" && tenantContext && <VendorRentWorkspace context={tenantContext} />}
         {active === "Shared Commerce" && <SharedCommerceCenter />}
         {active === "Delivery" && <DeliveryCenter />}
-        {active === "Checkout" && (
-          <CheckoutCenter openSale={() => setSale(true)} />
-        )}
+        {active === "Checkout" && tenantContext && <CheckoutCenter openSale={() => setSale(true)} tenantContext={tenantContext} />}
         {active === "Cash Drawer" && <CashDrawerCenter go={go} />}
         {active === "Staff" && (
           <ListView
@@ -4310,7 +4308,7 @@ const checkoutCashCopy = {
   },
 } as const;
 
-function CheckoutCenter({ openSale }: { openSale: () => void }) {
+function CheckoutCenter({ openSale, tenantContext }: { openSale: () => void; tenantContext: TenantContext }) {
   const { value: policy } = useRetailPolicy();
   const { value: delivery } = useDeliverySettings();
   const { value: store } = useStoreSettings();
@@ -4326,7 +4324,6 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
   const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
   const [paymentMessage, setPaymentMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [tenantContext, setTenantContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: "Checking production access." });
   const [authoritativeAmounts, setAuthoritativeAmounts] = useState<{ subtotal: number; deliveryFee: number; tax: number; total: number; paymentStatus: string } | null>(null);
   const [placed, setPlaced] = useState(false);
   const [orderId, setOrderId] = useState(
@@ -4335,12 +4332,9 @@ function CheckoutCenter({ openSale }: { openSale: () => void }) {
   useEffect(() => {
     const stored = localStorage.getItem("br-customer-bag:blossom-royall");
     if (stored) setBag(JSON.parse(stored));
-    void resolveTenantContext().then((context) => {
-      setTenantContext(context);
-      if (context.mode === "production" && ["owner", "manager", "staff"].includes(context.role || "")) setTender("Cash");
-      if (context.mode === "production" && context.role === "customer") setTender("Bank transfer");
-    });
-  }, []);
+    if (tenantContext.mode === "production" && ["owner", "manager", "staff"].includes(tenantContext.role || "")) setTender("Cash");
+    if (tenantContext.mode === "production" && tenantContext.role === "customer") setTender("Bank transfer");
+  }, [tenantContext]);
   const subtotal = bag.reduce((sum, item) => sum + item.price, 0);
   const deliveryFee =
     method === "delivery" && subtotal < delivery.freeLocalMinimum
@@ -5302,7 +5296,7 @@ const recommendRingSize = (millimeters: number, wideBand: boolean) => {
   return millimeters < 43 || millimeters > 71 ? "Jeweler fitting recommended" : `Approximate US ring size ${closest[1] + (wideBand ? 0.5 : 0)} · ISO ${Math.round(millimeters)}`;
 };
 
-function MyFit({ go }: { go: (destination: string) => void }) {
+function MyFit({ go, tenantContext }: { go: (destination: string) => void; tenantContext: TenantContext }) {
   const [locale, setLocale] = useState<keyof typeof fitCopy>("en");
   const [unit, setUnit] = useState<FitUnit>("imperial");
   const [measurements, setMeasurements] = useState<FitProfile["measurements"]>({
@@ -5319,7 +5313,6 @@ function MyFit({ go }: { go: (destination: string) => void }) {
   const [consent, setConsent] = useState(false);
   const [shareWithVendors, setShareWithVendors] = useState(false);
   const [notice, setNotice] = useState("");
-  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [savedAt, setSavedAt] = useState("");
   const [fitPhotos, setFitPhotos] = useState<Record<string, string>>({});
   const [ringMethod, setRingMethod] = useState<"gauge" | "existing_ring" | "estimate">("gauge");
@@ -5342,24 +5335,18 @@ function MyFit({ go }: { go: (destination: string) => void }) {
       setShareWithVendors(profile.shareWithVendors);
       setSavedAt(profile.updatedAt);
     }
-    void resolveTenantContext().then(async (context) => {
-      setTenantContext(context);
-      if (context.mode !== "production") return;
-      try {
-        const profile = await loadAccountFitProfile(context);
-        if (!profile) return;
-        localStorage.setItem(fitStorageKey, JSON.stringify(profile));
-        setUnit(profile.unit);
-        setMeasurements(profile.measurements);
-        setConsent(profile.consent);
-        setShareWithVendors(profile.shareWithVendors);
-        setSavedAt(profile.updatedAt);
-        setNotice(fitCopy.en.accountLoaded);
-      } catch {
-        setNotice(fitCopy.en.syncFailed);
-      }
-    });
-  }, []);
+    if (tenantContext.mode !== "production") return;
+    void loadAccountFitProfile(tenantContext).then((profile) => {
+      if (!profile) return;
+      localStorage.setItem(fitStorageKey, JSON.stringify(profile));
+      setUnit(profile.unit);
+      setMeasurements(profile.measurements);
+      setConsent(profile.consent);
+      setShareWithVendors(profile.shareWithVendors);
+      setSavedAt(profile.updatedAt);
+      setNotice(fitCopy.en.accountLoaded);
+    }).catch(() => setNotice(fitCopy.en.syncFailed));
+  }, [tenantContext]);
 
   useEffect(() => {
     const sync = async () => {
