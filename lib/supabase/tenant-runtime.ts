@@ -649,6 +649,56 @@ export async function removeTenantVendor(context: TenantContext, vendorId: strin
   if (error) throw error;
 }
 
+export type TenantLeaseRecord = {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  spaceCode: string;
+  monthlyRent: number;
+  deposit: number;
+  startDate: string;
+  endDate: string | null;
+  status: string;
+  rentDueDay: number;
+};
+
+export async function loadTenantLeases(context: TenantContext): Promise<TenantLeaseRecord[]> {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager"].includes(context.role || "")) return [];
+  const { data, error } = await createClient().from("leases")
+    .select("id, vendor_id, space_code, monthly_rent, deposit, start_date, end_date, status, rent_due_day, vendors!inner(name, store_id)")
+    .eq("vendors.store_id", context.storeId)
+    .order("start_date", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((lease) => ({
+    id: lease.id,
+    vendorId: lease.vendor_id,
+    vendorName: (lease.vendors as unknown as { name: string }).name,
+    spaceCode: lease.space_code || "",
+    monthlyRent: Number(lease.monthly_rent),
+    deposit: Number(lease.deposit || 0),
+    startDate: lease.start_date,
+    endDate: lease.end_date,
+    status: lease.status || "draft",
+    rentDueDay: Number(lease.rent_due_day || 1),
+  }));
+}
+
+export async function createTenantLease(context: TenantContext, input: Omit<TenantLeaseRecord, "id" | "vendorName">) {
+  if (context.mode !== "production" || !context.storeId || !["owner", "manager"].includes(context.role || "")) throw new Error("Owner or manager production access is required.");
+  const { data, error } = await createClient().from("leases").insert({
+    vendor_id: input.vendorId,
+    space_code: input.spaceCode,
+    monthly_rent: input.monthlyRent,
+    deposit: input.deposit,
+    start_date: input.startDate,
+    end_date: input.endDate || null,
+    status: input.status,
+    rent_due_day: input.rentDueDay,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
 export type TenantVendorStorefront = {
   id: string;
   vendorId: string;

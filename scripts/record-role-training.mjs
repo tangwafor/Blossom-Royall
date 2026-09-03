@@ -621,6 +621,27 @@ const interfaceActionExecutors = {
     if (persisted.status !== "published" || persisted.media_rights_status !== "confirmed" || persisted.updated_by !== trainingUserIdFor("owner")) throw new Error("Brand review lacks owner accountable publication evidence.");
     return { control: "Published storefront", result: `Owner publication and media rights verified for ${storefront.public_name}`, storefrontId: storefront.id };
   },
+  configure_lease: async ({ page }) => {
+    const vendor = workflowEvidence.get("owner:lifecycle-vendor");
+    if (!vendor) throw new Error("Lease configuration has no lifecycle vendor target.");
+    const center = page.locator(".production-lease-center");
+    await center.getByRole("button", { name: "New agreement", exact: true }).click();
+    const form = center.locator(".production-lease-form");
+    const spaceCode = `LIFE-${process.env.TRAINING_FIXTURE_RUN_ID}`;
+    await form.getByLabel("Vendor", { exact: true }).selectOption(vendor.id);
+    await form.getByLabel("Space code").fill(spaceCode);
+    await form.getByLabel("Monthly rent").fill("700");
+    await form.getByLabel("Deposit", { exact: true }).fill("1400");
+    await form.getByLabel("Start date").fill(date);
+    await form.getByLabel("End date").fill(`${Number(date.slice(0, 4)) + 1}${date.slice(4)}`);
+    await form.getByLabel("Rent due day").fill("1");
+    await form.getByRole("button", { name: "Create lease draft", exact: true }).click();
+    await page.getByText("Production lease draft created.", { exact: true }).waitFor();
+    const lease = assertNoError(await trainingAdmin.from("leases").select("id, vendor_id, space_code, monthly_rent, deposit, status").eq("vendor_id", vendor.id).eq("space_code", spaceCode).single(), "Lifecycle vendor lease");
+    if (lease.status !== "draft" || Number(lease.monthly_rent) !== 700 || Number(lease.deposit) !== 1400) throw new Error("Production lease draft did not preserve its controlled terms.");
+    workflowEvidence.set("owner:lifecycle-lease", lease);
+    return { control: "Create lease draft", result: `${spaceCode} persisted with governed draft status`, leaseId: lease.id };
+  },
   remove_vendor: async ({ page }) => {
     const vendor = workflowEvidence.get("owner:lifecycle-vendor");
     if (!vendor) throw new Error("Owner vendor removal has no lifecycle target.");

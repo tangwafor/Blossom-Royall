@@ -47,6 +47,7 @@ import Link from "next/link";
 import {
   loadAccountFitProfile,
   loadTenantVendors,
+  loadTenantLeases,
   loadVendorRentWorkspace,
   loadVendorLedger,
   loadOwnedVendorProfile,
@@ -82,6 +83,7 @@ import {
   removeAccountFitProfiles,
   saveAccountFitProfile,
   saveTenantVendor,
+  createTenantLease,
   saveTenantVendorStorefront,
   saveTenantCommerceSettings,
   loadTenantOperatingSettings,
@@ -98,6 +100,7 @@ import {
   type VendorRentRecord,
   type VendorLedgerEntry,
   type VendorOperatingSnapshot,
+  type TenantLeaseRecord,
 } from "../lib/supabase/tenant-runtime";
 import {
   useCommerceSettings,
@@ -1864,7 +1867,9 @@ function VendorOperations() {
       </section>
       <VendorStorefrontStudio vendors={records} tenantContext={tenantContext} />
       <AfricstylePilotImport />
-      <VendorLeaseRentCenter vendors={records} />
+      {tenantContext.mode === "production" && ["owner", "manager"].includes(tenantContext.role || "")
+        ? <ProductionVendorLeaseCenter vendors={records} context={tenantContext} />
+        : <VendorLeaseRentCenter vendors={records} />}
       <VendorBrandManager />
     </>
   );
@@ -2175,6 +2180,51 @@ function VendorRentWorkspace({ context }: { context: TenantContext }) {
       </div>}
     </section>
   </ListView>;
+}
+
+function ProductionVendorLeaseCenter({ vendors, context }: { vendors: VendorRecord[]; context: TenantContext }) {
+  const [leases, setLeases] = useState<TenantLeaseRecord[]>([]);
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const refresh = async () => setLeases(await loadTenantLeases(context));
+  useEffect(() => { void refresh().catch(() => setNotice("Production lease records could not be loaded.")); }, [context.storeId, context.userId]);
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await createTenantLease(context, {
+        vendorId: String(data.get("vendorId")),
+        spaceCode: String(data.get("spaceCode")).trim(),
+        monthlyRent: Number(data.get("monthlyRent")),
+        deposit: Number(data.get("deposit")),
+        startDate: String(data.get("startDate")),
+        endDate: String(data.get("endDate")) || null,
+        status: "draft",
+        rentDueDay: Number(data.get("rentDueDay")),
+      });
+      await refresh();
+      setOpen(false);
+      setNotice("Production lease draft created.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Production lease was not created: ${error.message}` : "Production lease was not created.");
+    }
+  };
+  return <section className="panel vendor-finance production-lease-center">
+    <div className="panel-head"><span><small className="eyebrow">LEASES AND RENT</small><h3>Production lease records</h3></span><button onClick={() => setOpen((value) => !value)}><FileSignature />{open ? "Close draft" : "New agreement"}</button></div>
+    <p>Draft commercial terms remain tenant scoped. Signing and activation require the approved legal workflow.</p>
+    {notice && <output className="policy-saved" role="status">{notice}</output>}
+    {open && <form className="production-lease-form" onSubmit={(event) => void save(event)}>
+      <label>Vendor<select name="vendorId" required defaultValue=""><option value="" disabled>Choose vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
+      <label>Space code<input name="spaceCode" required maxLength={80} /></label>
+      <label>Monthly rent<input name="monthlyRent" required type="number" min="0.01" step="0.01" /></label>
+      <label>Deposit<input name="deposit" required type="number" min="0" step="0.01" /></label>
+      <label>Start date<input name="startDate" required type="date" /></label>
+      <label>End date<input name="endDate" type="date" /></label>
+      <label>Rent due day<input name="rentDueDay" required type="number" min="1" max="28" defaultValue="1" /></label>
+      <button className="primary" type="submit"><Check />Create lease draft</button>
+    </form>}
+    <div className="agreement-ledger">{leases.map((lease) => <article key={lease.id}><span><b>{lease.vendorName}</b><small>{lease.spaceCode}</small></span><span><small>Monthly rent</small><b>${lease.monthlyRent.toFixed(2)}</b></span><span><small>Status</small><b>{lease.status.toUpperCase()}</b></span></article>)}</div>
+  </section>;
 }
 
 function VendorLeaseRentCenter({ vendors }: { vendors: VendorRecord[] }) {

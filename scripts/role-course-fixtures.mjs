@@ -123,10 +123,12 @@ export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId,
       variantId && `delete from public.product_variants where id='${variantId}';`,
       productId && `delete from public.products where id='${productId}';`,
       vendorId && `delete from public.vendors where id='${vendorId}';`,
+      runId && `delete from public.leases where space_code='LIFE-${runId}';`,
       runId && `delete from public.vendor_storefronts where vendor_id in (select id from public.vendors where name ilike 'Lifecycle QA ${runId}%');`,
       runId && `delete from public.vendors where name ilike 'Lifecycle QA ${runId}%';`,
       runId && `delete from public.audit_log where coalesce(after_data->>'name', before_data->>'name', '') ilike 'Lifecycle QA ${runId}%';`,
       runId && `delete from public.audit_log where coalesce(after_data->>'public_name', before_data->>'public_name', '') ilike 'Lifecycle QA ${runId}%';`,
+      runId && `delete from public.audit_log where coalesce(after_data->>'space_code', before_data->>'space_code', '')='LIFE-${runId}';`,
     ].filter(Boolean);
     const auditIds = [vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId].filter(Boolean).map((id) => `'${id}'`).join(",");
     if (auditIds) cleanup.push(`delete from public.audit_log where entity_id in (${auditIds});`);
