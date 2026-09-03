@@ -247,7 +247,7 @@ const interfaceActionExecutors = {
     const guideRole = role[0].toUpperCase() + role.slice(1);
     await page.locator(".help-controls").getByRole("button", { name: guideRole, exact: true }).click();
     const search = page.getByLabel("Search help");
-    const term = role === "customer" ? "fit" : role === "vendor" ? "vendor" : "sale";
+    const term = role === "customer" ? "fit" : role === "vendor" ? "collection" : "sale";
     await search.fill(term);
     const guide = page.locator(".help-grid details").first();
     await guide.locator("summary").click();
@@ -444,9 +444,11 @@ const interfaceActionExecutors = {
     const pending = assertNoError(await trainingAdmin.from("rent_payments").select("id, amount, status").eq("lease_id", leaseId).eq("status", "pending").single(), `${role} pending rent payment`);
     const article = page.locator(".agreement-ledger article", { hasText: `$${Number(pending.amount).toFixed(2)}` });
     await article.getByRole("button", { name: "Confirm paid", exact: true }).click();
-    const receipt = page.getByText(/^BRR-/).first();
-    await receipt.waitFor();
-    const reviewed = assertNoError(await trainingAdmin.from("rent_payments").select("id, status, receipt_no, reviewed_by").eq("id", pending.id).single(), `${role} reviewed rent payment`);
+    const reviewed = await waitForAdminRow(
+      () => trainingAdmin.from("rent_payments").select("id, status, receipt_no, reviewed_by").eq("id", pending.id).eq("status", "paid").maybeSingle(),
+      `${role} reviewed rent payment`,
+    );
+    await page.getByText(reviewed.receipt_no, { exact: true }).waitFor();
     if (reviewed.status !== "paid" || reviewed.reviewed_by !== trainingUserIdFor(role) || !reviewed.receipt_no) throw new Error(`${role} rent review was not persisted with accountability.`);
     workflowEvidence.set(`${role}:rent`, reviewed);
     return { control: "Confirm paid", result: `${reviewed.receipt_no} approved by ${role}`, paymentId: reviewed.id };
@@ -741,7 +743,7 @@ const interfaceActionExecutors = {
     return { control: "Production settings record", result: `${chapter.label} write and actor match the database`, updatedAt: record.updated_at };
   },
   exercise_preview_controls: async ({ page, chapter }) => {
-    const before = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), `${chapter.label} preview boundary baseline`);
+    const before = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).maybeSingle(), `${chapter.label} preview boundary baseline`);
     workflowEvidence.set(`preview:${chapter.label}`, before);
     if (chapter.label === "Staff") {
       await page.getByRole("button", { name: "Invite staff", exact: true }).click();
@@ -767,11 +769,11 @@ const interfaceActionExecutors = {
     return { control: "Approve reorder", result: "Preview merchandising decision changed visibly without a production claim" };
   },
   verify_no_production_write: async ({ chapter }) => {
+    if (!workflowEvidence.has(`preview:${chapter.label}`)) throw new Error(`${chapter.label} has no preview boundary baseline.`);
     const before = workflowEvidence.get(`preview:${chapter.label}`);
-    if (!before) throw new Error(`${chapter.label} has no preview boundary baseline.`);
-    const after = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), `${chapter.label} preview boundary result`);
-    if (after.updated_at !== before.updated_at) throw new Error(`${chapter.label} changed the production settings record during a preview action.`);
-    return { control: "Production write boundary", result: `${chapter.label} left the production settings record unchanged`, updatedAt: after.updated_at };
+    const after = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).maybeSingle(), `${chapter.label} preview boundary result`);
+    if (after?.updated_at !== before?.updated_at) throw new Error(`${chapter.label} changed the production settings record during a preview action.`);
+    return { control: "Production write boundary", result: `${chapter.label} left the production settings record unchanged`, updatedAt: after?.updated_at || null };
   },
   route_authorized_task: async ({ page }) => {
     const board = page.getByLabel("Staff operating controls");
