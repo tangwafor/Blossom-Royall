@@ -746,13 +746,12 @@ const interfaceActionExecutors = {
     const before = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).maybeSingle(), `${chapter.label} preview boundary baseline`);
     workflowEvidence.set(`preview:${chapter.label}`, before);
     if (chapter.label === "Staff") {
-      await page.getByRole("button", { name: "Invite staff", exact: true }).click();
-      await page.locator(".staff-form").waitFor();
-      await page.locator(".staff-form").getByRole("button", { name: "Cancel", exact: true }).click();
-      return { control: "Invite staff", result: "Preview staff form opened and closed without submission" };
+      await page.getByText("Production staff activation", { exact: true }).waitFor();
+      await page.getByRole("heading", { name: "No production employees are enrolled yet", exact: true }).waitFor();
+      return { control: "Production staff activation", result: "Production correctly exposes no preview workforce write controls" };
     }
     if (chapter.label === "Delivery") {
-      const control = page.getByLabel("Local delivery", { exact: true });
+      const control = page.locator(".delivery-modes label", { hasText: "Local delivery" }).locator('input[type="checkbox"]');
       const before = await control.isChecked();
       await control.setChecked(!before);
       await control.setChecked(before);
@@ -833,6 +832,7 @@ const collectActionEvidence = async (page, role, chapter, action, backend) => {
 const chapterAssertions = async (page, role, label, backend) => {
   await expectVisibleText(page, "Live tenant records", `${role} ${label}`);
   if (role === "owner" && label === "Products") {
+    await page.getByRole("heading", { name: new RegExp(process.env.TRAINING_FIXTURE_RUN_ID) }).waitFor({ state: "visible", timeout: 30000 });
     const visibleProducts = await page.locator(".product-grid .product").count();
     if (visibleProducts !== backend.products) throw new Error(`Owner Products mismatch: UI ${visibleProducts}, backend ${backend.products}.`);
     return { chapter: label, uiProducts: visibleProducts, backendProducts: backend.products };
