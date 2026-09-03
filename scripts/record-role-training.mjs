@@ -170,6 +170,20 @@ const addFixtureProductToCheckout = async (page) => {
   return product;
 };
 
+const courseOrderFor = async (role) => {
+  const own = workflowEvidence.get(`${role}:order`);
+  if (own) return own;
+  const variantId = process.env.TRAINING_FIXTURE_VARIANT_ID;
+  if (!trainingAdmin || !variantId) throw new Error("Order course action requires the disposable variant fixture.");
+  const rows = assertNoError(await trainingAdmin.from("orders")
+    .select("id, receipt_no, payment_status, fulfillment_status, status, order_items!inner(variant_id)")
+    .eq("order_items.variant_id", variantId)
+    .order("created_at", { ascending: true }), "Shared course orders");
+  const order = rows.find((row) => row.fulfillment_status !== "fulfilled") || rows[0];
+  if (!order) throw new Error("No disposable course order is available.");
+  return order;
+};
+
 const interfaceActionExecutors = {
   refresh_vendor_reconciliation: async ({ page }) => {
     const panel = page.getByLabel("Owner vendor reconciliation");
@@ -322,6 +336,35 @@ const interfaceActionExecutors = {
     const history = page.locator(".drawer-history");
     await history.getByText("Variance", { exact: true }).first().waitFor();
     return { control: "Recent drawer history", result: `Expected ${session.expected_cash}, counted ${session.counted_cash}, variance ${session.variance}`, visibleRows: await page.locator(".drawer-history article").count(), matchedRowCount: await row.count() };
+  },
+  advance_fulfillment: async ({ page, role }) => {
+    let order = await courseOrderFor(role);
+    if (order.payment_status !== "succeeded") {
+      const queue = page.getByLabel("Pending payment verification");
+      const payment = queue.locator("li", { hasText: order.receipt_no });
+      await payment.getByRole("button", { name: "Verify", exact: true }).click();
+      await page.getByText(`${order.receipt_no} payment verified.`, { exact: true }).waitFor();
+      order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status, status").eq("id", order.id).single(), "Verified course order");
+      if (order.payment_status !== "succeeded") throw new Error(`${order.receipt_no} payment was not persisted as succeeded.`);
+      await page.getByRole("button", { name: "Command Center", exact: true }).click();
+      await page.getByRole("button", { name: "Orders", exact: true }).click();
+    }
+    const row = page.locator(".table > div", { hasText: order.receipt_no }).last();
+    const action = row.getByRole("button", { name: /Start preparation|Mark ready|Send for delivery|Confirm pickup|Confirm delivery/ });
+    const label = await action.innerText();
+    await action.click();
+    const updated = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status, status").eq("id", order.id).single(), "Advanced course order");
+    const events = assertNoError(await trainingAdmin.from("order_fulfillment_events").select("id, event_type, actor_user_id").eq("order_id", order.id).order("created_at", { ascending: true }), "Course fulfillment events");
+    if (!events.some((event) => event.actor_user_id === trainingUserIdFor(role))) throw new Error(`${role} fulfillment event was not recorded.`);
+    workflowEvidence.set(`${role}:order`, updated);
+    workflowEvidence.set("course:shared-order", updated);
+    return { control: label, result: `${updated.receipt_no} advanced to ${updated.fulfillment_status}`, orderId: updated.id, eventCount: events.length };
+  },
+  verify_cross_role_status: async ({ role }) => {
+    const order = workflowEvidence.get(`${role}:order`) || workflowEvidence.get("course:shared-order");
+    if (!order) throw new Error(`${role} has no fulfillment state to reconcile.`);
+    const persisted = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, fulfillment_status, status").eq("id", order.id).single(), "Cross role order status");
+    return { control: "Shared order state", result: `${persisted.receipt_no} is ${persisted.fulfillment_status} for every authorized role`, orderId: persisted.id };
   },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
