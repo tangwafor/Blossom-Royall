@@ -35,6 +35,7 @@
     "training:record": "node scripts/record-role-training.mjs",
     "training:vendor:ephemeral": "node scripts/run-ephemeral-vendor-training.mjs",
     "training:owner:ephemeral": "node scripts/run-ephemeral-owner-training.mjs",
+    "training:all:ephemeral": "node scripts/run-role-course-fixtures.mjs",
     "native:sync": "npm run build:sites && node scripts/run-capacitor.cjs sync",
     "native:doctor": "node scripts/run-capacitor.cjs doctor",
     "native:verify": "node scripts/verify-native-readiness.mjs",
