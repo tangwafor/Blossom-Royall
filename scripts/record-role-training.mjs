@@ -75,7 +75,7 @@ const memberBackendAssertion = async (expectedRole) => {
     trainingAdmin.from("products").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
     trainingAdmin.from("orders").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
     trainingAdmin.from("return_requests").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
-    trainingAdmin.from("payments").select("id", { count: "exact", head: true }).eq("store_id", membership.store_id),
+    trainingAdmin.from("payments").select("id, orders!inner(store_id)", { count: "exact", head: true }).eq("orders.store_id", membership.store_id),
   ]);
   for (const [result, label] of [[products, "products"], [orders, "orders"], [returns, "returns"], [payments, "payments"]]) {
     if (result.error) throw new Error(`${expectedRole} ${label} backend assertion failed: ${result.error.message}`);
@@ -254,6 +254,11 @@ const interfaceActionExecutors = {
   },
   start_sale: async ({ page }) => {
     await page.getByRole("button", { name: "Start checkout", exact: true }).click();
+    await page.getByRole("heading", { name: "Start a new sale", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Browse catalog", exact: true }).click();
+    await page.getByRole("heading", { name: "Checkout opened", exact: true }).waitFor();
+    await page.getByRole("button", { name: /Continue to checkout/ }).click();
+    await page.getByRole("button", { name: "Products", exact: true }).click();
     await page.getByRole("heading", { name: "Products", exact: true }).waitFor();
     const product = await addFixtureProductToCheckout(page);
     await page.getByRole("button", { name: "Checkout", exact: true }).click();
@@ -995,6 +1000,13 @@ for (const role of selectedRoles) {
       await page.waitForURL(/\/workspace/, { timeout: 30000 });
     }
     await page.waitForURL(/\/workspace/, { timeout: 30000 });
+    for (let attempt = 0; attempt < 3 && !(await page.locator("html[data-app-ready='true']").count()); attempt += 1) {
+      const assignmentBoundary = page.getByText("Your account is secure.", { exact: true });
+      if (await assignmentBoundary.count()) {
+        await page.waitForTimeout(1000);
+        await page.reload({ waitUntil: "networkidle" });
+      }
+    }
     await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
     if (!backendAssertions[role]) throw new Error(`${role} detailed course has no backend assertion contract yet.`);
     roleBackendEvidence = await backendAssertions[role]();
