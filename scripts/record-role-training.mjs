@@ -340,7 +340,13 @@ const interfaceActionExecutors = {
     const panel = page.locator(".drawer-open");
     await panel.locator(`option[value="${register.id}"]`).waitFor({ state: "attached" });
     const registerSelect = panel.getByLabel("Register", { exact: true });
-    if ((await registerSelect.inputValue()) !== register.id) await registerSelect.selectOption(register.id);
+    await registerSelect.evaluate((element, value) => {
+      const select = element;
+      if (select.value !== value) {
+        select.value = value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }, register.id);
     await panel.getByLabel("Opening float", { exact: true }).fill("100");
     await panel.getByLabel("Note", { exact: true }).fill(`Release course ${role}`);
     await panel.getByRole("button", { name: "Open drawer", exact: true }).click();
@@ -812,6 +818,7 @@ const chapterAssertions = async (page, role, label, backend) => {
     return { chapter: label, vendorId: backend.vendorId, vendorName: backend.vendorName, backendProducts: backend.products, backendOrderItems: backend.orderItems, backendLeases: backend.leases, backendLedger: backend.ledger };
   }
   if (role === "vendor" && label === "My Products") {
+    if (backend.products) await page.getByRole("heading", { name: new RegExp(process.env.TRAINING_FIXTURE_RUN_ID) }).waitFor({ state: "visible", timeout: 30000 });
     const visibleProducts = await page.locator(".product-grid .product").count();
     if (visibleProducts !== backend.products) throw new Error(`Vendor Products mismatch: UI ${visibleProducts}, backend ${backend.products}.`);
     await page.getByText("Vendor catalog editing is still in development.", { exact: false }).first().waitFor({ state: backend.products ? "visible" : "hidden", timeout: 5000 }).catch(() => {});
@@ -1046,9 +1053,13 @@ for (const role of selectedRoles) {
     const destinations = edition === "reel" ? roleConfig[role].allowed.slice(0, 2) : roleConfig[role].allowed;
     for (const label of destinations) {
       const expectedHeading = label === "My Products" ? "Products" : label;
-      const button = page.locator(".shell > aside nav").getByRole("button", { name: label, exact: true });
-      await button.waitFor({ state: "attached" });
-      await button.evaluate((element) => element.click());
+      const navigated = await page.evaluate((target) => {
+        const button = [...document.querySelectorAll(".shell > aside nav button")].find((element) => element.textContent?.trim().replace(/\d+$/, "").trim() === target);
+        if (!button) return false;
+        button.click();
+        return true;
+      }, label);
+      if (!navigated) throw new Error(`${role} navigation does not contain ${label}`);
       await page.waitForTimeout(400);
       const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
       if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${expectedHeading} heading`);

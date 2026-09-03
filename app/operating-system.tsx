@@ -780,7 +780,7 @@ export function OperatingSystem() {
             </>
           </ListView>
         )}
-        {active === "My Orders" && <CustomerOrders />}
+        {active === "My Orders" && tenantContext && <CustomerOrders tenantContext={tenantContext} />}
         {active === "Aftercare" && <AftercareCenter />}
         {active === "Products" && (
           <ListView
@@ -804,7 +804,7 @@ export function OperatingSystem() {
         {active === "Shared Commerce" && <SharedCommerceCenter />}
         {active === "Delivery" && <DeliveryCenter />}
         {active === "Checkout" && tenantContext && <CheckoutCenter openSale={() => setSale(true)} tenantContext={tenantContext} />}
-        {active === "Cash Drawer" && <CashDrawerCenter go={go} />}
+        {active === "Cash Drawer" && tenantContext && <CashDrawerCenter go={go} context={tenantContext} />}
         {active === "Staff" && (
           <ListView
             eyebrow="TODAY'S TEAM"
@@ -4239,11 +4239,10 @@ const drawerCopy = {
   es: { title: "Caja de efectivo", subtitle: "Abra con un fondo contado, registre cada movimiento y cierre contra el total del sistema.", register: "Caja", location: "Ubicación", create: "Agregar caja", opening: "Fondo inicial", open: "Abrir caja", paidIn: "Entrada", paidOut: "Salida", reason: "Motivo", record: "Registrar movimiento", counted: "Efectivo contado", close: "Cerrar y conciliar", expected: "Esperado", variance: "Diferencia", noDrawer: "No hay caja abierta", checkout: "Ir al cobro", history: "Historial reciente", note: "Nota", production: "Inicie sesión como propietario, gerente o empleado para usar las cajas de producción." },
 } as const;
 
-function CashDrawerCenter({ go }: { go: (destination: string) => void }) {
+function CashDrawerCenter({ go, context }: { go: (destination: string) => void; context: TenantContext }) {
   const { value: store } = useStoreSettings();
   const locale = (store.locale || "en").slice(0, 2) as keyof typeof drawerCopy;
   const copy = drawerCopy[locale] || drawerCopy.en;
-  const [context, setContext] = useState<TenantContext>({ mode: "preview", storeId: null, userId: null, role: null, reason: copy.production });
   const [registers, setRegisters] = useState<CashRegisterRecord[]>([]);
   const [sessions, setSessions] = useState<CashDrawerSessionRecord[]>([]);
   const [registerName, setRegisterName] = useState("");
@@ -4266,7 +4265,7 @@ function CashDrawerCenter({ go }: { go: (destination: string) => void }) {
     setSessions(workspace.sessions);
     if (!registerId && workspace.registers[0]) setRegisterId(workspace.registers[0].id);
   };
-  useEffect(() => { void resolveTenantContext().then(async (next) => { setContext(next); try { await refresh(next); } catch (error) { setMessage(error instanceof Error ? error.message : copy.production); } }); }, []);
+  useEffect(() => { void refresh(context).catch((error) => setMessage(error instanceof Error ? error.message : copy.production)); }, [context]);
   const perform = async (work: () => Promise<void>, success: string) => {
     setBusy(true); setMessage("");
     try { await work(); await refresh(context); setMessage(success); }
@@ -4756,7 +4755,7 @@ function CheckoutCenter({ openSale, tenantContext }: { openSale: () => void; ten
   );
 }
 
-function CustomerOrders() {
+function CustomerOrders({ tenantContext }: { tenantContext: TenantContext }) {
   const { value: currentPolicy } = useRetailPolicy();
   const [order, setOrder] = useState<{
     rawId?: string;
@@ -4780,17 +4779,15 @@ function CustomerOrders() {
   const [returnStarted, setReturnStarted] = useState(false);
   const [returnMessage, setReturnMessage] = useState("");
   const [returnSubmitting, setReturnSubmitting] = useState(false);
-  const [tenantContext, setTenantContext] = useState<TenantContext | null>(null);
   const [pickupCredential, setPickupCredential] = useState<{ code: string; expiresAt: string } | null>(null);
   const [paymentMade, setPaymentMade] = useState(false);
   useEffect(() => {
     const stored = localStorage.getItem("br-latest-order:blossom-royall");
     if (stored) setOrder({ ...JSON.parse(stored), source: "device" });
-    void resolveTenantContext().then(async (context) => {
-      setTenantContext(context);
-      if (context.mode === "production" && context.role === "customer") {
+    void (async () => {
+      if (tenantContext.mode === "production" && tenantContext.role === "customer") {
         try {
-          const [latest] = await loadCustomerOrderHistory(context);
+          const [latest] = await loadCustomerOrderHistory(tenantContext);
           if (latest) {
             setOrder({
               rawId: latest.id,
@@ -4807,7 +4804,7 @@ function CustomerOrders() {
               fulfillmentEvents: latest.fulfillmentEvents,
             });
             if (latest.fulfillmentMethod === "pickup") {
-              setPickupCredential(await loadCustomerPickupCode(context, latest.id));
+              setPickupCredential(await loadCustomerPickupCode(tenantContext, latest.id));
             }
           }
         } finally {
@@ -4816,8 +4813,8 @@ function CustomerOrders() {
       } else {
         setLoading(false);
       }
-    });
-  }, []);
+    })();
+  }, [tenantContext]);
   if (loading && !order)
     return (
       <ListView
