@@ -485,6 +485,50 @@ const interfaceActionExecutors = {
     if (persisted.customer_id !== trainingUserIdFor("customer")) throw new Error("Return history lost its customer attribution.");
     return { control: "Customer return history", result: `Return ${persisted.id} remains attached to the customer and order with status ${persisted.status}`, returnId: persisted.id };
   },
+  complete_measurements: async ({ page }) => {
+    const values = [["Bust", "36"], ["Natural waist", "30"], ["Hips", "40"], ["Inseam", "30"], ["Shoulder width", "15"]];
+    for (let index = 0; index < values.length; index += 1) {
+      const [label, value] = values[index];
+      await page.getByRole("spinbutton", { name: label, exact: true }).fill(value);
+      if (index < values.length - 1) await page.getByRole("button", { name: "Next measurement", exact: true }).click();
+    }
+    return { control: "Guided measurements", result: "Five required apparel measurements completed through the guided interface" };
+  },
+  record_consent: async ({ page }) => {
+    await page.getByLabel(/I consent to saving/).check();
+    return { control: "Fit profile consent", result: "Customer consent is selected before persistence" };
+  },
+  save_fit: async ({ page, role }) => {
+    await page.getByRole("button", { name: "Save My Fit", exact: true }).click();
+    await page.getByText("Saved to your account.", { exact: false }).waitFor();
+    const profiles = assertNoError(await trainingAdmin.from("measurement_profiles").select("id, units, measurements").eq("customer_id", trainingUserIdFor(role)).eq("label", "My Fit"), "Customer My Fit profile");
+    if (profiles.length !== 1 || profiles[0].measurements?.consent !== true) throw new Error("My Fit was not persisted once with explicit consent.");
+    workflowEvidence.set("customer:fit-profile", profiles[0]);
+    return { control: "Save My Fit", result: `Profile ${profiles[0].id} persisted with consent`, profileId: profiles[0].id };
+  },
+  shop_with_fit: async ({ page }) => {
+    await page.getByRole("button", { name: "Shop with My Fit", exact: true }).click();
+    await page.getByLabel("My Fit shopping status").waitFor();
+    await page.getByText("Your fit passport is ready", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "My Fit", exact: true }).click();
+    await page.getByRole("heading", { name: "Measure once. Shop with confidence.", exact: true }).waitFor();
+    return { control: "Shop with My Fit", result: "Saved fit passport appeared in shopping and the course returned to My Fit" };
+  },
+  export_fit: async ({ page }) => {
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export My Fit", exact: true }).click();
+    const artifact = await download;
+    if (artifact.suggestedFilename() !== "blossom-royall-my-fit.json") throw new Error(`Unexpected My Fit export name: ${artifact.suggestedFilename()}`);
+    return { control: "Export My Fit", result: `${artifact.suggestedFilename()} downloaded through the interface` };
+  },
+  delete_fit: async ({ page, role }) => {
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete My Fit", exact: true }).click();
+    await page.getByText(/My Fit was deleted from this device/).waitFor();
+    const remaining = assertNoError(await trainingAdmin.from("measurement_profiles").select("id").eq("customer_id", trainingUserIdFor(role)).eq("label", "My Fit"), "Remaining My Fit profiles");
+    if (remaining.length) throw new Error("My Fit account profile remains after deletion.");
+    return { control: "Delete My Fit", result: "Device and account profile deletion verified" };
+  },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
 };
