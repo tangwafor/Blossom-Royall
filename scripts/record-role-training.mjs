@@ -26,6 +26,7 @@ const courseActionCoverageComplete = false;
 const workflowEvidence = new Map();
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const trainingUserIdFor = (role) => process.env[`TRAINING_${role.toUpperCase()}_USER_ID`] || trainingUserId;
+const trainingCredentialFor = (role, field) => process.env[`TRAINING_${role.toUpperCase()}_${field}`];
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
 const date = new Date().toISOString().slice(0, 10);
 const artifactRoot = join(process.cwd(), "artifacts", "training", `${date}-${commit}`);
@@ -43,6 +44,15 @@ const trainingAdmin = trainingServerKey && trainingSupabaseUrl
 const assertNoError = (result, label) => {
   if (result.error) throw new Error(`${label} backend assertion failed: ${result.error.message}`);
   return result.data;
+};
+
+const authenticatedTrainingClient = async (role) => {
+  const email = trainingCredentialFor(role, "EMAIL");
+  const password = trainingCredentialFor(role, "PASSWORD");
+  if (!trainingSupabaseUrl || !trainingServerKey || !email || !password) throw new Error(`${role} sealed fixture credentials are unavailable.`);
+  const client = createClient(trainingSupabaseUrl, trainingServerKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  assertNoError(await client.auth.signInWithPassword({ email, password }), `${role} sealed fixture sign in`);
+  return client;
 };
 
 const memberBackendAssertion = async (expectedRole) => {
@@ -259,7 +269,15 @@ const interfaceActionExecutors = {
     const receiptLabel = await receipt.getAttribute("aria-label");
     const receiptNo = receiptLabel?.replace("Receipt for order ", "");
     if (!receiptNo) throw new Error("Checkout completed without a visible receipt number.");
-    const order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("receipt_no", receiptNo).single(), "Checkout order");
+    let order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("receipt_no", receiptNo).single(), "Checkout order");
+    if (role === "customer" && order.payment_status !== "succeeded") {
+      const payment = assertNoError(await trainingAdmin.from("payments").select("id").eq("order_id", order.id).single(), "Customer course payment");
+      const staffClient = await authenticatedTrainingClient("staff");
+      assertNoError(await staffClient.rpc("review_pending_payment", { p_payment_id: payment.id, p_decision: "verified", p_verification_note: "Disposable release course prerequisite" }), "Customer course payment verification");
+      await staffClient.auth.signOut();
+      order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status, status").eq("id", order.id).single(), "Confirmed customer course order");
+      if (order.payment_status !== "succeeded" || order.status !== "confirmed") throw new Error("Customer course payment prerequisite did not confirm the disposable order.");
+    }
     workflowEvidence.set(`${role}:order`, order);
     return { control: "Place order", result: `Order ${order.receipt_no} verified in the database`, orderId: order.id };
   },
@@ -417,6 +435,55 @@ const interfaceActionExecutors = {
     if (payments.length !== 2 || payments.some((payment) => payment.status !== "paid" || !payment.receipt_no)) throw new Error("Vendor does not have both finalized reviewer decisions.");
     for (const payment of payments) await page.getByText(payment.receipt_no, { exact: true }).waitFor();
     return { control: "Reviewed rent history", result: `Manager and owner receipts are visible`, receiptNumbers: payments.map((payment) => payment.receipt_no) };
+  },
+  start_return: async ({ page, role }) => {
+    const order = workflowEvidence.get(`${role}:order`);
+    if (!order) throw new Error("Customer return requires the verified disposable order.");
+    await page.getByRole("button", { name: "Return or exchange", exact: true }).first().click();
+    await page.getByLabel("Return reason").selectOption({ label: "Fit was not right" });
+    await page.getByLabel("Preferred return resolution").selectOption("exchange");
+    await page.getByRole("button", { name: "Start request", exact: true }).click();
+    await page.getByText("Request received", { exact: true }).waitFor();
+    const request = assertNoError(await trainingAdmin.from("return_requests").select("id, order_id, customer_id, status, requested_resolution").eq("order_id", order.id).eq("customer_id", trainingUserIdFor(role)).single(), "Customer return request");
+    if (request.status !== "requested" || request.requested_resolution !== "exchange") throw new Error("Customer return request did not preserve its requested state and resolution.");
+    workflowEvidence.set("course:return", request);
+    return { control: "Start request", result: `Return ${request.id} recorded for ${order.receipt_no}`, returnId: request.id };
+  },
+  review_return: async ({ page }) => {
+    const request = workflowEvidence.get("course:return") || assertNoError(await trainingAdmin.from("return_requests").select("id, status, reason, requested_resolution").eq("customer_id", trainingUserIdFor("customer")).single(), "Shared course return");
+    const item = page.locator('[aria-label="Production return queue"] li', { hasText: request.id.slice(0, 8).toUpperCase() });
+    await item.waitFor();
+    workflowEvidence.set("course:return", request);
+    return { control: "Production return queue", result: `Return ${request.id} is visible with status ${request.status}`, returnId: request.id };
+  },
+  advance_authorized_return: async ({ page, role }) => {
+    const request = workflowEvidence.get("course:return");
+    if (!request) throw new Error("Staff return action has no shared customer request.");
+    const item = page.locator('[aria-label="Production return queue"] li', { hasText: request.id.slice(0, 8).toUpperCase() });
+    await item.getByRole("button", { name: "Start review", exact: true }).click();
+    await page.getByText(`Return ${request.id.slice(0, 8).toUpperCase()} is now reviewing.`, { exact: true }).waitFor();
+    const updated = assertNoError(await trainingAdmin.from("return_requests").select("id, status, reviewed_by").eq("id", request.id).single(), "Staff return review");
+    if (updated.status !== "reviewing" || updated.reviewed_by !== trainingUserIdFor(role)) throw new Error("Staff return review was not persisted with accountability.");
+    workflowEvidence.set("course:return", updated);
+    return { control: "Start review", result: `Return ${updated.id} advanced to reviewing`, returnId: updated.id };
+  },
+  approve_or_reject_return: async ({ page, role }) => {
+    const request = workflowEvidence.get("course:return");
+    if (!request) throw new Error("Owner return action has no shared customer request.");
+    const item = page.locator('[aria-label="Production return queue"] li', { hasText: request.id.slice(0, 8).toUpperCase() });
+    await item.getByRole("button", { name: "Approve", exact: true }).click();
+    await page.getByText(`Return ${request.id.slice(0, 8).toUpperCase()} is now approved.`, { exact: true }).waitFor();
+    const updated = assertNoError(await trainingAdmin.from("return_requests").select("id, status, reviewed_by").eq("id", request.id).single(), "Owner return approval");
+    if (updated.status !== "approved" || updated.reviewed_by !== trainingUserIdFor(role)) throw new Error("Owner return approval was not persisted with accountability.");
+    workflowEvidence.set("course:return", updated);
+    return { control: "Approve", result: `Return ${updated.id} advanced to approved`, returnId: updated.id };
+  },
+  verify_customer_history: async () => {
+    const request = workflowEvidence.get("course:return");
+    if (!request) throw new Error("No shared return is available for customer history evidence.");
+    const persisted = assertNoError(await trainingAdmin.from("return_requests").select("id, customer_id, order_id, status").eq("id", request.id).single(), "Customer return history");
+    if (persisted.customer_id !== trainingUserIdFor("customer")) throw new Error("Return history lost its customer attribution.");
+    return { control: "Customer return history", result: `Return ${persisted.id} remains attached to the customer and order with status ${persisted.status}`, returnId: persisted.id };
   },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
