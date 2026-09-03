@@ -5548,7 +5548,7 @@ function MyFit({ go }: { go: (destination: string) => void }) {
         {savedAt && <p className="fit-updated"><Clock3 />{copy.updated}: {new Date(savedAt).toLocaleString(locale)}</p>}
         <footer>
           <p className="fit-jewelry-result"><b>{recommendedRingSize}</b><small>Ring fit varies by band width, knuckle shape, temperature, and regional sizing. Confirm valuable or custom rings with the seller or a jeweler.</small></p>
-          <button className="primary" type="button" disabled={!consent || requiredFitFields.some((item) => measurements[item] <= 0)} onClick={() => void save()}><Check />{copy.save}</button>
+          <button className="primary" type="button" disabled={!tenantContext || !consent || requiredFitFields.some((item) => measurements[item] <= 0)} onClick={() => void save()}><Check />{copy.save}</button>
           <button type="button" disabled={!notice} onClick={() => go("Customer Shop")}>{copy.shop}<ArrowUpRight /></button>
           <button type="button" disabled={!savedAt} onClick={exportProfile}><Download />{copy.export}</button>
           <button type="button" disabled={!savedAt} onClick={() => void deleteProfile()}><Trash2 />{copy.remove}</button>

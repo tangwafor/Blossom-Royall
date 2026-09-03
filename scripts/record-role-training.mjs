@@ -289,7 +289,10 @@ const interfaceActionExecutors = {
     const receiptLabel = await receipt.getAttribute("aria-label");
     const receiptNo = receiptLabel?.replace("Receipt for order ", "");
     if (!receiptNo) throw new Error("Checkout completed without a visible receipt number.");
-    let order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("receipt_no", receiptNo).single(), "Checkout order");
+    const reference = `QA-${process.env.TRAINING_FIXTURE_RUN_ID}-${role}`;
+    const paymentRow = await waitForAdminRow(() => trainingAdmin.from("payments").select("order_id").eq("provider_ref", reference).maybeSingle(), "Checkout payment");
+    let order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("id", paymentRow.order_id).single(), "Checkout order");
+    if (order.receipt_no !== receiptNo) throw new Error(`Visible receipt ${receiptNo} does not match persisted receipt ${order.receipt_no}.`);
     if (role === "customer" && order.payment_status !== "succeeded") {
       const payment = assertNoError(await trainingAdmin.from("payments").select("id").eq("order_id", order.id).single(), "Customer course payment");
       const staffClient = await authenticatedTrainingClient("staff");
@@ -519,7 +522,13 @@ const interfaceActionExecutors = {
     return { control: "Fit profile consent", result: "Customer consent is selected before persistence" };
   },
   save_fit: async ({ page, role }) => {
-    await page.getByRole("button", { name: "Save My Fit", exact: true }).click();
+    const saveButton = page.getByRole("button", { name: "Save My Fit", exact: true });
+    await saveButton.waitFor({ state: "visible" });
+    await page.waitForFunction(() => {
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.includes("Save My Fit"));
+      return button && !button.disabled;
+    });
+    await saveButton.click();
     await page.getByText("Saved to your account.", { exact: false }).waitFor();
     const profiles = assertNoError(await trainingAdmin.from("measurement_profiles").select("id, units, measurements").eq("customer_id", trainingUserIdFor(role)).eq("label", "My Fit"), "Customer My Fit profile");
     if (profiles.length !== 1 || profiles[0].measurements?.consent !== true) throw new Error("My Fit was not persisted once with explicit consent.");
@@ -572,6 +581,10 @@ const interfaceActionExecutors = {
     const form = page.locator(".vendor-operations-form");
     const nextName = `${current.name} ${role}`;
     await form.getByLabel("Public brand name").fill(nextName);
+    const contact = form.getByLabel("Contact person");
+    if (!(await contact.inputValue())) await contact.fill("Release Course Reviewer");
+    const email = form.getByLabel("Email", { exact: true });
+    if (!(await email.inputValue())) await email.fill(`${role}.${process.env.TRAINING_FIXTURE_RUN_ID}@blossomroyall.invalid`);
     await form.getByRole("button", { name: "Save vendor", exact: true }).click();
     await form.waitFor({ state: "hidden" });
     const updated = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("id", target.id).eq("name", nextName).maybeSingle(), `${role} updated vendor`);
