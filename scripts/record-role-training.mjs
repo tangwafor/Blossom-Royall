@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { roleCourseMatrix } from "./role-course-matrix.mjs";
 
-const roles = ["owner", "manager", "staff", "vendor", "customer"];
+const roles = ["customer", "staff", "manager", "owner", "vendor"];
 const requestedRole = process.env.TRAINING_ROLE || "all";
 const edition = process.env.TRAINING_EDITION || "detailed";
 const baseUrl = process.env.TRAINING_BASE_URL || "http://127.0.0.1:3002";
@@ -264,7 +264,12 @@ const interfaceActionExecutors = {
     return { control: "Place order", result: `Order ${order.receipt_no} verified in the database`, orderId: order.id };
   },
   verify_receipt: async ({ page, role, chapter }) => {
-    if (chapter.label === "Rent") return { control: "Rent receipt", result: "Rent receipt visibility is verified with the rent workflow" };
+    if (chapter.label === "Rent") {
+      const payments = assertNoError(await trainingAdmin.from("rent_payments").select("id, receipt_no, status, lease_id").in("lease_id", [process.env.TRAINING_FIXTURE_LEASE_ID, process.env.TRAINING_FIXTURE_REVIEW_LEASE_ID]).eq("status", "paid"), "Rent receipts");
+      if (!payments.length || payments.some((payment) => !payment.receipt_no)) throw new Error(`${role} rent course has no finalized receipt evidence.`);
+      for (const payment of payments) await page.getByText(payment.receipt_no, { exact: true }).waitFor();
+      return { control: "Rent receipt", result: `${payments.length} finalized rent receipt records match the interface`, receiptNumbers: payments.map((payment) => payment.receipt_no) };
+    }
     const order = workflowEvidence.get(`${role}:order`);
     if (!order) throw new Error(`${role} checkout has no verified order for receipt evidence.`);
     await page.getByRole("article", { name: `Receipt for order ${order.receipt_no}` }).waitFor();
@@ -365,6 +370,53 @@ const interfaceActionExecutors = {
     if (!order) throw new Error(`${role} has no fulfillment state to reconcile.`);
     const persisted = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, fulfillment_status, status").eq("id", order.id).single(), "Cross role order status");
     return { control: "Shared order state", result: `${persisted.receipt_no} is ${persisted.fulfillment_status} for every authorized role`, orderId: persisted.id };
+  },
+  review_rent_payment: async ({ page, role }) => {
+    const leaseId = role === "manager" ? process.env.TRAINING_FIXTURE_LEASE_ID : process.env.TRAINING_FIXTURE_REVIEW_LEASE_ID;
+    if (!leaseId) throw new Error(`${role} rent review requires its disposable lease fixture.`);
+    const pending = assertNoError(await trainingAdmin.from("rent_payments").select("id, amount, status").eq("lease_id", leaseId).eq("status", "pending").single(), `${role} pending rent payment`);
+    const article = page.locator(".agreement-ledger article", { hasText: `$${Number(pending.amount).toFixed(2)}` });
+    await article.getByRole("button", { name: "Confirm paid", exact: true }).click();
+    const receipt = page.getByText(/^BRR-/).first();
+    await receipt.waitFor();
+    const reviewed = assertNoError(await trainingAdmin.from("rent_payments").select("id, status, receipt_no, reviewed_by").eq("id", pending.id).single(), `${role} reviewed rent payment`);
+    if (reviewed.status !== "paid" || reviewed.reviewed_by !== trainingUserIdFor(role) || !reviewed.receipt_no) throw new Error(`${role} rent review was not persisted with accountability.`);
+    workflowEvidence.set(`${role}:rent`, reviewed);
+    return { control: "Confirm paid", result: `${reviewed.receipt_no} approved by ${role}`, paymentId: reviewed.id };
+  },
+  verify_vendor_rent_status: async ({ role }) => {
+    const reviewed = workflowEvidence.get(`${role}:rent`);
+    if (!reviewed) throw new Error(`${role} has no reviewed rent payment evidence.`);
+    const payment = assertNoError(await trainingAdmin.from("rent_payments").select("id, status, receipt_no").eq("id", reviewed.id).single(), "Shared vendor rent status");
+    if (payment.status !== "paid" || !payment.receipt_no) throw new Error("Vendor rent status does not match the reviewer decision.");
+    return { control: "Shared rent record", result: `${payment.receipt_no} is paid in the vendor and reviewer data source`, paymentId: payment.id };
+  },
+  submit_rent_evidence: async ({ page, role }) => {
+    const leaseId = process.env.TRAINING_FIXTURE_SUBMIT_LEASE_ID;
+    if (!leaseId) throw new Error("Vendor rent submission requires the disposable submission lease.");
+    const article = page.locator(".agreement-ledger article", { hasText: "$850.00" });
+    await article.getByLabel("Payment method", { exact: true }).fill("Bank transfer");
+    const reference = `QA-C-${process.env.TRAINING_FIXTURE_RUN_ID}`;
+    await article.getByLabel("Confirmation reference", { exact: true }).fill(reference);
+    await article.getByRole("button", { name: "Submit payment", exact: true }).click();
+    await page.getByText("Payment submitted for owner verification.", { exact: false }).waitFor();
+    const payment = assertNoError(await trainingAdmin.from("rent_payments").select("id, status, provider_reference, submitted_by").eq("lease_id", leaseId).eq("status", "pending").single(), "Vendor rent submission");
+    if (payment.provider_reference !== reference || payment.submitted_by !== trainingUserIdFor(role)) throw new Error("Vendor rent evidence was not persisted with its reference and actor.");
+    workflowEvidence.set("vendor:rent-submission", payment);
+    return { control: "Submit payment", result: `Pending payment ${payment.id} recorded with reference ${reference}`, paymentId: payment.id };
+  },
+  verify_pending_status: async () => {
+    const payment = workflowEvidence.get("vendor:rent-submission");
+    if (!payment) throw new Error("Vendor has no submitted rent payment to verify.");
+    const persisted = assertNoError(await trainingAdmin.from("rent_payments").select("id, status").eq("id", payment.id).single(), "Pending vendor rent status");
+    if (persisted.status !== "pending") throw new Error(`Vendor rent submission status is ${persisted.status}, not pending.`);
+    return { control: "Pending status", result: `${persisted.id} remains pending owner verification` };
+  },
+  verify_owner_review: async ({ page }) => {
+    const payments = assertNoError(await trainingAdmin.from("rent_payments").select("id, status, receipt_no, lease_id").in("lease_id", [process.env.TRAINING_FIXTURE_LEASE_ID, process.env.TRAINING_FIXTURE_REVIEW_LEASE_ID]), "Reviewed vendor rent records");
+    if (payments.length !== 2 || payments.some((payment) => payment.status !== "paid" || !payment.receipt_no)) throw new Error("Vendor does not have both finalized reviewer decisions.");
+    for (const payment of payments) await page.getByText(payment.receipt_no, { exact: true }).waitFor();
+    return { control: "Reviewed rent history", result: `Manager and owner receipts are visible`, receiptNumbers: payments.map((payment) => payment.receipt_no) };
   },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),

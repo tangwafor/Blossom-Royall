@@ -52,6 +52,8 @@ export async function createRoleCourseFixtures() {
   let productId = null;
   let variantId = null;
   let leaseId = null;
+  let leaseReviewId = null;
+  let leaseSubmitId = null;
   try {
     for (const role of roles) {
       const email = `${role}.${runId}@blossomroyall.invalid`;
@@ -67,6 +69,8 @@ export async function createRoleCourseFixtures() {
     productId = randomUUID();
     variantId = randomUUID();
     leaseId = randomUUID();
+    leaseReviewId = randomUUID();
+    leaseSubmitId = randomUUID();
     await query(`begin;
       set local role authenticated;
       select set_config('request.jwt.claim.sub','${identities.owner.userId}',true);
@@ -78,16 +82,22 @@ export async function createRoleCourseFixtures() {
       select public.adjust_catalog_stock('${variantId}',5,'Opening training fixture stock');
       select public.review_catalog_product('${productId}','published','');
       insert into public.leases(id,vendor_id,space_code,monthly_rent,deposit,start_date,end_date,status,signed_at,rent_due_day)
-      values('${leaseId}','${vendorId}','QA-${runId}',800,1600,current_date,current_date + 365,'signed',now(),1);
+      values
+        ('${leaseId}','${vendorId}','QA-A-${runId}',800,1600,current_date,current_date + 365,'signed',now(),1),
+        ('${leaseReviewId}','${vendorId}','QA-B-${runId}',825,1650,current_date,current_date + 365,'signed',now(),1),
+        ('${leaseSubmitId}','${vendorId}','QA-C-${runId}',850,1700,current_date,current_date + 365,'signed',now(),1);
+      select set_config('request.jwt.claim.sub','${identities.vendor.userId}',true);
+      select public.submit_vendor_rent_payment('${leaseId}',date_trunc('month',current_date)::date,800,'Bank transfer','QA-A-${runId}');
+      select public.submit_vendor_rent_payment('${leaseReviewId}',date_trunc('month',current_date)::date,825,'Bank transfer','QA-B-${runId}');
       commit;`);
-    return { admin, query, url, serverKey, runId, storeId, vendorId, productId, variantId, leaseId, identities };
+    return { admin, query, url, serverKey, runId, storeId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, identities };
   } catch (error) {
-    await cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, identities }).catch(() => {});
+    await cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, identities }).catch(() => {});
     throw error;
   }
 }
 
-export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, identities }) {
+export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, identities }) {
   if (query) {
     const identityIds = Object.values(identities).map((identity) => `'${identity.userId}'`).join(",");
     const cleanup = [
@@ -104,13 +114,17 @@ export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId,
       identityIds && `delete from public.cash_drawer_sessions where opened_by in (${identityIds});`,
       identityIds && `delete from public.cash_registers where created_by in (${identityIds});`,
       leaseId && `delete from public.rent_payments where lease_id='${leaseId}';`,
+      leaseReviewId && `delete from public.rent_payments where lease_id='${leaseReviewId}';`,
+      leaseSubmitId && `delete from public.rent_payments where lease_id='${leaseSubmitId}';`,
       leaseId && `delete from public.leases where id='${leaseId}';`,
+      leaseReviewId && `delete from public.leases where id='${leaseReviewId}';`,
+      leaseSubmitId && `delete from public.leases where id='${leaseSubmitId}';`,
       variantId && `delete from public.inventory_movements where variant_id='${variantId}';`,
       variantId && `delete from public.product_variants where id='${variantId}';`,
       productId && `delete from public.products where id='${productId}';`,
       vendorId && `delete from public.vendors where id='${vendorId}';`,
     ].filter(Boolean);
-    const auditIds = [vendorId, productId, variantId, leaseId].filter(Boolean).map((id) => `'${id}'`).join(",");
+    const auditIds = [vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId].filter(Boolean).map((id) => `'${id}'`).join(",");
     if (auditIds) cleanup.push(`delete from public.audit_log where entity_id in (${auditIds});`);
     if (cleanup.length) await query(`begin; ${cleanup.join("\n")} commit;`);
   }
@@ -121,7 +135,7 @@ export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId,
   const [leakedVendors, leakedProducts, leakedLeases] = await Promise.all([
     admin.from("vendors").select("id").ilike("name", `%${runId}%`),
     admin.from("products").select("id").ilike("name", `%${runId}%`),
-    admin.from("leases").select("id").eq("space_code", `QA-${runId}`),
+    admin.from("leases").select("id").in("space_code", [`QA-A-${runId}`, `QA-B-${runId}`, `QA-C-${runId}`]),
   ]).then((results) => results.map((result, index) => requireData(result, ["Fixture vendor", "Fixture product", "Fixture lease"][index])));
   if (leakedUsers.length || leakedVendors.length || leakedProducts.length || leakedLeases.length) throw new Error(`Role course cleanup leaked records for ${runId}.`);
 }
