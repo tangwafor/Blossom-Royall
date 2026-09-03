@@ -425,9 +425,12 @@ const interfaceActionExecutors = {
     const action = row.getByRole("button", { name: /Start preparation|Mark ready|Send for delivery|Confirm pickup|Confirm delivery/ });
     const label = await action.innerText();
     await action.click();
+    await waitForAdminRow(
+      () => trainingAdmin.from("order_fulfillment_events").select("id, event_type, actor_user_id").eq("order_id", order.id).eq("actor_user_id", trainingUserIdFor(role)).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      `${role} fulfillment event`,
+    );
     const updated = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status, status").eq("id", order.id).single(), "Advanced course order");
     const events = assertNoError(await trainingAdmin.from("order_fulfillment_events").select("id, event_type, actor_user_id").eq("order_id", order.id).order("created_at", { ascending: true }), "Course fulfillment events");
-    if (!events.some((event) => event.actor_user_id === trainingUserIdFor(role))) throw new Error(`${role} fulfillment event was not recorded.`);
     workflowEvidence.set(`${role}:order`, updated);
     workflowEvidence.set("course:shared-order", updated);
     return { control: label, result: `${updated.receipt_no} advanced to ${updated.fulfillment_status}`, orderId: updated.id, eventCount: events.length };
@@ -468,8 +471,11 @@ const interfaceActionExecutors = {
     const reference = `QA-C-${process.env.TRAINING_FIXTURE_RUN_ID}`;
     await article.getByLabel("Confirmation reference", { exact: true }).fill(reference);
     await article.getByRole("button", { name: "Submit payment", exact: true }).click();
-    await page.getByText("Payment submitted for owner verification.", { exact: false }).waitFor();
-    const payment = assertNoError(await trainingAdmin.from("rent_payments").select("id, status, provider_reference, submitted_by").eq("lease_id", leaseId).eq("status", "pending").single(), "Vendor rent submission");
+    const payment = await waitForAdminRow(
+      () => trainingAdmin.from("rent_payments").select("id, status, provider_reference, submitted_by").eq("lease_id", leaseId).eq("status", "pending").maybeSingle(),
+      "Vendor rent submission",
+    );
+    await page.getByText("Submitted and waiting for owner verification.", { exact: true }).waitFor();
     if (payment.provider_reference !== reference || payment.submitted_by !== trainingUserIdFor(role)) throw new Error("Vendor rent evidence was not persisted with its reference and actor.");
     workflowEvidence.set("vendor:rent-submission", payment);
     return { control: "Submit payment", result: `Pending payment ${payment.id} recorded with reference ${reference}`, paymentId: payment.id };
@@ -647,7 +653,11 @@ const interfaceActionExecutors = {
   configure_storefront: async ({ page }) => {
     const vendor = workflowEvidence.get("owner:lifecycle-vendor");
     if (!vendor) throw new Error("Storefront configuration has no lifecycle vendor target.");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
+    await navigateSidebar(page, "Vendors", "owner");
     const studio = page.locator(".storefront-studio");
+    await studio.locator(`option[value="${vendor.id}"]`).waitFor({ state: "attached", timeout: 30000 });
     await studio.getByRole("button", { name: "Create storefront", exact: true }).click();
     const form = studio.locator(".storefront-form");
     await form.getByLabel("Vendor", { exact: true }).selectOption(vendor.id);
@@ -814,7 +824,9 @@ const collectActionEvidence = async (page, role, chapter, action, backend) => {
   }
   if (action === "label_settlement_development") await page.getByText("Settlement execution and payout disbursement are still in development.", { exact: true }).waitFor();
   if (action === "label_routing_development") await page.getByText("Consolidated route planning automation is still in development.", { exact: false }).waitFor();
-  if (boundaryActions.has(action) && !executor && chapter.status === "preview" && !/preview/i.test(dataSource)) {
+  const explicitProductionPreviewBoundary = chapter.label === "Staff"
+    && await page.getByText("Production staff activation", { exact: true }).count();
+  if (boundaryActions.has(action) && !executor && chapter.status === "preview" && !/preview/i.test(dataSource) && !explicitProductionPreviewBoundary) {
     throw new Error(`${role} ${chapter.label} action ${action} did not prove the preview boundary.`);
   }
   const interaction = executor ? await executor({ page, role, chapter, backend }) : null;
