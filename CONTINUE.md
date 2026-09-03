@@ -18,6 +18,8 @@ The complete local Playwright suite passed on September 3, 2026: 114 tests passe
 
 Role course action evidence implementation is in progress. The recorder now produces visible interface and backend identity evidence for 52 of 96 unique required actions and fails on any action without a real executor. Real executors cover vendor reconciliation refresh, order search with cleanup, help search and workflow routing with return, guided tour restart, customer bag mutation with cleanup, and the visible live alert automation boundary. Owner and manager Command Center training is correctly classified as mixed because production alert automation remains in development. The remaining forty four actions are production mutations or cross role reconciliation and must use disposable QA fixtures before they can be asserted without contaminating business records.
 
+The disposable production fixture foundation is implemented in `scripts/role-course-fixtures.mjs`. It creates isolated owner, manager, staff, vendor, and customer accounts plus a dedicated QA vendor under a unique run identifier. A live production validation created all six records, cleaned them, and passed the final leak audit with no temporary users or vendors remaining. Real product, order, rent, and return fixture records are the next layer.
+
 ## Verified catalog scope
 
 1. Owner governed product and variant creation, reading, updating, and removal.
