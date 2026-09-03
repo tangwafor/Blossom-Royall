@@ -1909,7 +1909,7 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
     const mediaRightsStatus = String(data.get("mediaRightsStatus")) as TenantVendorStorefront["mediaRightsStatus"];
     if (requestedStatus === "published" && mediaRightsStatus !== "confirmed") { setNotice("Confirm media rights before publishing this storefront."); return; }
     const vendorId = String(data.get("vendorId"));
-    const current = editing || profiles.find((profile) => profile.vendorId === vendorId);
+    const current = profiles.find((profile) => profile.id === editing?.id || profile.vendorId === vendorId);
     const profile: TenantVendorStorefront = {
       id: current?.id && !current.id.startsWith("preview") ? current.id : crypto.randomUUID(), vendorId,
       slug: String(data.get("slug")).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
@@ -1921,7 +1921,7 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
       primaryColor: String(data.get("primaryColor")), secondaryColor: String(data.get("secondaryColor")),
       fulfillmentMethods: data.getAll("fulfillmentMethods").map(String), mediaRightsStatus, status: requestedStatus,
     };
-    const next = current ? profiles.map((item) => item.vendorId === vendorId ? profile : item) : [profile, ...profiles];
+    const next = current ? profiles.map((item) => item.id === current.id ? profile : item) : [profile, ...profiles];
     if (tenantContext.mode === "production") {
       void saveTenantVendorStorefront(tenantContext, profile)
         .then(() => { persist(next); setEditing(null); setNotice(`${profile.publicName} production storefront saved as ${profile.status}.`); })
