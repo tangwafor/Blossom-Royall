@@ -209,6 +209,8 @@ const courseOrderFor = async (role) => {
   return order;
 };
 
+const visibleOrderId = (order) => `#${String(order.id).slice(0, 8).toUpperCase()}`;
+
 const navigateSidebar = async (page, label, role = "current role") => {
   const navigated = await page.evaluate((target) => {
     const button = [...document.querySelectorAll(".shell > aside nav button")].find(
@@ -415,10 +417,11 @@ const interfaceActionExecutors = {
       await page.getByText(`${order.receipt_no} payment verified.`, { exact: true }).waitFor();
       order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status, status").eq("id", order.id).single(), "Verified course order");
       if (order.payment_status !== "succeeded") throw new Error(`${order.receipt_no} payment was not persisted as succeeded.`);
-      await navigateSidebar(page, "Command Center");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
       await navigateSidebar(page, "Orders");
     }
-    const row = page.locator(".table > div", { hasText: order.receipt_no }).last();
+    const row = page.locator(".table > div", { hasText: visibleOrderId(order) }).last();
     const action = row.getByRole("button", { name: /Start preparation|Mark ready|Send for delivery|Confirm pickup|Confirm delivery/ });
     const label = await action.innerText();
     await action.click();
@@ -489,7 +492,13 @@ const interfaceActionExecutors = {
     await page.getByLabel("Return reason").selectOption({ label: "Fit was not right" });
     await page.getByLabel("Preferred return resolution").selectOption("exchange");
     await page.getByRole("button", { name: "Start request", exact: true }).click();
-    await page.getByText("Request received", { exact: true }).waitFor();
+    const confirmation = page.getByText("Request received", { exact: true });
+    const failure = page.locator(".return-sheet .payment-warning");
+    const result = await Promise.race([
+      confirmation.waitFor().then(() => "confirmed"),
+      failure.waitFor().then(() => "failed"),
+    ]);
+    if (result === "failed") throw new Error(`Customer return submission failed: ${await failure.innerText()}`);
     const request = assertNoError(await trainingAdmin.from("return_requests").select("id, order_id, customer_id, status, requested_resolution").eq("order_id", order.id).eq("customer_id", trainingUserIdFor(role)).single(), "Customer return request");
     if (request.status !== "requested" || request.requested_resolution !== "exchange") throw new Error("Customer return request did not preserve its requested state and resolution.");
     workflowEvidence.set("course:return", request);
@@ -779,7 +788,7 @@ const interfaceActionExecutors = {
   },
   verify_owner_status: async ({ page }) => {
     const order = await courseOrderFor("vendor");
-    await page.getByText(order.receipt_no, { exact: true }).first().waitFor();
+    await page.getByText(visibleOrderId(order), { exact: true }).first().waitFor();
     const persisted = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, status, fulfillment_status").eq("id", order.id).single(), "Vendor shared fulfillment status");
     const events = assertNoError(await trainingAdmin.from("order_fulfillment_events").select("id, event_type, actor_user_id").eq("order_id", order.id), "Vendor visible fulfillment history");
     if (!events.length) throw new Error("Vendor order has no staff recorded fulfillment state to reconcile.");
