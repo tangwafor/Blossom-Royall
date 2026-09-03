@@ -12,9 +12,9 @@ export default defineConfig({
   reporter:'list',
   use:{baseURL:credentialRelease?credentialBaseUrl:'http://127.0.0.1:3002',trace:'on-first-retry',serviceWorkers:'block'},
   webServer:credentialRelease?undefined:{
-    command:'npm run dev -- --hostname 127.0.0.1 --port 3002',
+    command:'npm run dev -- --webpack --hostname 127.0.0.1 --port 3002',
     url:'http://127.0.0.1:3002',
-    reuseExistingServer:true,
+    reuseExistingServer:process.env.PLAYWRIGHT_REUSE_SERVER==='true',
     timeout:120000,
     env:{
       ...process.env,

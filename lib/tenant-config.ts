@@ -139,7 +139,17 @@ function useTenantSection<T extends object>(key: string, defaults: T) {
   useEffect(() => {
     const load = () => {
       const stored = localStorage.getItem(key);
-      setValue(stored ? { ...defaults, ...JSON.parse(stored) } : defaults);
+      if (!stored) {
+        setValue(defaults);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stored);
+        setValue(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { ...defaults, ...parsed } : defaults);
+      } catch {
+        localStorage.removeItem(key);
+        setValue(defaults);
+      }
     };
     load();
     window.addEventListener("br-tenant-config", load);

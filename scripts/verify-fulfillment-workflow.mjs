@@ -4,7 +4,7 @@ const [migration, fixMigration, runtime, app] = await Promise.all([
   readFile("supabase/migrations/20260828183500_order_fulfillment.sql", "utf8"),
   readFile("supabase/migrations/20260829095500_fix_fulfillment_random_bytes.sql", "utf8"),
   readFile("lib/supabase/tenant-runtime.ts", "utf8"),
-  readFile("app/page.tsx", "utf8"),
+  readFile("app/operating-system.tsx", "utf8"),
 ]);
 
 const failures = [];

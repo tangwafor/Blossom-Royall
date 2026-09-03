@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 const runtime = readFileSync("lib/supabase/tenant-runtime.ts", "utf8");
-const app = readFileSync("app/page.tsx", "utf8");
+const app = readFileSync("app/operating-system.tsx", "utf8");
 const packageData = JSON.parse(readFileSync("package.json", "utf8"));
 
 for (const fragment of [

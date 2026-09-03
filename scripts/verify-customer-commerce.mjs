@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 const [migration, runtime, app] = await Promise.all([
   readFile("supabase/migrations/20260828175500_customer_storefront_access.sql", "utf8"),
   readFile("lib/supabase/tenant-runtime.ts", "utf8"),
-  readFile("app/page.tsx", "utf8"),
+  readFile("app/operating-system.tsx", "utf8"),
 ]);
 
 const failures = [];

@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const migration = readFileSync(resolve("supabase/migrations/20260830084500_vendor_rent_workflow.sql"), "utf8").toLowerCase();
 const runtime = readFileSync(resolve("lib/supabase/tenant-runtime.ts"), "utf8");
-const page = readFileSync(resolve("app/page.tsx"), "utf8");
+const page = readFileSync(resolve("app/operating-system.tsx"), "utf8");
 for (const fragment of ["submit_vendor_rent_payment", "review_vendor_rent_payment", "private.owns_vendor", "pending", "paid", "audit_log", "revoke all", "grant execute"]) {
   if (!migration.includes(fragment)) throw new Error(`Rent migration is missing ${fragment}`);
 }

@@ -4,7 +4,7 @@ import { LoaderCircle, LockKeyhole } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import BrandMark from "../brand-mark";
-import { OperatingSystem } from "../page";
+import { OperatingSystem } from "../operating-system";
 
 type AccessState = "checking" | "authorized" | "unassigned";
 

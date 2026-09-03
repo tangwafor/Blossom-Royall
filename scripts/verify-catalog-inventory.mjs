@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 const [migration, runtime, app, roles, manifest] = await Promise.all([
   readFile("supabase/migrations/20260902123000_catalog_inventory_governance.sql", "utf8"),
   readFile("lib/supabase/tenant-runtime.ts", "utf8"),
-  readFile("app/page.tsx", "utf8"),
+  readFile("app/operating-system.tsx", "utf8"),
   readFile("scripts/catalog-inventory-role-tests.sql", "utf8"),
   readFile("package.json", "utf8"),
 ]);

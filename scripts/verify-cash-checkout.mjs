@@ -4,7 +4,7 @@ const [migration, smoke, security, app, tests, prepush] = await Promise.all([
   readFile("supabase/migrations/20260829062000_accountable_cash_checkout.sql", "utf8"),
   readFile("scripts/atomic-checkout-smoke.sql", "utf8"),
   readFile("scripts/atomic-checkout-security.sql", "utf8"),
-  readFile("app/page.tsx", "utf8"),
+  readFile("app/operating-system.tsx", "utf8"),
   readFile("tests/app.spec.ts", "utf8"),
   readFile("package.json", "utf8"),
 ]);

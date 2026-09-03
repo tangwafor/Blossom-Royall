@@ -8,6 +8,17 @@ import type { StorefrontDefinition, StorefrontProduct } from "@/lib/storefront-c
 type Locale = "en" | "fr" | "es";
 type CartLine = { id: string; name: string; vendor: string; price: number; fulfillment: string; quantity: number };
 
+const readSavedCart = (value: string | null): CartLine[] => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is CartLine => Boolean(item && typeof item === "object" && typeof item.name === "string" && typeof item.vendor === "string" && Number.isFinite(Number(item.price))));
+  } catch {
+    return [];
+  }
+};
+
 const copy = {
   en: { back: "Back to Blossom Royall", stores: "Mall stores", search: "Search this store", all: "All collections", products: "products", add: "Add to bag", added: "Added", bag: "Shopping bag", empty: "Your bag is ready for something special.", subtotal: "Subtotal", checkout: "Continue to checkout", clear: "Clear bag", details: "Product details", sizes: "Available options", close: "Close", owner: "Owned by", shop: "Shop the collection", external: "Official website", fulfillment: "Fulfillment", powered: "Powered by TA Tech" },
   fr: { back: "Retour à Blossom Royall", stores: "Boutiques du centre", search: "Rechercher dans cette boutique", all: "Toutes les collections", products: "produits", add: "Ajouter au panier", added: "Ajouté", bag: "Panier", empty: "Votre panier attend une pièce spéciale.", subtotal: "Sous total", checkout: "Passer au paiement", clear: "Vider le panier", details: "Détails du produit", sizes: "Options disponibles", close: "Fermer", owner: "Propriété de", shop: "Voir la collection", external: "Site officiel", fulfillment: "Livraison", powered: "Propulsé par TA Tech" },
@@ -33,7 +44,9 @@ export default function StorefrontExperience({ storefront, siblingStores }: { st
     setTheme(savedTheme);
     setLocale(copy[savedLocale] ? savedLocale : "en");
     document.documentElement.dataset.theme = savedTheme;
-    if (savedBag) setCart((JSON.parse(savedBag) as CartLine[]).map((item, index) => ({ ...item, id: item.id || `saved-${index}`, quantity: item.quantity || 1 })));
+    const restoredCart = readSavedCart(savedBag).map((item, index) => ({ ...item, id: item.id || `saved-${index}`, quantity: item.quantity || 1 }));
+    setCart(restoredCart);
+    if (savedBag && !restoredCart.length) localStorage.removeItem("br-customer-bag:blossom-royall");
   }, []);
 
   const categories = useMemo(() => Array.from(new Set(storefront.products.flatMap((product) => product.categories))).sort(), [storefront.products]);

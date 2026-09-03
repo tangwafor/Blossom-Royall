@@ -196,6 +196,18 @@ test("shops the Duplex catalog and carries the bag into checkout", async ({ page
   expect(bag).toContain("Africstyle Fashion");
 });
 
+test("recovers the public storefront from damaged saved browser data", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("br-customer-bag:blossom-royall", "{");
+    localStorage.setItem("br-retail-policy:blossom-royall", "{");
+  });
+  await page.goto("/stores/africstyle-fashion");
+  await expect(page.getByPlaceholder("Search this store")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Africstyle Fashion", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Shopping bag, 0/ })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("br-customer-bag:blossom-royall"))).toBeNull();
+});
+
 test("lets the owner configure tenant identity without code changes", async ({
   page,
 }, testInfo) => {
