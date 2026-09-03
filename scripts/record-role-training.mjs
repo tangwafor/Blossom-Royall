@@ -310,6 +310,10 @@ const interfaceActionExecutors = {
     }
     const order = workflowEvidence.get(`${role}:order`);
     if (!order) throw new Error(`${role} checkout has no verified order for receipt evidence.`);
+    if (chapter.label === "My Orders") {
+      await page.getByText(order.receipt_no, { exact: true }).first().waitFor();
+      return { control: "Receipt", result: `${order.receipt_no} matches the persisted customer order`, orderId: order.id };
+    }
     await page.getByRole("article", { name: `Receipt for order ${order.receipt_no}` }).waitFor();
     return { control: "Receipt", result: `${order.receipt_no} matches the persisted order`, orderId: order.id };
   },
@@ -339,19 +343,12 @@ const interfaceActionExecutors = {
     }
     const panel = page.locator(".drawer-open");
     await panel.locator(`option[value="${register.id}"]`).waitFor({ state: "attached" });
-    const registerSelect = panel.getByLabel("Register", { exact: true });
-    await registerSelect.evaluate((element, value) => {
-      const select = element;
-      if (select.value !== value) {
-        select.value = value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }, register.id);
     await panel.getByLabel("Opening float", { exact: true }).fill("100");
     await panel.getByLabel("Note", { exact: true }).fill(`Release course ${role}`);
     await panel.getByRole("button", { name: "Open drawer", exact: true }).click();
     await page.getByText("Cash drawer opened.", { exact: true }).waitFor();
-    const session = assertNoError(await trainingAdmin.from("cash_drawer_sessions").select("id, opening_float, status").eq("opened_by", trainingUserIdFor(role)).eq("status", "open").single(), "Open cash drawer");
+    const session = assertNoError(await trainingAdmin.from("cash_drawer_sessions").select("id, register_id, opening_float, status").eq("opened_by", trainingUserIdFor(role)).eq("status", "open").single(), "Open cash drawer");
+    if (session.register_id !== register.id) throw new Error(`${role} drawer opened on an unexpected register.`);
     workflowEvidence.set(`${role}:drawer`, session);
     return { control: "Open drawer", result: `Open session ${session.id} verified`, sessionId: session.id };
   },

@@ -7381,7 +7381,7 @@ function OrderTable({ rows, context }: { rows: Order[]; context?: TenantContext 
           <span>{o.customer}</span>
           <span>
             <em className={o.status.toLowerCase()}>{o.status}</em>
-            {nextAction(o) && context?.mode === "production" && (
+            {nextAction(o) && context?.mode === "production" && ["owner", "manager", "staff"].includes(context.role || "") && (
               <button onClick={() => void advance(o)} disabled={updating === o.rawId}>
                 {updating === o.rawId ? "Recording" : nextAction(o)?.label}
               </button>
