@@ -1946,7 +1946,7 @@ function VendorStorefrontStudio({ vendors, tenantContext }: { vendors: VendorRec
     secondaryColor: "#f1d49d", fulfillmentMethods: [], mediaRightsStatus: "pending", status: "draft",
   });
   return <section className="panel storefront-studio">
-    <div className="panel-head"><span><small className="eyebrow">VENDOR STOREFRONT STUDIO</small><h3>Independent brand homes inside Blossom Royall</h3></span><button className="primary" onClick={() => setEditing(selected || blankProfile())}><Sparkles />{selected ? "Edit storefront" : "Create storefront"}</button></div>
+    <div className="panel-head"><span><small className="eyebrow">VENDOR STOREFRONT STUDIO</small><h3>Independent brand homes inside Blossom Royall</h3></span><span>{selected && <button onClick={() => setEditing(selected)}>Edit storefront</button>}<button className="primary" onClick={() => setEditing(blankProfile())}><Sparkles />Create storefront</button></span></div>
     <p>Each vendor controls an isolated public identity, catalog story, fulfillment promise, and policy presentation while Blossom Royall remains the mall brand.</p>
     {editing && <form className="storefront-form" onSubmit={save}>
       <label>Vendor<select name="vendorId" required defaultValue={editing.vendorId}>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>

@@ -55,6 +55,17 @@ const authenticatedTrainingClient = async (role) => {
   return client;
 };
 
+const waitForAdminRow = async (load, label) => {
+  let lastError = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const result = await load();
+    if (!result.error && result.data) return result.data;
+    lastError = result.error;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`${label} backend assertion failed: ${lastError?.message || "record did not appear"}`);
+};
+
 const memberBackendAssertion = async (expectedRole) => {
   const userId = trainingUserIdFor(expectedRole);
   if (!trainingAdmin || !userId) throw new Error(`${expectedRole} backend assertion client is unavailable.`);
@@ -528,6 +539,108 @@ const interfaceActionExecutors = {
     const remaining = assertNoError(await trainingAdmin.from("measurement_profiles").select("id").eq("customer_id", trainingUserIdFor(role)).eq("label", "My Fit"), "Remaining My Fit profiles");
     if (remaining.length) throw new Error("My Fit account profile remains after deletion.");
     return { control: "Delete My Fit", result: "Device and account profile deletion verified" };
+  },
+  invite_vendor: async ({ page }) => {
+    const name = `Lifecycle QA ${process.env.TRAINING_FIXTURE_RUN_ID}`;
+    await page.getByRole("button", { name: "Invite vendor", exact: true }).click();
+    const form = page.locator(".vendor-operations-form");
+    await form.getByLabel("Public brand name").fill(name);
+    await form.getByLabel("Category", { exact: true }).fill("Release evidence");
+    await form.getByLabel("Contact person").fill("Lifecycle Reviewer");
+    await form.getByLabel("Email", { exact: true }).fill(`lifecycle.${process.env.TRAINING_FIXTURE_RUN_ID}@blossomroyall.invalid`);
+    await form.getByRole("button", { name: "Create invitation", exact: true }).click();
+    await page.getByText(`${name} was added.`, { exact: false }).waitFor();
+    const vendor = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("name", name).maybeSingle(), "Invited lifecycle vendor");
+    workflowEvidence.set("owner:lifecycle-vendor", vendor);
+    return { control: "Create invitation", result: `${name} persisted with an onboarding link`, vendorId: vendor.id };
+  },
+  edit_vendor: async ({ page, role }) => {
+    const target = role === "owner" ? workflowEvidence.get("owner:lifecycle-vendor") : { id: process.env.TRAINING_FIXTURE_VENDOR_ID };
+    if (!target?.id) throw new Error(`${role} vendor edit has no disposable target.`);
+    const current = assertNoError(await trainingAdmin.from("vendors").select("id, name").eq("id", target.id).single(), `${role} vendor edit target`);
+    const card = page.locator(".vendor-directory article", { has: page.getByRole("heading", { name: current.name, exact: true }) });
+    await card.getByRole("button", { name: "Edit", exact: true }).click();
+    const form = page.locator(".vendor-operations-form");
+    const nextName = `${current.name} ${role}`;
+    await form.getByLabel("Public brand name").fill(nextName);
+    await form.getByRole("button", { name: "Save vendor", exact: true }).click();
+    await page.getByText(`${nextName} was updated.`, { exact: true }).waitFor();
+    const updated = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("id", target.id).eq("name", nextName).maybeSingle(), `${role} updated vendor`);
+    if (role === "owner") workflowEvidence.set("owner:lifecycle-vendor", updated);
+    return { control: "Save vendor", result: `${updated.name} verified in production`, vendorId: updated.id };
+  },
+  suspend_vendor: async ({ page }) => {
+    const vendor = workflowEvidence.get("owner:lifecycle-vendor");
+    if (!vendor) throw new Error("Owner vendor suspension has no lifecycle target.");
+    const card = page.locator(".vendor-directory article", { has: page.getByRole("heading", { name: vendor.name, exact: true }) });
+    await card.getByRole("button", { name: "Suspend", exact: true }).click();
+    const updated = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("id", vendor.id).eq("status", "suspended").maybeSingle(), "Suspended lifecycle vendor");
+    workflowEvidence.set("owner:lifecycle-vendor", updated);
+    return { control: "Suspend", result: `${updated.name} persisted as suspended`, vendorId: updated.id };
+  },
+  restore_vendor: async ({ page }) => {
+    const vendor = workflowEvidence.get("owner:lifecycle-vendor");
+    if (!vendor) throw new Error("Owner vendor restoration has no lifecycle target.");
+    const card = page.locator(".vendor-directory article", { has: page.getByRole("heading", { name: vendor.name, exact: true }) });
+    await card.getByRole("button", { name: "Restore", exact: true }).click();
+    const updated = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("id", vendor.id).eq("status", "onboarding").maybeSingle(), "Restored lifecycle vendor");
+    workflowEvidence.set("owner:lifecycle-vendor", updated);
+    return { control: "Restore", result: `${updated.name} returned to onboarding`, vendorId: updated.id };
+  },
+  configure_storefront: async ({ page }) => {
+    const vendor = workflowEvidence.get("owner:lifecycle-vendor");
+    if (!vendor) throw new Error("Storefront configuration has no lifecycle vendor target.");
+    const studio = page.locator(".storefront-studio");
+    await studio.getByRole("button", { name: "Create storefront", exact: true }).click();
+    const form = studio.locator(".storefront-form");
+    await form.getByLabel("Vendor", { exact: true }).selectOption(vendor.id);
+    const publicName = `${vendor.name} Store`;
+    const slug = `qa-${process.env.TRAINING_FIXTURE_RUN_ID}`.replace(/[^a-z0-9-]/g, "-");
+    await form.getByLabel("Public store name").fill(publicName);
+    await form.getByLabel("Store address slug").fill(slug);
+    await form.getByLabel("Owner display name").fill("Release Reviewer");
+    await form.getByLabel("Tagline", { exact: true }).fill("Disposable release evidence storefront");
+    await form.getByLabel("Brand story").fill("This temporary storefront verifies tenant scoped production brand configuration.");
+    await form.getByLabel("Categories", { exact: true }).fill("Release evidence, Accessories");
+    await form.getByLabel("Store pickup", { exact: true }).check();
+    await form.getByLabel("Media rights").selectOption("confirmed");
+    await form.getByLabel("Publication status").selectOption("published");
+    await form.getByRole("button", { name: "Save storefront", exact: true }).click();
+    await page.getByText(`${publicName} production storefront saved as published.`, { exact: true }).waitFor();
+    const storefront = assertNoError(await trainingAdmin.from("vendor_storefronts").select("id, vendor_id, public_name, slug, media_rights_status, status").eq("vendor_id", vendor.id).single(), "Lifecycle vendor storefront");
+    if (storefront.status !== "published" || storefront.media_rights_status !== "confirmed") throw new Error("Lifecycle storefront was not published with confirmed media rights.");
+    workflowEvidence.set("owner:lifecycle-storefront", storefront);
+    return { control: "Save storefront", result: `${storefront.public_name} published with confirmed media rights`, storefrontId: storefront.id };
+  },
+  review_brand: async ({ page }) => {
+    const storefront = workflowEvidence.get("owner:lifecycle-storefront");
+    if (!storefront) throw new Error("Brand review has no production storefront evidence.");
+    const card = page.locator(".storefront-cards article", { hasText: storefront.public_name });
+    await card.getByText("published", { exact: true }).waitFor();
+    const persisted = assertNoError(await trainingAdmin.from("vendor_storefronts").select("id, status, media_rights_status, updated_by").eq("id", storefront.id).single(), "Published brand review");
+    if (persisted.status !== "published" || persisted.media_rights_status !== "confirmed" || persisted.updated_by !== trainingUserIdFor("owner")) throw new Error("Brand review lacks owner accountable publication evidence.");
+    return { control: "Published storefront", result: `Owner publication and media rights verified for ${storefront.public_name}`, storefrontId: storefront.id };
+  },
+  remove_vendor: async ({ page }) => {
+    const vendor = workflowEvidence.get("owner:lifecycle-vendor");
+    if (!vendor) throw new Error("Owner vendor removal has no lifecycle target.");
+    const storefront = workflowEvidence.get("owner:lifecycle-storefront");
+    if (storefront) {
+      const storefrontCard = page.locator(".storefront-cards article", { hasText: storefront.public_name });
+      await storefrontCard.getByRole("button", { name: "Remove", exact: true }).click();
+      await storefrontCard.getByRole("button", { name: "Confirm remove", exact: true }).click();
+      await page.getByText(`${storefront.public_name} production storefront removed.`, { exact: true }).waitFor();
+    }
+    const card = page.locator(".vendor-directory article", { has: page.getByRole("heading", { name: vendor.name, exact: true }) });
+    await card.getByRole("button", { name: "Remove", exact: true }).click();
+    await card.getByRole("button", { name: "Confirm remove", exact: true }).click();
+    await page.getByText(`${vendor.name} was removed from this tenant roster.`, { exact: true }).waitFor();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const remaining = assertNoError(await trainingAdmin.from("vendors").select("id").eq("id", vendor.id), "Removed lifecycle vendor");
+      if (!remaining.length) return { control: "Confirm remove", result: `${vendor.name} removed from production`, vendorId: vendor.id };
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error(`${vendor.name} remained in production after removal.`);
   },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
