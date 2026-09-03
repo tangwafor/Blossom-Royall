@@ -57,7 +57,7 @@ const authenticatedTrainingClient = async (role) => {
 
 const waitForAdminRow = async (load, label) => {
   let lastError = null;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const result = await load();
     if (!result.error && result.data) return result.data;
     lastError = result.error;
@@ -519,6 +519,7 @@ const interfaceActionExecutors = {
     return { control: "Fit profile consent", result: "Customer consent is selected before persistence" };
   },
   save_fit: async ({ page, role }) => {
+    await page.locator('.fit-workspace[data-tenant-mode="production"]').waitFor({ timeout: 30000 });
     const saveButton = page.getByRole("button", { name: "Save My Fit", exact: true });
     await saveButton.waitFor({ state: "visible" });
     await page.waitForFunction(() => {

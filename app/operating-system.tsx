@@ -5459,7 +5459,7 @@ function MyFit({ go }: { go: (destination: string) => void }) {
           </select>
         </label>
       </section>
-      <section className="fit-workspace panel">
+      <section className="fit-workspace panel" data-tenant-mode={tenantContext?.mode || "loading"}>
         <header>
           <span>
             <small className="eyebrow">{copy.guide}</small>
