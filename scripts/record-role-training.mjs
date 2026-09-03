@@ -657,9 +657,9 @@ const interfaceActionExecutors = {
     await page.locator("html[data-app-ready='true']").waitFor({ timeout: 30000 });
     await navigateSidebar(page, "Vendors", "owner");
     const studio = page.locator(".storefront-studio");
-    await studio.locator(`option[value="${vendor.id}"]`).waitFor({ state: "attached", timeout: 30000 });
     await studio.getByRole("button", { name: "Create storefront", exact: true }).click();
     const form = studio.locator(".storefront-form");
+    await form.locator(`option[value="${vendor.id}"]`).waitFor({ state: "attached", timeout: 30000 });
     await form.getByLabel("Vendor", { exact: true }).selectOption(vendor.id);
     const publicName = `${vendor.name} Store`;
     const slug = `qa-${process.env.TRAINING_FIXTURE_RUN_ID}`.replace(/[^a-z0-9-]/g, "-");
@@ -738,9 +738,13 @@ const interfaceActionExecutors = {
       "Business Setup": { button: /Save business settings|Business settings saved/, notice: "Authoritative identity, tax, policy, commerce, and delivery settings were saved with an audit record." },
     }[chapter.label];
     if (!controls) throw new Error(`${chapter.label} has no production control save contract.`);
+    const before = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).maybeSingle(), `${chapter.label} settings baseline`);
     await page.getByRole("button", { name: controls.button, exact: typeof controls.button === "string" }).click();
-    await page.getByText(controls.notice, { exact: true }).waitFor();
-    const record = assertNoError(await trainingAdmin.from("store_operating_settings").select("store_id, updated_by, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).single(), `${chapter.label} production settings`);
+    const record = await waitForAdminRow(async () => {
+      const result = await trainingAdmin.from("store_operating_settings").select("store_id, updated_by, updated_at").eq("store_id", process.env.TRAINING_STORE_ID).maybeSingle();
+      if (result.error || !result.data || result.data.updated_by !== trainingUserIdFor(role) || result.data.updated_at === before?.updated_at) return { data: null, error: result.error };
+      return result;
+    }, `${chapter.label} production settings`);
     if (record.updated_by !== trainingUserIdFor(role)) throw new Error(`${chapter.label} settings were not attributed to ${role}.`);
     workflowEvidence.set(`${role}:${chapter.label}:settings`, record);
     return { control: String(controls.button), result: `${chapter.label} persisted with actor ${record.updated_by}`, updatedAt: record.updated_at };
@@ -825,7 +829,10 @@ const collectActionEvidence = async (page, role, chapter, action, backend) => {
   if (action === "label_settlement_development") await page.getByText("Settlement execution and payout disbursement are still in development.", { exact: true }).waitFor();
   if (action === "label_routing_development") await page.getByText("Consolidated route planning automation is still in development.", { exact: false }).waitFor();
   const explicitProductionPreviewBoundary = chapter.label === "Staff"
-    && await page.getByText("Production staff activation", { exact: true }).count();
+    ? await page.getByText("Production staff activation", { exact: true }).count()
+    : chapter.label === "Delivery"
+      ? await page.getByText("Consolidated route planning automation is still in development.", { exact: false }).count()
+      : 0;
   if (boundaryActions.has(action) && !executor && chapter.status === "preview" && !/preview/i.test(dataSource) && !explicitProductionPreviewBoundary) {
     throw new Error(`${role} ${chapter.label} action ${action} did not prove the preview boundary.`);
   }
