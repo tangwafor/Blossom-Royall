@@ -209,6 +209,18 @@ const courseOrderFor = async (role) => {
   return order;
 };
 
+const navigateSidebar = async (page, label, role = "current role") => {
+  const navigated = await page.evaluate((target) => {
+    const button = [...document.querySelectorAll(".shell > aside nav button")].find(
+      (element) => element.textContent?.trim().replace(/\d+$/, "").trim() === target,
+    );
+    if (!button) return false;
+    button.click();
+    return true;
+  }, label);
+  if (!navigated) throw new Error(`${role} navigation does not contain ${label}`);
+};
+
 const interfaceActionExecutors = {
   refresh_vendor_reconciliation: async ({ page }) => {
     const panel = page.getByLabel("Owner vendor reconciliation");
@@ -230,6 +242,8 @@ const interfaceActionExecutors = {
     return { control: "Search", result: `${visibleRows} matching order rows observed` };
   },
   route_to_workflow: async ({ page, role }) => {
+    const guideRole = role[0].toUpperCase() + role.slice(1);
+    await page.locator(".help-controls").getByRole("button", { name: guideRole, exact: true }).click();
     const search = page.getByLabel("Search help");
     const term = role === "customer" ? "fit" : role === "vendor" ? "vendor" : "sale";
     await search.fill(term);
@@ -343,6 +357,13 @@ const interfaceActionExecutors = {
     }
     const panel = page.locator(".drawer-open");
     await panel.locator(`option[value="${register.id}"]`).waitFor({ state: "attached" });
+    await page.evaluate((registerId) => {
+      const select = document.querySelector(".drawer-open select");
+      if (!(select instanceof HTMLSelectElement)) throw new Error("Cash register selector is unavailable.");
+      select.value = registerId;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }, register.id);
+    await page.waitForFunction((registerId) => document.querySelector(".drawer-open select")?.value === registerId, register.id);
     await panel.getByLabel("Opening float", { exact: true }).fill("100");
     await panel.getByLabel("Note", { exact: true }).fill(`Release course ${role}`);
     await panel.getByRole("button", { name: "Open drawer", exact: true }).click();
@@ -394,8 +415,8 @@ const interfaceActionExecutors = {
       await page.getByText(`${order.receipt_no} payment verified.`, { exact: true }).waitFor();
       order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status, status").eq("id", order.id).single(), "Verified course order");
       if (order.payment_status !== "succeeded") throw new Error(`${order.receipt_no} payment was not persisted as succeeded.`);
-      await page.getByRole("button", { name: "Command Center", exact: true }).click();
-      await page.getByRole("button", { name: "Orders", exact: true }).click();
+      await navigateSidebar(page, "Command Center");
+      await navigateSidebar(page, "Orders");
     }
     const row = page.locator(".table > div", { hasText: order.receipt_no }).last();
     const action = row.getByRole("button", { name: /Start preparation|Mark ready|Send for delivery|Confirm pickup|Confirm delivery/ });
@@ -1050,13 +1071,7 @@ for (const role of selectedRoles) {
     const destinations = edition === "reel" ? roleConfig[role].allowed.slice(0, 2) : roleConfig[role].allowed;
     for (const label of destinations) {
       const expectedHeading = label === "My Products" ? "Products" : label;
-      const navigated = await page.evaluate((target) => {
-        const button = [...document.querySelectorAll(".shell > aside nav button")].find((element) => element.textContent?.trim().replace(/\d+$/, "").trim() === target);
-        if (!button) return false;
-        button.click();
-        return true;
-      }, label);
-      if (!navigated) throw new Error(`${role} navigation does not contain ${label}`);
+      await navigateSidebar(page, label, role);
       await page.waitForTimeout(400);
       const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
       if (!(await heading.count())) throw new Error(`${role} navigation opened without the expected ${expectedHeading} heading`);
