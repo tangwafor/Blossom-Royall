@@ -762,7 +762,7 @@ h3 {
   padding: 15px;
   overflow: hidden;
 }
-.product > div {
+.product-media {
   height: 140px;
   margin: -15px -15px 14px;
   background: linear-gradient(145deg, #eee4e4, #f8f2eb);
@@ -771,7 +771,7 @@ h3 {
   color: #9f828d;
   position: relative;
 }
-.product > div span {
+.product-media span {
   position: absolute;
   right: 10px;
   top: 10px;

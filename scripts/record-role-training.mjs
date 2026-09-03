@@ -573,7 +573,7 @@ const interfaceActionExecutors = {
     const nextName = `${current.name} ${role}`;
     await form.getByLabel("Public brand name").fill(nextName);
     await form.getByRole("button", { name: "Save vendor", exact: true }).click();
-    await page.getByRole("heading", { name: nextName, exact: true }).waitFor();
+    await form.waitFor({ state: "hidden" });
     const updated = await waitForAdminRow(() => trainingAdmin.from("vendors").select("id, name, status").eq("id", target.id).eq("name", nextName).maybeSingle(), `${role} updated vendor`);
     if (role === "owner") workflowEvidence.set("owner:lifecycle-vendor", updated);
     return { control: "Save vendor", result: `${updated.name} verified in production`, vendorId: updated.id };

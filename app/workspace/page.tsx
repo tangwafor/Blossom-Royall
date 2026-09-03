@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabase/client";
 import BrandMark from "../brand-mark";
 import { OperatingSystem } from "../operating-system";
+import { resolveTenantContext } from "../../lib/supabase/tenant-runtime";
 
 type AccessState = "checking" | "authorized" | "unassigned";
 
@@ -20,6 +21,11 @@ export default function WorkspacePage() {
           return;
         }
         const { data: membership } = await client.from("store_memberships").select("id, role").eq("user_id", user.id).limit(1).maybeSingle();
+        if (!membership) {
+          const context = await resolveTenantContext();
+          setAccess(context.mode === "production" && context.role === "customer" ? "authorized" : "unassigned");
+          return;
+        }
         if (membership?.role === "owner") {
           const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
           if (assuranceError || assurance.currentLevel !== "aal2") {
@@ -27,7 +33,7 @@ export default function WorkspacePage() {
             return;
           }
         }
-        setAccess(membership ? "authorized" : "unassigned");
+        setAccess("authorized");
       } catch {
         location.replace("/auth?returnTo=%2Fworkspace");
       }
