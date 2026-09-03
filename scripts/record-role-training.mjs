@@ -660,27 +660,41 @@ const interfaceActionExecutors = {
     await studio.getByRole("button", { name: "Create storefront", exact: true }).click();
     const form = studio.locator(".storefront-form");
     await form.locator(`option[value="${vendor.id}"]`).waitFor({ state: "attached", timeout: 30000 });
-    await page.evaluate((vendorId) => {
-      const select = document.querySelector('.storefront-form select[name="vendorId"]');
-      if (!(select instanceof HTMLSelectElement)) throw new Error("Storefront vendor selector is unavailable.");
-      select.value = vendorId;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    }, vendor.id);
-    await page.waitForFunction((vendorId) => document.querySelector('.storefront-form select[name="vendorId"]')?.value === vendorId, vendor.id);
     const publicName = `${vendor.name} Store`;
     const slug = `qa-${process.env.TRAINING_FIXTURE_RUN_ID}`.replace(/[^a-z0-9-]/g, "-");
-    await form.getByLabel("Public store name").fill(publicName);
-    await form.getByLabel("Store address slug").fill(slug);
-    await form.getByLabel("Owner display name").fill("Release Reviewer");
-    await form.getByLabel("Tagline", { exact: true }).fill("Disposable release evidence storefront");
-    await form.getByLabel("Brand story").fill("This temporary storefront verifies tenant scoped production brand configuration.");
-    await form.getByLabel("Categories", { exact: true }).fill("Release evidence, Accessories");
-    await form.getByLabel("Store pickup", { exact: true }).check();
-    await form.getByLabel("Media rights").selectOption("confirmed");
-    await form.getByLabel("Publication status").selectOption("published");
-    await form.getByRole("button", { name: "Save storefront", exact: true }).click();
+    await page.evaluate(({ vendorId, publicName, slug }) => {
+      const formElement = document.querySelector(".storefront-form");
+      if (!(formElement instanceof HTMLFormElement)) throw new Error("Storefront form is unavailable.");
+      const values = {
+        vendorId,
+        publicName,
+        slug,
+        ownerDisplayName: "Release Reviewer",
+        tagline: "Disposable release evidence storefront",
+        story: "This temporary storefront verifies tenant scoped production brand configuration.",
+        categories: "Release evidence, Accessories",
+        mediaRightsStatus: "confirmed",
+        status: "published",
+      };
+      for (const [name, value] of Object.entries(values)) {
+        const field = formElement.elements.namedItem(name);
+        if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement)) throw new Error(`Storefront field ${name} is unavailable.`);
+        field.value = value;
+        field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+      }
+      const pickup = [...formElement.querySelectorAll('input[name="fulfillmentMethods"]')].find((input) => input.value === "Store pickup");
+      if (!(pickup instanceof HTMLInputElement)) throw new Error("Store pickup control is unavailable.");
+      pickup.checked = true;
+      pickup.dispatchEvent(new Event("change", { bubbles: true }));
+      const submit = formElement.querySelector('button[type="submit"], button.primary');
+      if (!(submit instanceof HTMLButtonElement)) throw new Error("Storefront submit control is unavailable.");
+      submit.click();
+    }, { vendorId: vendor.id, publicName, slug });
+    const storefront = await waitForAdminRow(
+      () => trainingAdmin.from("vendor_storefronts").select("id, vendor_id, public_name, slug, media_rights_status, status").eq("vendor_id", vendor.id).eq("status", "published").maybeSingle(),
+      "Lifecycle vendor storefront",
+    );
     await page.getByText(`${publicName} production storefront saved as published.`, { exact: true }).waitFor();
-    const storefront = assertNoError(await trainingAdmin.from("vendor_storefronts").select("id, vendor_id, public_name, slug, media_rights_status, status").eq("vendor_id", vendor.id).single(), "Lifecycle vendor storefront");
     if (storefront.status !== "published" || storefront.media_rights_status !== "confirmed") throw new Error("Lifecycle storefront was not published with confirmed media rights.");
     workflowEvidence.set("owner:lifecycle-storefront", storefront);
     return { control: "Save storefront", result: `${storefront.public_name} published with confirmed media rights`, storefrontId: storefront.id };
