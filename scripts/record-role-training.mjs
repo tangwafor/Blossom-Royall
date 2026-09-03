@@ -715,16 +715,26 @@ const interfaceActionExecutors = {
     await center.getByRole("button", { name: "New agreement", exact: true }).click();
     const form = center.locator(".production-lease-form");
     const spaceCode = `LIFE-${process.env.TRAINING_FIXTURE_RUN_ID}`;
-    await form.getByLabel("Vendor", { exact: true }).selectOption(vendor.id);
-    await form.getByLabel("Space code").fill(spaceCode);
-    await form.getByLabel("Monthly rent").fill("700");
-    await form.getByLabel("Deposit", { exact: true }).fill("1400");
-    await form.getByLabel("Start date").fill(date);
-    await form.getByLabel("End date").fill(`${Number(date.slice(0, 4)) + 1}${date.slice(4)}`);
-    await form.getByLabel("Rent due day").fill("1");
-    await form.getByRole("button", { name: "Create lease draft", exact: true }).click();
+    await form.locator(`option[value="${vendor.id}"]`).waitFor({ state: "attached", timeout: 30000 });
+    await page.evaluate(({ vendorId, spaceCode, startDate, endDate }) => {
+      const formElement = document.querySelector(".production-lease-form");
+      if (!(formElement instanceof HTMLFormElement)) throw new Error("Production lease form is unavailable.");
+      const values = { vendorId, spaceCode, monthlyRent: "700", deposit: "1400", startDate, endDate, rentDueDay: "1" };
+      for (const [name, value] of Object.entries(values)) {
+        const field = formElement.elements.namedItem(name);
+        if (!(field instanceof HTMLInputElement || field instanceof HTMLSelectElement)) throw new Error(`Lease field ${name} is unavailable.`);
+        field.value = value;
+        field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+      }
+      const submit = formElement.querySelector('button[type="submit"]');
+      if (!(submit instanceof HTMLButtonElement)) throw new Error("Lease submit control is unavailable.");
+      submit.click();
+    }, { vendorId: vendor.id, spaceCode, startDate: date, endDate: `${Number(date.slice(0, 4)) + 1}${date.slice(4)}` });
+    const lease = await waitForAdminRow(
+      () => trainingAdmin.from("leases").select("id, vendor_id, space_code, monthly_rent, deposit, status").eq("vendor_id", vendor.id).eq("space_code", spaceCode).maybeSingle(),
+      "Lifecycle vendor lease",
+    );
     await page.getByText("Production lease draft created.", { exact: true }).waitFor();
-    const lease = assertNoError(await trainingAdmin.from("leases").select("id, vendor_id, space_code, monthly_rent, deposit, status").eq("vendor_id", vendor.id).eq("space_code", spaceCode).single(), "Lifecycle vendor lease");
     if (lease.status !== "draft" || Number(lease.monthly_rent) !== 700 || Number(lease.deposit) !== 1400) throw new Error("Production lease draft did not preserve its controlled terms.");
     workflowEvidence.set("owner:lifecycle-lease", lease);
     return { control: "Create lease draft", result: `${spaceCode} persisted with governed draft status`, leaseId: lease.id };
