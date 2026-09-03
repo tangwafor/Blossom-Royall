@@ -142,6 +142,24 @@ const boundaryActions = new Set([
   "verify_alert_automation_development",
 ]);
 
+const exerciseFixtureInventory = async ({ page }) => {
+  const productId = process.env.TRAINING_FIXTURE_PRODUCT_ID;
+  const variantId = process.env.TRAINING_FIXTURE_VARIANT_ID;
+  if (!trainingAdmin || !productId || !variantId) throw new Error("Inventory course action requires the disposable product and variant fixture.");
+  const product = assertNoError(await trainingAdmin.from("products").select("name").eq("id", productId).single(), "Inventory fixture product");
+  const before = assertNoError(await trainingAdmin.from("product_variants").select("qty_on_hand").eq("id", variantId).single(), "Inventory fixture quantity before action");
+  const card = page.locator(".product", { has: page.getByRole("heading", { name: product.name, exact: true }) });
+  await card.getByRole("button", { name: "Receive one", exact: true }).click();
+  await card.getByText(`${before.qty_on_hand + 1} on hand`, { exact: false }).waitFor();
+  await card.getByRole("button", { name: "Remove one", exact: true }).click();
+  await card.getByText(`${before.qty_on_hand} on hand`, { exact: false }).waitFor();
+  const after = assertNoError(await trainingAdmin.from("product_variants").select("qty_on_hand").eq("id", variantId).single(), "Inventory fixture quantity after action");
+  if (after.qty_on_hand !== before.qty_on_hand) throw new Error(`Inventory fixture was not restored: expected ${before.qty_on_hand}, received ${after.qty_on_hand}.`);
+  const movements = assertNoError(await trainingAdmin.from("inventory_movements").select("id, quantity_delta").eq("variant_id", variantId), "Inventory fixture movement audit");
+  if (!movements.some((row) => row.quantity_delta === 1) || !movements.some((row) => row.quantity_delta === -1)) throw new Error("Inventory fixture did not record both accountable movements.");
+  return { control: "Receive one and Remove one", result: `Quantity restored to ${after.qty_on_hand}; ${movements.length} movement records verified`, productId, variantId };
+};
+
 const interfaceActionExecutors = {
   refresh_vendor_reconciliation: async ({ page }) => {
     const panel = page.getByLabel("Owner vendor reconciliation");
@@ -190,6 +208,8 @@ const interfaceActionExecutors = {
     await remove.click();
     return { control: "Add item to bag", result: "Shopping bag appeared and the training item was removed" };
   },
+  adjust_authorized_stock: exerciseFixtureInventory,
+  verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
 };
 
 const collectActionEvidence = async (page, role, chapter, action, backend) => {
