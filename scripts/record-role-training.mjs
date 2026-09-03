@@ -136,23 +136,76 @@ const boundaryActions = new Set([
   "label_catalog_editing_development", "label_awaiting_owner_answers", "label_photo_sizing_development",
 ]);
 
+const interfaceActionExecutors = {
+  refresh_vendor_reconciliation: async ({ page }) => {
+    const panel = page.getByLabel("Owner vendor reconciliation");
+    await panel.getByRole("button", { name: "Refresh", exact: true }).click();
+    await panel.getByRole("heading", { name: "What each vendor sees", exact: true }).waitFor();
+    return { control: "Refresh", result: "Owner vendor reconciliation remained visible after refresh" };
+  },
+  refresh_board: async ({ page }) => {
+    const control = page.getByRole("button", { name: /Refresh live data|Refreshing/ }).first();
+    await control.click();
+    await page.getByText("Vendor isolation active", { exact: true }).waitFor();
+    return { control: "Refresh live data", result: "Vendor isolation remained active after refresh" };
+  },
+  search_order: async ({ page, backend }) => {
+    const search = page.getByLabel("Search", { exact: true });
+    await search.fill(backend.orders ? "BR" : "no matching training order");
+    const visibleRows = await page.locator(".orders tbody tr").count();
+    await search.fill("");
+    return { control: "Search", result: `${visibleRows} matching order rows observed` };
+  },
+  route_to_workflow: async ({ page, role }) => {
+    const search = page.getByLabel("Search help");
+    const term = role === "customer" ? "fit" : role === "vendor" ? "vendor" : "sale";
+    await search.fill(term);
+    const guide = page.locator(".help-grid details").first();
+    await guide.locator("summary").click();
+    const route = guide.getByRole("button", { name: /^Open / });
+    const label = (await route.innerText()).replace(/^Open\s+/, "").trim();
+    await route.click();
+    await page.getByRole("heading", { name: label, exact: true }).first().waitFor();
+    await page.getByRole("button", { name: "Help", exact: true }).click();
+    await page.getByRole("heading", { name: "Help", exact: true }).first().waitFor();
+    return { control: `Open ${label}`, result: `Routed to ${label} and returned to Help` };
+  },
+  restart_tour: async ({ page }) => {
+    await page.getByRole("button", { name: "Start guided tour", exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+    await page.getByLabel("Close guided tour").click();
+    return { control: "Start guided tour", result: "Tour opened and closed through its accessible controls" };
+  },
+  add_to_bag: async ({ page }) => {
+    const add = page.getByRole("button", { name: /^Add .* to bag$/ }).first();
+    await add.click();
+    await page.getByLabel("Shopping bag summary").waitFor();
+    const remove = page.getByRole("button", { name: /^Remove .* from bag$/ }).first();
+    await remove.click();
+    return { control: "Add item to bag", result: "Shopping bag appeared and the training item was removed" };
+  },
+};
+
 const collectActionEvidence = async (page, role, chapter, action, backend) => {
   const heading = page.getByRole("heading", { name: chapter.label === "My Products" ? "Products" : chapter.label, exact: true }).first();
   await heading.waitFor({ state: "visible", timeout: 15000 });
-  if (!observationActions.has(action) && !boundaryActions.has(action)) {
+  const executor = interfaceActionExecutors[action];
+  if (!observationActions.has(action) && !boundaryActions.has(action) && !executor) {
     throw new Error(`${role} ${chapter.label} action ${action} has no real interface executor yet.`);
   }
   const dataSource = await page.getByLabel("Data source").innerText();
   if (boundaryActions.has(action) && chapter.status === "preview" && !/preview/i.test(dataSource)) {
     throw new Error(`${role} ${chapter.label} action ${action} did not prove the preview boundary.`);
   }
+  const interaction = executor ? await executor({ page, role, chapter, backend }) : null;
   return {
     action,
-    kind: observationActions.has(action) ? "visible_read" : "visible_boundary",
+    kind: executor ? "interface_action" : observationActions.has(action) ? "visible_read" : "visible_boundary",
     heading: await heading.innerText(),
     dataSource,
     backendStoreId: backend.storeId,
     backendRole: backend.role,
+    interaction,
   };
 };
 

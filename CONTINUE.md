@@ -16,7 +16,7 @@ The Next.js route component was separated from the reusable operating system com
 
 The complete local Playwright suite passed on September 3, 2026: 114 tests passed across desktop and mobile, with two intentional skips. The application workflows are healthy. The remaining release blocker is the narrated role course executor, which currently verifies chapter access but does not yet perform and reconcile every required workflow action.
 
-Role course action evidence implementation is in progress. The recorder now produces visible interface and backend identity evidence for 46 of 96 unique required actions and fails on any action without a real executor. The remaining fifty actions are mutations, workflow routing, or cross role reconciliation and must not be marked complete until their real interface actions and backend results are asserted.
+Role course action evidence implementation is in progress. The recorder now produces visible interface and backend identity evidence for 51 of 96 unique required actions and fails on any action without a real executor. Real executors now cover vendor reconciliation refresh, order search with cleanup, help search and workflow routing with return, guided tour restart, and customer bag mutation with cleanup. The remaining forty five actions are production mutations, unavailable alert automation, or cross role reconciliation and must not be marked complete until their real interface actions and backend results are asserted.
 
 ## Verified catalog scope
 
