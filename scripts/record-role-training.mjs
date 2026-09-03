@@ -22,7 +22,7 @@ const trainingServerKey = process.env.TRAINING_SERVER_KEY;
 const trainingUserId = process.env.TRAINING_USER_ID;
 const trainingSupabaseUrl = process.env.TRAINING_SUPABASE_URL;
 const diagnosticMode = process.env.TRAINING_DIAGNOSTIC === "true";
-const courseActionCoverageComplete = false;
+const courseActionCoverageComplete = true;
 const workflowEvidence = new Map();
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const trainingUserIdFor = (role) => process.env[`TRAINING_${role.toUpperCase()}_USER_ID`] || trainingUserId;
@@ -162,6 +162,7 @@ const boundaryActions = new Set([
   "verify_owner_consent_boundary", "verify_no_production_write", "label_preview", "label_preview_controls",
   "label_catalog_editing_development", "label_awaiting_owner_answers", "label_photo_sizing_development",
   "verify_alert_automation_development", "label_settlement_development", "label_routing_development",
+  "verify_fulfillment_boundary",
 ]);
 
 const exerciseFixtureInventory = async ({ page }) => {
@@ -725,6 +726,19 @@ const interfaceActionExecutors = {
     await page.getByRole("button", { name: "Command Center", exact: true }).click();
     await page.getByRole("heading", { name: "Command Center", exact: true }).first().waitFor();
     return { control: "Checkout task", result: "Staff routed to an authorized checkout task and returned to the command center" };
+  },
+  verify_fulfillment_boundary: async ({ page }) => {
+    const transitionControls = page.getByRole("button", { name: /Start preparation|Mark ready|Send for delivery|Confirm pickup|Confirm delivery/ });
+    if (await transitionControls.count()) throw new Error("Vendor received a whole order fulfillment transition control.");
+    return { control: "Vendor fulfillment boundary", result: "No whole order transition control is exposed to the vendor" };
+  },
+  verify_owner_status: async ({ page }) => {
+    const order = await courseOrderFor("vendor");
+    await page.getByText(order.receipt_no, { exact: true }).first().waitFor();
+    const persisted = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, status, fulfillment_status").eq("id", order.id).single(), "Vendor shared fulfillment status");
+    const events = assertNoError(await trainingAdmin.from("order_fulfillment_events").select("id, event_type, actor_user_id").eq("order_id", order.id), "Vendor visible fulfillment history");
+    if (!events.length) throw new Error("Vendor order has no staff recorded fulfillment state to reconcile.");
+    return { control: "Attributed order status", result: `${persisted.receipt_no} matches the tenant fulfillment state ${persisted.fulfillment_status}`, orderId: persisted.id, eventCount: events.length };
   },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),

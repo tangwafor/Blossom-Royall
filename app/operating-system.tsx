@@ -7293,7 +7293,7 @@ function VendorBoard({ context, go }: { context: TenantContext; go: (destination
     </section>
     <section className="panel approval-boundary">
       <div><ShieldCheck /><span><small className="eyebrow">OWNER CONSENT</small><h3>Clear approval boundaries</h3></span></div>
-      <p>Vendors control their product information, stock proposals, fulfillment updates, and store profile drafts. The owner controls activation, mall policies, lease terms, rent confirmation, public brand approval, refunds, payouts, suspensions, and permission changes.</p>
+      <p>Vendors control their product information, stock proposals, and store profile drafts, and can view fulfillment updates for their attributed items. Authorized tenant staff control whole order transitions. The owner controls activation, mall policies, lease terms, rent confirmation, public brand approval, refunds, payouts, suspensions, and permission changes.</p>
     </section>
   </div>;
 }
