@@ -134,6 +134,7 @@ const boundaryActions = new Set([
   "verify_other_vendor_absent", "verify_owner_governance_boundary", "verify_owner_controls_absent",
   "verify_owner_consent_boundary", "verify_no_production_write", "label_preview", "label_preview_controls",
   "label_catalog_editing_development", "label_awaiting_owner_answers", "label_photo_sizing_development",
+  "verify_alert_automation_development",
 ]);
 
 const interfaceActionExecutors = {
@@ -194,6 +195,11 @@ const collectActionEvidence = async (page, role, chapter, action, backend) => {
     throw new Error(`${role} ${chapter.label} action ${action} has no real interface executor yet.`);
   }
   const dataSource = await page.getByLabel("Data source").innerText();
+  if (action === "verify_alert_automation_development") {
+    await page.getByLabel("Notifications").click();
+    await page.getByText("Production alert automation is still in development.", { exact: false }).waitFor();
+    await page.getByLabel("Close notifications").click();
+  }
   if (boundaryActions.has(action) && chapter.status === "preview" && !/preview/i.test(dataSource)) {
     throw new Error(`${role} ${chapter.label} action ${action} did not prove the preview boundary.`);
   }
