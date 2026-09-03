@@ -54,6 +54,7 @@ export async function createRoleCourseFixtures() {
   let leaseId = null;
   let leaseReviewId = null;
   let leaseSubmitId = null;
+  let registerId = null;
   try {
     for (const role of roles) {
       const email = `${role}.${runId}@blossomroyall.invalid`;
@@ -71,6 +72,7 @@ export async function createRoleCourseFixtures() {
     leaseId = randomUUID();
     leaseReviewId = randomUUID();
     leaseSubmitId = randomUUID();
+    registerId = randomUUID();
     await query(`begin;
       set local role authenticated;
       select set_config('request.jwt.claim.sub','${identities.owner.userId}',true);
@@ -81,6 +83,8 @@ export async function createRoleCourseFixtures() {
       values('${variantId}','${productId}','QA-${runId}','7','Gold',125,7,'mm',2);
       select public.adjust_catalog_stock('${variantId}',5,'Opening training fixture stock');
       select public.review_catalog_product('${productId}','published','');
+      insert into public.cash_registers(id,store_id,name,location,created_by,updated_by)
+      values('${registerId}','${storeId}','QA Assigned ${runId}','Release course','${identities.owner.userId}','${identities.owner.userId}');
       insert into public.leases(id,vendor_id,space_code,monthly_rent,deposit,start_date,end_date,status,signed_at,rent_due_day)
       values
         ('${leaseId}','${vendorId}','QA-A-${runId}',800,1600,current_date,current_date + 365,'signed',now(),1),
@@ -90,14 +94,14 @@ export async function createRoleCourseFixtures() {
       select public.submit_vendor_rent_payment('${leaseId}',date_trunc('month',current_date)::date,800,'Bank transfer','QA-A-${runId}');
       select public.submit_vendor_rent_payment('${leaseReviewId}',date_trunc('month',current_date)::date,825,'Bank transfer','QA-B-${runId}');
       commit;`);
-    return { admin, query, url, serverKey, runId, storeId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, identities };
+    return { admin, query, url, serverKey, runId, storeId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, registerId, identities };
   } catch (error) {
-    await cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, identities }).catch(() => {});
+    await cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, registerId, identities }).catch(() => {});
     throw error;
   }
 }
 
-export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, identities }) {
+export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, leaseReviewId, leaseSubmitId, registerId, identities }) {
   if (query) {
     const identityIds = Object.values(identities).map((identity) => `'${identity.userId}'`).join(",");
     const cleanup = [
@@ -113,6 +117,7 @@ export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId,
       identityIds && `delete from public.cash_drawer_adjustments where recorded_by in (${identityIds});`,
       identityIds && `delete from public.cash_drawer_sessions where opened_by in (${identityIds});`,
       identityIds && `delete from public.cash_registers where created_by in (${identityIds});`,
+      registerId && `delete from public.cash_registers where id='${registerId}';`,
       leaseId && `delete from public.rent_payments where lease_id='${leaseId}';`,
       leaseReviewId && `delete from public.rent_payments where lease_id='${leaseReviewId}';`,
       leaseSubmitId && `delete from public.rent_payments where lease_id='${leaseSubmitId}';`,

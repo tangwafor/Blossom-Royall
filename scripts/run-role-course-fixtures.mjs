@@ -32,6 +32,7 @@ try {
         TRAINING_FIXTURE_LEASE_ID: fixtures.leaseId,
         TRAINING_FIXTURE_REVIEW_LEASE_ID: fixtures.leaseReviewId,
         TRAINING_FIXTURE_SUBMIT_LEASE_ID: fixtures.leaseSubmitId,
+        TRAINING_FIXTURE_REGISTER_ID: fixtures.registerId,
       },
     });
     if (result.status !== 0) throw new Error(`${edition} all role production course failed.`);

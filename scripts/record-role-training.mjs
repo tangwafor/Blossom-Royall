@@ -333,11 +333,12 @@ const interfaceActionExecutors = {
   open_drawer: async ({ page, role }) => {
     let register = workflowEvidence.get("course:register");
     if (!register) {
-      const result = assertNoError(await trainingAdmin.from("cash_registers").select("id, name").ilike("name", `QA ${process.env.TRAINING_FIXTURE_RUN_ID}`).single(), "Shared cash register");
+      const result = assertNoError(await trainingAdmin.from("cash_registers").select("id, name").eq("id", process.env.TRAINING_FIXTURE_REGISTER_ID).single(), "Assigned cash register");
       register = result;
       workflowEvidence.set("course:register", result);
     }
     const panel = page.locator(".drawer-open");
+    await panel.locator(`option[value="${register.id}"]`).waitFor({ state: "attached" });
     await panel.getByLabel("Register", { exact: true }).selectOption(register.id);
     await panel.getByLabel("Opening float", { exact: true }).fill("100");
     await panel.getByLabel("Note", { exact: true }).fill(`Release course ${role}`);
@@ -527,7 +528,7 @@ const interfaceActionExecutors = {
       return button && !button.disabled;
     });
     await saveButton.click();
-    await page.getByText("Saved to your account.", { exact: false }).waitFor();
+    await page.getByText(/saved securely to your account/i).waitFor();
     const profiles = assertNoError(await trainingAdmin.from("measurement_profiles").select("id, units, measurements").eq("customer_id", trainingUserIdFor(role)).eq("label", "My Fit"), "Customer My Fit profile");
     if (profiles.length !== 1 || profiles[0].measurements?.consent !== true) throw new Error("My Fit was not persisted once with explicit consent.");
     workflowEvidence.set("customer:fit-profile", profiles[0]);
@@ -1045,7 +1046,8 @@ for (const role of selectedRoles) {
     for (const label of destinations) {
       const expectedHeading = label === "My Products" ? "Products" : label;
       const button = page.getByRole("button", { name: label, exact: true });
-      await button.waitFor({ state: "visible" });
+      await button.waitFor({ state: "attached" });
+      await button.scrollIntoViewIfNeeded();
       await button.click();
       await page.waitForTimeout(400);
       const heading = page.getByRole("heading", { name: expectedHeading, exact: true }).first();
