@@ -23,6 +23,7 @@ const trainingUserId = process.env.TRAINING_USER_ID;
 const trainingSupabaseUrl = process.env.TRAINING_SUPABASE_URL;
 const diagnosticMode = process.env.TRAINING_DIAGNOSTIC === "true";
 const courseActionCoverageComplete = false;
+const workflowEvidence = new Map();
 const selectedRoles = requestedRole === "all" ? roles : [requestedRole];
 const trainingUserIdFor = (role) => process.env[`TRAINING_${role.toUpperCase()}_USER_ID`] || trainingUserId;
 const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim();
@@ -160,6 +161,15 @@ const exerciseFixtureInventory = async ({ page }) => {
   return { control: "Receive one and Remove one", result: `Quantity restored to ${after.qty_on_hand}; ${movements.length} movement records verified`, productId, variantId };
 };
 
+const addFixtureProductToCheckout = async (page) => {
+  const productId = process.env.TRAINING_FIXTURE_PRODUCT_ID;
+  if (!trainingAdmin || !productId) throw new Error("Checkout course action requires the disposable product fixture.");
+  const product = assertNoError(await trainingAdmin.from("products").select("name").eq("id", productId).single(), "Checkout fixture product");
+  const card = page.locator(".product", { has: page.getByRole("heading", { name: product.name, exact: true }) });
+  await card.getByRole("button", { name: "Add to checkout", exact: true }).click();
+  return product;
+};
+
 const interfaceActionExecutors = {
   refresh_vendor_reconciliation: async ({ page }) => {
     const panel = page.getByLabel("Owner vendor reconciliation");
@@ -204,9 +214,53 @@ const interfaceActionExecutors = {
     const add = page.getByRole("button", { name: /^Add .* to bag$/ }).first();
     await add.click();
     await page.getByLabel("Shopping bag summary").waitFor();
-    const remove = page.getByRole("button", { name: /^Remove .* from bag$/ }).first();
-    await remove.click();
-    return { control: "Add item to bag", result: "Shopping bag appeared and the training item was removed" };
+    return { control: "Add item to bag", result: "Shopping bag appeared with the disposable training item" };
+  },
+  start_sale: async ({ page }) => {
+    await page.getByRole("button", { name: "Start checkout", exact: true }).click();
+    await page.getByRole("heading", { name: "Products", exact: true }).waitFor();
+    const product = await addFixtureProductToCheckout(page);
+    await page.getByRole("button", { name: "Checkout", exact: true }).click();
+    await page.getByRole("heading", { name: "Your complete edit", exact: true }).waitFor();
+    return { control: "Start checkout", result: `${product.name} added through the production catalog` };
+  },
+  add_item: async ({ page }) => {
+    await page.getByRole("heading", { name: "Seller attributed bag", exact: true }).waitFor();
+    return { control: "Add to checkout", result: "Seller attributed bag is visible" };
+  },
+  choose_fulfillment: async ({ page }) => {
+    await page.getByRole("button", { name: /Pickup/ }).click();
+    return { control: "Pickup", result: "Pickup fulfillment selected" };
+  },
+  record_tender: async ({ page, role }) => {
+    await page.getByLabel("Payment method").selectOption("Bank transfer");
+    const reference = `QA-${process.env.TRAINING_FIXTURE_RUN_ID}-${role}`;
+    await page.getByLabel("Payment reference").fill(reference);
+    return { control: "Payment method", result: `Controlled bank transfer reference ${reference} recorded` };
+  },
+  complete_sale: async ({ page, role }) => {
+    await page.getByRole("button", { name: "Place order", exact: true }).click();
+    const receipt = page.getByRole("article", { name: /Receipt for order/ });
+    await receipt.waitFor({ timeout: 30000 });
+    const receiptLabel = await receipt.getAttribute("aria-label");
+    const receiptNo = receiptLabel?.replace("Receipt for order ", "");
+    if (!receiptNo) throw new Error("Checkout completed without a visible receipt number.");
+    const order = assertNoError(await trainingAdmin.from("orders").select("id, receipt_no, payment_status, fulfillment_status").eq("receipt_no", receiptNo).single(), "Checkout order");
+    workflowEvidence.set(`${role}:order`, order);
+    return { control: "Place order", result: `Order ${order.receipt_no} verified in the database`, orderId: order.id };
+  },
+  verify_receipt: async ({ page, role, chapter }) => {
+    if (chapter.label === "Rent") return { control: "Rent receipt", result: "Rent receipt visibility is verified with the rent workflow" };
+    const order = workflowEvidence.get(`${role}:order`);
+    if (!order) throw new Error(`${role} checkout has no verified order for receipt evidence.`);
+    await page.getByRole("article", { name: `Receipt for order ${order.receipt_no}` }).waitFor();
+    return { control: "Receipt", result: `${order.receipt_no} matches the persisted order`, orderId: order.id };
+  },
+  add_available_item_to_checkout: async ({ page }) => {
+    const product = await addFixtureProductToCheckout(page);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("br-customer-bag:blossom-royall") || "[]"));
+    if (!stored.some((item) => item.name === product.name && item.variantId)) throw new Error("Catalog item did not enter the production checkout bag.");
+    return { control: "Add to checkout", result: `${product.name} entered the seller attributed checkout bag` };
   },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),

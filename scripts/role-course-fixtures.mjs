@@ -90,6 +90,15 @@ export async function createRoleCourseFixtures() {
 export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, identities }) {
   if (query) {
     const cleanup = [
+      variantId && `create temporary table qa_course_orders on commit drop as select distinct order_id as id from public.order_items where variant_id='${variantId}';`,
+      variantId && `delete from public.return_requests where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.order_fulfillment_events where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.order_pickup_credentials where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.inventory_movements where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.vendor_ledger_entries where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.payments where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.order_items where order_id in (select id from qa_course_orders);`,
+      variantId && `delete from public.orders where id in (select id from qa_course_orders);`,
       leaseId && `delete from public.rent_payments where lease_id='${leaseId}';`,
       leaseId && `delete from public.leases where id='${leaseId}';`,
       variantId && `delete from public.inventory_movements where variant_id='${variantId}';`,
