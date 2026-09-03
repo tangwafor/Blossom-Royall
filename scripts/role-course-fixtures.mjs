@@ -89,6 +89,7 @@ export async function createRoleCourseFixtures() {
 
 export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId, productId, variantId, leaseId, identities }) {
   if (query) {
+    const identityIds = Object.values(identities).map((identity) => `'${identity.userId}'`).join(",");
     const cleanup = [
       variantId && `create temporary table qa_course_orders on commit drop as select distinct order_id as id from public.order_items where variant_id='${variantId}';`,
       variantId && `delete from public.return_requests where order_id in (select id from qa_course_orders);`,
@@ -99,6 +100,9 @@ export async function cleanupRoleCourseFixtures({ admin, query, runId, vendorId,
       variantId && `delete from public.payments where order_id in (select id from qa_course_orders);`,
       variantId && `delete from public.order_items where order_id in (select id from qa_course_orders);`,
       variantId && `delete from public.orders where id in (select id from qa_course_orders);`,
+      identityIds && `delete from public.cash_drawer_adjustments where recorded_by in (${identityIds});`,
+      identityIds && `delete from public.cash_drawer_sessions where opened_by in (${identityIds});`,
+      identityIds && `delete from public.cash_registers where created_by in (${identityIds});`,
       leaseId && `delete from public.rent_payments where lease_id='${leaseId}';`,
       leaseId && `delete from public.leases where id='${leaseId}';`,
       variantId && `delete from public.inventory_movements where variant_id='${variantId}';`,

@@ -262,6 +262,67 @@ const interfaceActionExecutors = {
     if (!stored.some((item) => item.name === product.name && item.variantId)) throw new Error("Catalog item did not enter the production checkout bag.");
     return { control: "Add to checkout", result: `${product.name} entered the seller attributed checkout bag` };
   },
+  create_register: async ({ page, role }) => {
+    const name = `QA ${process.env.TRAINING_FIXTURE_RUN_ID}`;
+    const setup = page.locator(".drawer-registers");
+    await setup.getByLabel("Register", { exact: true }).fill(name);
+    await setup.getByLabel("Location", { exact: true }).fill("Release course");
+    await setup.getByRole("button", { name: "Add register", exact: true }).click();
+    await setup.getByText(name, { exact: true }).waitFor();
+    const register = assertNoError(await trainingAdmin.from("cash_registers").select("id, name").eq("name", name).eq("created_by", trainingUserIdFor(role)).single(), "Cash register creation");
+    workflowEvidence.set("course:register", register);
+    return { control: "Add register", result: `${name} verified in the database`, registerId: register.id };
+  },
+  open_drawer: async ({ page, role }) => {
+    let register = workflowEvidence.get("course:register");
+    if (!register) {
+      const result = assertNoError(await trainingAdmin.from("cash_registers").select("id, name").ilike("name", `QA ${process.env.TRAINING_FIXTURE_RUN_ID}`).single(), "Shared cash register");
+      register = result;
+      workflowEvidence.set("course:register", result);
+    }
+    const panel = page.locator(".drawer-open");
+    await panel.getByLabel("Register", { exact: true }).selectOption(register.id);
+    await panel.getByLabel("Opening float", { exact: true }).fill("100");
+    await panel.getByLabel("Note", { exact: true }).fill(`Release course ${role}`);
+    await panel.getByRole("button", { name: "Open drawer", exact: true }).click();
+    await page.getByText("Cash drawer opened.", { exact: true }).waitFor();
+    const session = assertNoError(await trainingAdmin.from("cash_drawer_sessions").select("id, opening_float, status").eq("opened_by", trainingUserIdFor(role)).eq("status", "open").single(), "Open cash drawer");
+    workflowEvidence.set(`${role}:drawer`, session);
+    return { control: "Open drawer", result: `Open session ${session.id} verified`, sessionId: session.id };
+  },
+  record_adjustment: async ({ page, role }) => {
+    const session = workflowEvidence.get(`${role}:drawer`);
+    if (!session) throw new Error(`${role} has no verified open drawer.`);
+    const panel = page.locator(".drawer-active");
+    await panel.getByLabel("Cash movement").selectOption("paid_in");
+    await panel.getByLabel("Movement amount").fill("10");
+    await panel.getByLabel("Reason", { exact: true }).fill("Release course float check");
+    await panel.getByRole("button", { name: "Record movement", exact: true }).click();
+    await page.getByText("Cash movement recorded.", { exact: true }).waitFor();
+    const adjustment = assertNoError(await trainingAdmin.from("cash_drawer_adjustments").select("id, amount, adjustment_type").eq("session_id", session.id).single(), "Cash drawer adjustment");
+    return { control: "Record movement", result: `Paid in ${adjustment.amount} verified`, adjustmentId: adjustment.id };
+  },
+  close_drawer: async ({ page, role }) => {
+    const session = workflowEvidence.get(`${role}:drawer`);
+    if (!session) throw new Error(`${role} has no verified drawer to close.`);
+    const panel = page.locator(".drawer-active");
+    await panel.getByLabel("Counted cash", { exact: true }).fill("110");
+    await panel.getByLabel("Note", { exact: true }).fill("Release course reconciled");
+    await panel.getByRole("button", { name: "Close and reconcile", exact: true }).click();
+    await page.getByText("Cash drawer closed and reconciled.", { exact: true }).waitFor();
+    const closed = assertNoError(await trainingAdmin.from("cash_drawer_sessions").select("id, status, expected_cash, counted_cash, variance").eq("id", session.id).single(), "Closed cash drawer");
+    if (closed.status !== "closed" || Number(closed.variance) !== 0) throw new Error(`Cash drawer reconciliation mismatch for ${session.id}.`);
+    workflowEvidence.set(`${role}:drawer`, closed);
+    return { control: "Close and reconcile", result: `Session ${closed.id} closed with zero variance`, sessionId: closed.id };
+  },
+  verify_variance: async ({ page, role }) => {
+    const session = workflowEvidence.get(`${role}:drawer`);
+    if (!session || session.status !== "closed") throw new Error(`${role} has no closed drawer evidence.`);
+    const row = page.locator(".drawer-history article", { hasText: session.id }).first();
+    const history = page.locator(".drawer-history");
+    await history.getByText("Variance", { exact: true }).first().waitFor();
+    return { control: "Recent drawer history", result: `Expected ${session.expected_cash}, counted ${session.counted_cash}, variance ${session.variance}`, visibleRows: await page.locator(".drawer-history article").count(), matchedRowCount: await row.count() };
+  },
   adjust_authorized_stock: exerciseFixtureInventory,
   verify_inventory_movement: async () => ({ control: "Inventory movement audit", result: "Receive and remove records were verified against the disposable variant" }),
 };
